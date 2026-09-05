@@ -95,8 +95,10 @@ export function weeksAgo(date: Date, now = new Date()) {
 export interface ProjectCosts {
   budget: number
   committed: number // accepted + paid quotes
-  spent: number // paid quotes + expenses
-  real: number // committed quotes + expenses (the "real cost")
+  spent: number // cash actually out the door: every expense, deposits included
+  quotePaid: number // deposits and part-payments made toward accepted quotes
+  owed: number // committed minus what has been paid toward it
+  real: number // committed quotes + other expenses (the "real cost")
   variance: number // budget - real (positive = under budget)
   quotesReceived: number
   lowestQuote: number | null
@@ -104,14 +106,21 @@ export interface ProjectCosts {
   savedByChoosing: number // highest - accepted, if an accepted exists
 }
 
+/**
+ * A deposit is an expense that points at a quote, so it must not be counted
+ * twice: the accepted quote already carries the full amount. Payments toward a
+ * quote that is no longer accepted (declined, deleted) are just money spent.
+ */
 export function projectCosts(project: Project, quotes: Quote[], expenses: Expense[]): ProjectCosts {
   const q = quotes.filter((x) => x.project_id === project.id)
   const e = expenses.filter((x) => x.project_id === project.id)
   const accepted = q.filter((x) => x.status === 'accepted' || x.status === 'paid')
-  const paid = q.filter((x) => x.status === 'paid')
+  const acceptedIds = new Set(accepted.map((x) => x.id))
   const committed = sum(accepted, (x) => x.amount)
-  const expenseTotal = sum(e, (x) => x.amount)
-  const real = committed + expenseTotal
+  const towardQuotes = e.filter((x) => x.quote_id && acceptedIds.has(x.quote_id))
+  const quotePaid = sum(towardQuotes, (x) => x.amount)
+  const otherExpenses = sum(e, (x) => x.amount) - quotePaid
+  const real = committed + otherExpenses + Math.max(0, quotePaid - committed)
   const amounts = q.map((x) => x.amount)
   const lowest = amounts.length ? Math.min(...amounts) : null
   const highest = amounts.length ? Math.max(...amounts) : null
@@ -119,7 +128,9 @@ export function projectCosts(project: Project, quotes: Quote[], expenses: Expens
   return {
     budget: Number(project.budget_estimate) || 0,
     committed,
-    spent: sum(paid, (x) => x.amount) + expenseTotal,
+    spent: sum(e, (x) => x.amount),
+    quotePaid,
+    owed: Math.max(0, committed - quotePaid),
     real,
     variance: (Number(project.budget_estimate) || 0) - real,
     quotesReceived: q.length,
@@ -127,6 +138,14 @@ export function projectCosts(project: Project, quotes: Quote[], expenses: Expens
     highestQuote: highest,
     savedByChoosing: acceptedAmount != null && highest != null ? Math.max(0, highest - acceptedAmount) : 0,
   }
+}
+
+/** What has been paid toward one quote, and what is still to go. */
+export function quoteProgress(quote: Quote, expenses: Expense[]) {
+  const payments = expenses.filter((e) => e.quote_id === quote.id).sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at))
+  const paid = sum(payments, (e) => e.amount)
+  const amount = Number(quote.amount) || 0
+  return { payments, paid, owed: Math.max(0, amount - paid), pct: amount > 0 ? Math.min(1, paid / amount) : 0, settled: amount > 0 && paid >= amount - 0.005 }
 }
 
 // ---------------------------------------------------------------------------

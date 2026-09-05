@@ -140,13 +140,15 @@ export function buildDemoState(): DemoState {
   ]
 
   const expenses: Expense[] = [
-    { id: 'e1', project_id: P.kitchen, title: 'Soft-close hinges ×24', amount: 1240, date: day(-14), category: 'Fixtures', contact_id: C.builders, receipt_path: null, created_by: R, created_at: d(14) },
-    { id: 'e2', project_id: P.kitchen, title: 'Sage cabinet enamel 5L', amount: 2150, date: day(-11), category: 'Paint', contact_id: C.builders, receipt_path: null, created_by: K, created_at: d(11) },
-    { id: 'e3', project_id: P.pool, title: 'Filter sand 2 × 25kg', amount: 650, date: day(-50), category: 'Materials', contact_id: null, receipt_path: null, created_by: R, created_at: d(50) },
-    { id: 'e4', project_id: P.bedroom, title: 'Plascon paint — 2 colours', amount: 2800, date: day(-90), category: 'Paint', contact_id: C.builders, receipt_path: null, created_by: K, created_at: d(90) },
-    { id: 'e5', project_id: P.bedroom, title: 'Rollers, tape & drop sheets', amount: 320, date: day(-90), category: 'Tools', contact_id: C.builders, receipt_path: null, created_by: K, created_at: d(90) },
-    { id: 'e6', project_id: P.bedroom, title: 'Curtain rail', amount: 480, date: day(-85), category: 'Fixtures', contact_id: null, receipt_path: null, created_by: R, created_at: d(85) },
-    { id: 'e7', project_id: P.borehole, title: 'Trench sand & conduit', amount: 380, date: day(-4), category: 'Materials', contact_id: C.builders, receipt_path: null, created_by: R, created_at: d(4) },
+    { id: 'e1', project_id: P.kitchen, title: 'Soft-close hinges ×24', amount: 1240, date: day(-14), category: 'Fixtures', contact_id: C.builders, quote_id: null, receipt_path: null, created_by: R, created_at: d(14) },
+    { id: 'e2', project_id: P.kitchen, title: 'Sage cabinet enamel 5L', amount: 2150, date: day(-11), category: 'Paint', contact_id: C.builders, quote_id: null, receipt_path: null, created_by: K, created_at: d(11) },
+    { id: 'e3', project_id: P.pool, title: 'Filter sand 2 × 25kg', amount: 650, date: day(-50), category: 'Materials', contact_id: null, quote_id: null, receipt_path: null, created_by: R, created_at: d(50) },
+    { id: 'e4', project_id: P.bedroom, title: 'Plascon paint — 2 colours', amount: 2800, date: day(-90), category: 'Paint', contact_id: C.builders, quote_id: null, receipt_path: null, created_by: K, created_at: d(90) },
+    { id: 'e5', project_id: P.bedroom, title: 'Rollers, tape & drop sheets', amount: 320, date: day(-90), category: 'Tools', contact_id: C.builders, quote_id: null, receipt_path: null, created_by: K, created_at: d(90) },
+    { id: 'e6', project_id: P.bedroom, title: 'Curtain rail', amount: 480, date: day(-85), category: 'Fixtures', contact_id: null, quote_id: null, receipt_path: null, created_by: R, created_at: d(85) },
+    { id: 'e7', project_id: P.borehole, title: 'Trench sand & conduit', amount: 380, date: day(-4), category: 'Materials', contact_id: C.builders, quote_id: null, receipt_path: null, created_by: R, created_at: d(4) },
+    { id: 'e8', project_id: P.kitchen, title: 'Deposit — Doors, paint & handles (50%)', amount: 12400, date: day(-18), category: 'Quote payment', contact_id: C.joe, quote_id: 'q2', receipt_path: null, created_by: K, created_at: d(18) },
+    { id: 'e9', project_id: P.pool, title: 'Paid in full — Sand change, seals & service', amount: 5850, date: day(-45), category: 'Quote payment', contact_id: C.poolpro, quote_id: 'q4', receipt_path: null, created_by: R, created_at: d(45) },
   ]
 
   const tasks: Task[] = [

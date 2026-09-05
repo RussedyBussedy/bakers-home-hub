@@ -221,6 +221,8 @@ export function createDemoDb(): Db {
       })
     },
     async deleteQuote(id) {
+      // Mirror "on delete set null": a deposit stays as money spent, just no longer tied to a quote.
+      state.expenses = state.expenses.map((e) => (e.quote_id === id ? { ...e, quote_id: null } : e))
       await mutate('quotes', 'DELETE', () => { state.quotes = state.quotes.filter((x) => x.id !== id); return undefined }, { id })
     },
     async listExpenses() {

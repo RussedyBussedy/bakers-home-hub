@@ -73,6 +73,27 @@ await step('file quote + accept (with contact search)', async () => {
   if (!q) throw new Error('quote missing')
 })
 
+await step('deposit on the accepted quote, then settle it', async () => {
+  await page.getByRole('button', { name: 'Record a deposit' }).first().click()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /^30% ·/ }).click()
+  await page.getByRole('button', { name: 'Record payment' }).click()
+  await page.waitForTimeout(800)
+  await shot('03b-deposit')
+  const partial = await page.locator('text=R 5 550 paid · R 12 950 to go').count()
+  if (!partial) throw new Error('deposit not reflected on the quote')
+  const inExpenses = await page.locator('text=Deposit — Pergola timber + build (30%)').count()
+  if (!inExpenses) throw new Error('deposit missing from expenses')
+  await page.getByRole('button', { name: 'Record another payment' }).first().click()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /^Balance ·/ }).click()
+  await page.getByRole('button', { name: 'Record & mark paid' }).click()
+  await page.waitForTimeout(900)
+  await shot('03c-settled')
+  const full = await page.locator('text=Paid in full').count()
+  if (!full) throw new Error('quote not settled')
+})
+
 await step('log expense', async () => {
   await page.getByRole('button', { name: 'Log' }).click()
   await page.getByPlaceholder('Soft-close hinges ×24').fill('Coach bolts')

@@ -26,7 +26,8 @@ export default function ContactsPage() {
 
   const enriched = useMemo(() => data.contacts.map((c) => {
     const quotes = data.quotes.filter((x) => x.contact_id === c.id)
-    const spend = quotes.filter((x) => x.status === 'accepted' || x.status === 'paid').reduce((a, x) => a + x.amount, 0) + data.expenses.filter((e) => e.contact_id === c.id).reduce((a, e) => a + e.amount, 0)
+    // Deposits toward an accepted quote are already inside the quote amount.
+    const spend = quotes.filter((x) => x.status === 'accepted' || x.status === 'paid').reduce((a, x) => a + x.amount, 0) + data.expenses.filter((e) => e.contact_id === c.id && !e.quote_id).reduce((a, e) => a + e.amount, 0)
     const projects = [...new Set([...quotes.map((x) => x.project_id), ...data.expenses.filter((e) => e.contact_id === c.id).map((e) => e.project_id)])].map((id) => data.projects.find((p) => p.id === id)).filter(Boolean)
     return { c, quotes: quotes.length, spend, projects }
   }), [data])

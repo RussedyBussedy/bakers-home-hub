@@ -5,7 +5,7 @@ import type {
   Achievement, BoardItem, Contact, Expense, NewBoardItem, NewContact, NewExpense, NewImage, NewProject, NewQuote,
   NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, Task, XpEvent, XpKind,
 } from './types'
-import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, type GameSnapshot } from '../lib/xp'
+import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
 import { useUi } from '../store/ui'
 import { compressImage } from '../lib/images'
 import { todayISO, uid } from '../lib/utils'
@@ -313,8 +313,35 @@ export function useActions() {
 
   const deleteQuote = useCallback(async (q: Quote) => {
     setList<Quote>(keys.quotes, (old) => old.filter((x) => x.id !== q.id))
-    try { await db.deleteQuote(q.id); if (q.file_path) void db.remove([q.file_path]) } catch (e) { invalidate(keys.quotes); return fail(e, 'delete the quote') }
+    try {
+      await db.deleteQuote(q.id)
+      if (q.file_path) void db.remove([q.file_path])
+      // Deposits toward it stay as expenses, now unlinked.
+      setList<Expense>(keys.expenses, (old) => old.map((e) => (e.quote_id === q.id ? { ...e, quote_id: null } : e)))
+    } catch (e) { invalidate(keys.quotes); return fail(e, 'delete the quote') }
   }, [setList, db, invalidate, fail])
+
+  /**
+   * Keep a quote's status honest with what has been paid toward it: a first
+   * deposit accepts the quote, paying it off marks it paid, and removing a
+   * payment from a paid quote drops it back to accepted.
+   */
+  const syncQuoteStatus = useCallback(async (quoteId: string | null | undefined) => {
+    if (!quoteId) return
+    const quote = qc.getQueryData<Quote[]>(k(keys.quotes))?.find((q) => q.id === quoteId)
+    if (!quote || quote.status === 'rejected') return
+    const { settled, paid } = quoteProgress(quote, qc.getQueryData<Expense[]>(k(keys.expenses)) ?? [])
+    try {
+      if (settled && quote.status !== 'paid') {
+        await updateQuote(quote.id, { status: 'paid' })
+        toast({ title: 'Paid in full', description: `“${quote.title || 'Quote'}” is settled and marked as paid.`, tone: 'success' })
+      } else if (!settled && paid > 0 && quote.status === 'received') {
+        await updateQuote(quote.id, { status: 'accepted' })
+      } else if (!settled && quote.status === 'paid') {
+        await updateQuote(quote.id, { status: 'accepted' })
+      }
+    } catch { /* the toast from updateQuote covers it */ }
+  }, [qc, k, updateQuote, toast])
 
   const createExpense = useCallback(async (input: NewExpense & { file?: File | null }) => {
     if (!me) throw new Error('Not signed in')
@@ -324,19 +351,30 @@ export function useActions() {
       const e = await db.createExpense({ ...rest, receipt_path, created_by: me.id })
       setList<Expense>(keys.expenses, (old) => [...old, e])
       void award('expense_added', e.project_id, e.id)
+      await syncQuoteStatus(e.quote_id)
       return e
     } catch (e) { return fail(e, 'log the expense') }
-  }, [me, uploadFile, db, setList, award, fail])
+  }, [me, uploadFile, db, setList, award, syncQuoteStatus, fail])
 
   const updateExpense = useCallback(async (id: string, patch: Partial<Expense>) => {
+    const prev = qc.getQueryData<Expense[]>(k(keys.expenses))?.find((e) => e.id === id)
     setList<Expense>(keys.expenses, (old) => old.map((e) => (e.id === id ? { ...e, ...patch } : e)))
-    try { return await db.updateExpense(id, patch) } catch (e) { invalidate(keys.expenses); return fail(e, 'update the expense') }
-  }, [setList, db, invalidate, fail])
+    try {
+      const saved = await db.updateExpense(id, patch)
+      await syncQuoteStatus(saved.quote_id)
+      if (prev?.quote_id && prev.quote_id !== saved.quote_id) await syncQuoteStatus(prev.quote_id)
+      return saved
+    } catch (e) { invalidate(keys.expenses); return fail(e, 'update the expense') }
+  }, [qc, k, setList, db, syncQuoteStatus, invalidate, fail])
 
   const deleteExpense = useCallback(async (e: Expense) => {
     setList<Expense>(keys.expenses, (old) => old.filter((x) => x.id !== e.id))
-    try { await db.deleteExpense(e.id); if (e.receipt_path) void db.remove([e.receipt_path]) } catch (err) { invalidate(keys.expenses); return fail(err, 'delete the expense') }
-  }, [setList, db, invalidate, fail])
+    try {
+      await db.deleteExpense(e.id)
+      if (e.receipt_path) void db.remove([e.receipt_path])
+      await syncQuoteStatus(e.quote_id)
+    } catch (err) { invalidate(keys.expenses); return fail(err, 'delete the expense') }
+  }, [setList, db, syncQuoteStatus, invalidate, fail])
 
   // ---- nudges (quiet) ------------------------------------------------------
   /** A nudge sent as a side effect (e.g. assigning a task) — never blocks or toasts on failure. */

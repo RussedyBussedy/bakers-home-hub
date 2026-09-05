@@ -28,8 +28,11 @@ export const CATEGORIES = [
 ] as const
 
 export const EXPENSE_CATEGORIES = [
-  'Materials', 'Labour', 'Tools', 'Paint', 'Fixtures', 'Furniture', 'Plants', 'Delivery', 'Permits', 'Other',
+  'Materials', 'Labour', 'Quote payment', 'Tools', 'Paint', 'Fixtures', 'Furniture', 'Plants', 'Delivery', 'Permits', 'Other',
 ] as const
+
+/** The category a deposit or part-payment toward a quote is filed under. */
+export const QUOTE_PAYMENT_CATEGORY = 'Quote payment'
 
 export interface Household {
   id: string
@@ -135,6 +138,8 @@ export interface Expense {
   date: string
   category: string
   contact_id: string | null
+  /** Set when this expense is a deposit or part-payment toward a quote. */
+  quote_id: string | null
   receipt_path: string | null
   created_by: string
   created_at: string

@@ -30,7 +30,7 @@ export default function InsightsPage() {
   const expenses = useMemo(() => data.expenses.filter((e) => inRange(e.date)), [data.expenses, since]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => projects.map((p) => ({ p, c: projectCosts(p, quotes, expenses) })).sort((a, b) => b.c.budget - a.c.budget), [projects, quotes, expenses])
-  const totals = useMemo(() => rows.reduce((acc, r) => ({ budget: acc.budget + r.c.budget, real: acc.real + r.c.real, saved: acc.saved + r.c.savedByChoosing }), { budget: 0, real: 0, saved: 0 }), [rows])
+  const totals = useMemo(() => rows.reduce((acc, r) => ({ budget: acc.budget + r.c.budget, real: acc.real + r.c.real, saved: acc.saved + r.c.savedByChoosing, owed: acc.owed + r.c.owed, spent: acc.spent + r.c.spent }), { budget: 0, real: 0, saved: 0, owed: 0, spent: 0 }), [rows])
   const doneCount = projects.filter((p) => p.status === 'done').length
   const accuracy = useMemo(() => {
     const done = rows.filter((r) => r.p.status === 'done' && r.c.budget > 0)
@@ -40,7 +40,8 @@ export default function InsightsPage() {
 
   const byCategory = useMemo(() => {
     const m = new Map<string, number>()
-    expenses.filter((e) => projects.some((p) => p.id === e.project_id)).forEach((e) => m.set(e.category, (m.get(e.category) ?? 0) + e.amount))
+    // Deposits toward accepted quotes sit inside "Contractor quotes" already.
+    expenses.filter((e) => !e.quote_id && projects.some((p) => p.id === e.project_id)).forEach((e) => m.set(e.category, (m.get(e.category) ?? 0) + e.amount))
     quotes.filter((q) => (q.status === 'accepted' || q.status === 'paid') && projects.some((p) => p.id === q.project_id)).forEach((q) => m.set('Contractor quotes', (m.get('Contractor quotes') ?? 0) + q.amount))
     return [...m.entries()].sort((a, b) => b[1] - a[1])
   }, [expenses, quotes, projects])
@@ -51,7 +52,7 @@ export default function InsightsPage() {
     return eachMonthOfInterval({ start, end }).map((m) => {
       const next = addMonths(m, 1)
       const inMonth = (s: string | null | undefined) => { const d = toDate(s); return d ? d >= m && d < next : false }
-      const ex = data.expenses.filter((e) => inMonth(e.date)).reduce((a, e) => a + e.amount, 0)
+      const ex = data.expenses.filter((e) => !e.quote_id && inMonth(e.date)).reduce((a, e) => a + e.amount, 0)
       const qs = data.quotes.filter((q) => (q.status === 'accepted' || q.status === 'paid') && inMonth(q.quote_date ?? q.created_at)).reduce((a, q) => a + q.amount, 0)
       return { month: format(m, 'MMM'), full: format(m, 'MMMM yyyy'), total: ex + qs, expenses: ex, quotes: qs }
     })
@@ -61,7 +62,7 @@ export default function InsightsPage() {
   const suppliers = useMemo(() => data.contacts.map((c) => {
     const qs = data.quotes.filter((q) => q.contact_id === c.id)
     const accepted = qs.filter((q) => q.status === 'accepted' || q.status === 'paid')
-    const spend = accepted.reduce((a, q) => a + q.amount, 0) + data.expenses.filter((e) => e.contact_id === c.id).reduce((a, e) => a + e.amount, 0)
+    const spend = accepted.reduce((a, q) => a + q.amount, 0) + data.expenses.filter((e) => e.contact_id === c.id && !e.quote_id).reduce((a, e) => a + e.amount, 0)
     return { c, quotes: qs.length, accepted: accepted.length, spend }
   }).filter((s) => s.quotes > 0 || s.spend > 0).sort((a, b) => b.spend - a.spend), [data.contacts, data.quotes, data.expenses])
 
@@ -76,18 +77,19 @@ export default function InsightsPage() {
       </div>
 
       {/* KPI row */}
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {[
           { label: 'Budgeted', value: money(totals.budget), hint: `${projects.length} project${projects.length === 1 ? '' : 's'}` },
           { label: 'Real cost', value: money(totals.real), hint: `${Math.round(totals.budget ? (totals.real / totals.budget) * 100 : 0)}% of budget`, tone: totals.real > totals.budget && totals.budget > 0 ? 'danger' : undefined },
           { label: totals.budget - totals.real >= 0 ? 'Headroom' : 'Over budget', value: money(Math.abs(totals.budget - totals.real)), hint: 'budget minus real cost', tone: totals.budget - totals.real < 0 ? 'danger' : 'sage' },
+          { label: 'Still owed', value: money(totals.owed), hint: `on accepted quotes · ${money(totals.spent)} paid out`, tone: totals.owed > 0 ? 'ochre' : 'sage' },
           { label: 'Saved by comparing', value: money(totals.saved), hint: 'accepted vs highest quote', tone: 'sage' },
           { label: 'Budget accuracy', value: accuracy == null ? '—' : `${Math.round(accuracy * 100)}%`, hint: accuracy == null ? 'finish a project to see' : `real ÷ estimate on ${doneCount} done` },
         ].map((k, i) => (
           <Reveal key={k.label} index={i}>
             <div className="card p-4">
               <p className="text-[12px] font-medium text-ink-2">{k.label}</p>
-              <p className={cn('mt-1 text-[26px] font-semibold leading-none tracking-tight', k.tone === 'danger' ? 'text-danger' : k.tone === 'sage' ? 'text-sage-text' : 'text-ink')}>{k.value}</p>
+              <p className={cn('mt-1 text-[26px] font-semibold leading-none tracking-tight', k.tone === 'danger' ? 'text-danger' : k.tone === 'sage' ? 'text-sage-text' : k.tone === 'ochre' ? 'text-ochre-text' : 'text-ink')}>{k.value}</p>
               <p className="mt-1.5 text-[12px] text-ink-3">{k.hint}</p>
             </div>
           </Reveal>
