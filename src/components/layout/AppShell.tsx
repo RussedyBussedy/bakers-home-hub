@@ -62,7 +62,7 @@ export function AppShell() {
   return (
     <div className="min-h-dvh bg-bg">
       {/* Sidebar — desktop */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-line bg-surface/70 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-line bg-surface lg:flex">
         <div className="flex items-center gap-3 px-6 pt-7 pb-5">
           <HouseMark className="size-10" />
           <div className="min-w-0">

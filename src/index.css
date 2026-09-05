@@ -283,10 +283,15 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 }
+/* Frosted surfaces. Kept to the few places where something scrolls underneath (the phone's bottom bar,
+   the buttons over a project photo). Backdrop filters make WebKit re-composite the whole page whenever
+   anything else animates — on a Mac that showed up as a one-frame white flash between sections — so the
+   desktop sidebar and sticky bars are solid instead, and the ones that remain get their own layer. */
 @utility glass {
-  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
   backdrop-filter: saturate(160%) blur(14px);
   -webkit-backdrop-filter: saturate(160%) blur(14px);
+  transform: translateZ(0);
 }
 @utility card {
   background: var(--surface);
@@ -309,8 +314,9 @@
 @utility safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+/* Keeps at least the element's own top padding, and more under a phone's notch / status bar. */
 @utility safe-top {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
 @utility board-dots {
   background-color: var(--board-bg);

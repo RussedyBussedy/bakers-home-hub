@@ -23,7 +23,7 @@ export function Toasts() {
             exit={{ opacity: 0, y: -10, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 420, damping: 30 }}
             className={cn(
-              'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-md',
+              'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-lg',
               t.tone === 'danger' ? 'border-danger/30 bg-danger-soft text-ink' : t.tone === 'xp' ? 'border-gold/40 bg-gold-soft text-ink' : t.tone === 'success' ? 'border-sage/30 bg-sage-soft text-ink' : 'border-line bg-surface/95 text-ink',
             )}
             role="status"

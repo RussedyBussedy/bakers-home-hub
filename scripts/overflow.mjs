@@ -1,5 +1,5 @@
-// Finds layout "funnies" on phone widths: anything wider than the viewport,
-// text spilling out of its box, and pages that scroll sideways. Runs against
+// Finds layout "funnies" at phone, landscape, tablet and desktop sizes: anything wider than the viewport,
+// text spilling out of its box, pages that scroll sideways, and buttons covered by something else. Runs against
 // the demo build with deliberately long titles injected.
 import { chromium } from 'playwright'
 
@@ -76,13 +76,39 @@ for (const { name: vpName, width, height, mobile } of viewports) {
         // Text wider than its box without an ellipsis/scroll (clipped or spilling).
         if (el.children.length === 0 && (el.innerText || '').trim() && el.scrollWidth > el.clientWidth + 2 && cs.overflowX !== 'auto' && cs.textOverflow !== 'ellipsis' && cs.whiteSpace === 'nowrap') clipped.push(`${el.tagName.toLowerCase()}.${[...el.classList].slice(0, 3).join('.')} “${(el.innerText || '').trim().slice(0, 40)}”`)
       }
-      return { vw, scroll, wide: wide.slice(0, 6), clipped: clipped.slice(0, 6) }
+      // Dead controls: a visible button or link whose centre is covered by something else (a text block sitting over
+      // the header buttons, say) — taps on it go nowhere. Skip the bits under the fixed bottom bar / FAB.
+      const dead = []
+      for (const el of document.querySelectorAll('button, a[href], [role=button], [role=tab]')) {
+        if (!(el instanceof HTMLElement)) continue
+        if (el.matches(':disabled, [aria-disabled=true]')) continue
+        // Use the visible part of the control: clip its box by every scrolling/clipping ancestor.
+        let box = el.getBoundingClientRect()
+        let x1 = box.left, y1 = box.top, x2 = box.right, y2 = box.bottom
+        for (let e = el.parentElement; e && e !== document.body; e = e.parentElement) {
+          const o = getComputedStyle(e)
+          if (['auto', 'scroll', 'hidden', 'clip'].includes(o.overflowX) || ['auto', 'scroll', 'hidden', 'clip'].includes(o.overflowY)) {
+            const c = e.getBoundingClientRect(); x1 = Math.max(x1, c.left); y1 = Math.max(y1, c.top); x2 = Math.min(x2, c.right); y2 = Math.min(y2, c.bottom)
+          }
+        }
+        if (x2 - x1 < 8 || y2 - y1 < 8) continue
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2
+        if (cx < 0 || cy < 0 || cx > vw || cy > window.innerHeight) continue
+        const hit = document.elementFromPoint(cx, cy)
+        if (!hit || el === hit || el.contains(hit)) continue
+        let h = hit, coveredByFixed = false
+        for (; h && h !== document.body; h = h.parentElement) if (getComputedStyle(h).position === 'fixed') { coveredByFixed = true; break }
+        if (coveredByFixed) continue
+        dead.push(`${el.tagName.toLowerCase()} “${(el.getAttribute('aria-label') || el.innerText || '').trim().slice(0, 30)}” under ${hit.tagName.toLowerCase()}.${[...hit.classList].slice(0, 3).join('.')}`)
+      }
+      return { vw, scroll, wide: wide.slice(0, 6), clipped: clipped.slice(0, 6), dead: dead.slice(0, 6) }
     })
-    const bad = report.scroll > report.vw + 1 || report.wide.length || report.clipped.length
+    const bad = report.scroll > report.vw + 1 || report.wide.length || report.clipped.length || report.dead.length
     if (bad) problems++
     console.log(`${bad ? '✗' : '✓'} ${vpName} ${name}${report.scroll > report.vw + 1 ? ` — page scrolls sideways (${report.scroll} > ${report.vw})` : ''}`)
     for (const w of report.wide) console.log('    wide:', w)
     for (const c of report.clipped) console.log('    clipped:', c)
+    for (const d of report.dead) console.log('    dead control:', d)
     if (bad) await page.screenshot({ path: `qa-shots/overflow-${vpName}-${name}.png`, fullPage: true })
   }
   await context.close()

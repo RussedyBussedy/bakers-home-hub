@@ -34,7 +34,7 @@ npm run dev          # http://localhost:5173
 npm run build        # type-check + production build
 npm run qa           # screenshots of every screen (phone + desktop, light + dark) into qa-shots/
 npm run flows        # click-through smoke test of the main flows
-npm run overflow     # layout check at phone, landscape, tablet and desktop sizes: anything wider than the screen, clipped text, sideways scroll
+npm run overflow     # layout check at phone, landscape, tablet and desktop sizes: anything wider than the screen, clipped text, sideways scroll, buttons covered by other elements
 npm run scrollcheck  # desktop + landscape: pages open at the top, back restores scroll, no blank frames or splash between sections
 npm test             # build + flows in one go
 ```

@@ -36,12 +36,13 @@ export default function ProjectsPage() {
 
   return (
     <Page wide title="Projects" actions={<Button leading={<Plus className="size-4" />} onClick={() => navigate('/projects/new')} className="hidden sm:inline-flex">New project</Button>}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative sm:w-72">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="relative sm:w-72 sm:shrink-0">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-3" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search projects" className="pl-10" aria-label="Search projects" />
         </div>
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:px-0">
+        {/* A scroll strip on phones; wraps onto extra lines where there's room, so no chip is ever half hidden. */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:min-w-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pt-0.5">
           <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All · {counts.all}</Chip>
           <Chip active={filter === 'live'} onClick={() => setFilter('live')}>Live · {counts.live}</Chip>
           {counts.blocked ? <Chip active={filter === 'blocked'} onClick={() => setFilter('blocked')}>Blocked · {counts.blocked}</Chip> : null}

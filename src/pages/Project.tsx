@@ -105,10 +105,12 @@ export default function ProjectPage() {
     <div className="mx-auto w-full max-w-[1400px]">
       {/* Hero */}
       <motion.div className="relative" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
-        <div className="relative h-[46vw] max-h-[min(420px,58dvh)] min-h-[200px] overflow-hidden bg-surface-2 [overflow-anchor:none] lg:mx-10 lg:mt-6 lg:rounded-[32px]">
-          <CoverImage path={project.cover_path} alt="" accent={project.accent} className="h-full w-full" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#1e1a16]/85 via-[#1e1a16]/25 to-transparent" />
-          <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3 safe-top sm:p-4">
+        {/* The hero sizes to its text: the buttons row sits at the top and the title block at the bottom, in normal flow,
+            so a long title or a blocker note can never climb up over the Nudge / Edit buttons (it did on phones). */}
+        <div className="relative flex min-h-[max(200px,min(46vw,58dvh))] flex-col overflow-hidden bg-surface-2 [overflow-anchor:none] lg:mx-10 lg:mt-6 lg:min-h-[min(380px,58dvh)] lg:rounded-[32px]">
+          <div className="absolute inset-0"><CoverImage path={project.cover_path} alt="" accent={project.accent} className="h-full w-full" /></div>
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#1e1a16]/85 via-[#1e1a16]/25 to-transparent" />
+          <div className="relative z-10 flex items-center justify-between p-3 safe-top sm:p-4">
             <button onClick={() => navigate(-1)} className="glass grid size-11 place-items-center rounded-full border border-line text-ink shadow-md" aria-label="Back">
               <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
             </button>
@@ -128,10 +130,10 @@ export default function ProjectPage() {
               </Menu>
             </div>
           </div>
-          {/* In a phone-landscape hero (200px tall) only the chips and title fit — the rest is repeated below anyway. */}
-          <div className="absolute inset-x-0 bottom-0 p-4 pb-9 text-[#F6F1E9] sm:p-6 sm:pb-12 short:pb-9">
+          {/* In a phone-landscape hero only the chips and title fit — the rest is repeated below anyway. */}
+          <div className="relative mt-auto p-4 pb-9 pt-5 text-[#F6F1E9] sm:p-6 sm:pb-12 sm:pt-8 short:pb-9">
             <div className="flex flex-wrap items-center gap-2">
-              <Menu trigger={<button className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#F6F1E9]/15 px-3 text-xs font-medium backdrop-blur hover:bg-[#F6F1E9]/25"><StatusDot status={project.status} />{PROJECT_STATUSES.find((s) => s.value === project.status)?.label} <ChevronDown className="size-3.5" /></button>} align="start">
+              <Menu trigger={<button className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#F6F1E9]/20 px-3 text-xs font-medium hover:bg-[#F6F1E9]/30"><StatusDot status={project.status} />{PROJECT_STATUSES.find((s) => s.value === project.status)?.label} <ChevronDown className="size-3.5" /></button>} align="start">
                 <MenuLabel>Move to</MenuLabel>
                 {PROJECT_STATUSES.map((s) => <MenuItem key={s.value} onSelect={() => setStatus(s.value)} disabled={project.status === s.value}>{s.label}</MenuItem>)}
               </Menu>
@@ -167,7 +169,7 @@ export default function ProjectPage() {
 
         {/* Tabs */}
         <div ref={tabsTop} aria-hidden className="mt-6" />
-        <div className="sticky top-0 z-20 -mx-4 bg-bg/85 px-4 py-2 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+        <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
           <div role="tablist" className="flex gap-1 overflow-x-auto scrollbar-none">
             {TABS.map((t) => {
               const active = tab === t.value
