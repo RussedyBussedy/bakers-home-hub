@@ -12,7 +12,8 @@
     "flows": "node scripts/flows.mjs",
     "icons": "node scripts/icons.mjs",
     "test": "bash scripts/test.sh",
-    "overflow": "node scripts/overflow.mjs"
+    "overflow": "node scripts/overflow.mjs",
+    "scrollcheck": "node scripts/scrollcheck.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

@@ -7,6 +7,7 @@ import { ConfirmHost, PromptHost } from './components/ui/Sheet'
 import { NudgeHost } from './components/nudges/NudgeSheet'
 import { TooltipProvider } from './components/ui/Menu'
 import { Splash } from './components/layout/Splash'
+import { ScrollManager } from './components/layout/ScrollManager'
 import LoginPage from './pages/Login'
 import HubPage from './pages/Hub'
 import ProjectsPage from './pages/Projects'
@@ -40,11 +41,13 @@ export default function App() {
       <AuthProvider>
         <TooltipProvider>
           <BrowserRouter>
+            <ScrollManager />
             <Suspense fallback={<Splash />}>
               <Routes>
                 <Route path="/login" element={<RedirectIfAuthed />} />
                 <Route element={<RequireAuth />}>
-                  <Route path="/projects/:id/board" element={<BoardPage />} />
+                  {/* The board lives outside the shell; while its code arrives, show the plain background rather than the splash. */}
+                  <Route path="/projects/:id/board" element={<Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}><BoardPage /></Suspense>} />
                   <Route element={<AppShell />}>
                     <Route index element={<HubPage />} />
                     <Route path="/projects" element={<ProjectsPage />} />

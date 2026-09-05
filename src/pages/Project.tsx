@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { AlertOctagon, BellRing, CalendarDays, Camera, ChevronDown, Expand, FileText, HardHat, Link2, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Trash2, Wallet, Zap } from 'lucide-react'
@@ -54,6 +54,17 @@ export default function ProjectPage() {
   const [blockOpen, setBlockOpen] = useState(false)
   // Links from nudges arrive as /projects/:id?tab=tasks — follow them, then tidy the URL.
   useEffect(() => { if (isTab(paramTab)) { setTab(paramTab); setParams({}, { replace: true }) } }, [paramTab, setParams])
+  // Switching tabs while scrolled past the tab bar: bring the bar to the top so the new tab starts in view,
+  // instead of leaving the browser to pick a scroll position from whatever content happened to be there.
+  const tabsTop = useRef<HTMLDivElement>(null)
+  const firstTab = useRef(true)
+  useLayoutEffect(() => {
+    if (firstTab.current) { firstTab.current = false; return }
+    const el = tabsTop.current
+    if (!el) return
+    const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY)
+    if (window.scrollY > y) window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior })
+  }, [tab])
 
   const quotes = useMemo(() => data.quotes.filter((q) => q.project_id === id), [data.quotes, id])
   const expenses = useMemo(() => data.expenses.filter((e) => e.project_id === id), [data.expenses, id])
@@ -94,7 +105,7 @@ export default function ProjectPage() {
     <div className="mx-auto w-full max-w-[1400px]">
       {/* Hero */}
       <motion.div className="relative" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
-        <div className="relative h-[46vw] max-h-[420px] min-h-[260px] overflow-hidden bg-surface-2 lg:mx-10 lg:mt-6 lg:rounded-[32px]">
+        <div className="relative h-[46vw] max-h-[min(420px,58dvh)] min-h-[200px] overflow-hidden bg-surface-2 [overflow-anchor:none] lg:mx-10 lg:mt-6 lg:rounded-[32px]">
           <CoverImage path={project.cover_path} alt="" accent={project.accent} className="h-full w-full" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#1e1a16]/85 via-[#1e1a16]/25 to-transparent" />
           <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3 safe-top sm:p-4">
@@ -117,7 +128,8 @@ export default function ProjectPage() {
               </Menu>
             </div>
           </div>
-          <div className="absolute inset-x-0 bottom-0 p-4 pb-9 text-[#F6F1E9] sm:p-6 sm:pb-12">
+          {/* In a phone-landscape hero (200px tall) only the chips and title fit — the rest is repeated below anyway. */}
+          <div className="absolute inset-x-0 bottom-0 p-4 pb-9 text-[#F6F1E9] sm:p-6 sm:pb-12 short:pb-9">
             <div className="flex flex-wrap items-center gap-2">
               <Menu trigger={<button className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#F6F1E9]/15 px-3 text-xs font-medium backdrop-blur hover:bg-[#F6F1E9]/25"><StatusDot status={project.status} />{PROJECT_STATUSES.find((s) => s.value === project.status)?.label} <ChevronDown className="size-3.5" /></button>} align="start">
                 <MenuLabel>Move to</MenuLabel>
@@ -127,9 +139,9 @@ export default function ProjectPage() {
               {project.priority === 'high' && <span className="rounded-full bg-[#C4552B] px-2 py-0.5 text-[11px] font-semibold">High priority</span>}
               {project.blocked_on && <BlockerChip project={project} compact onClick={() => setBlockOpen(true)} className="bg-[#F6F1E9] text-danger" />}
             </div>
-            <h1 className="mt-2 max-w-3xl text-[30px] leading-[1.05] text-[#F6F1E9] sm:text-[42px]">{project.title}</h1>
-            {creator && <p className="mt-2 flex items-center gap-2 text-xs text-[#F6F1E9]/75"><Avatar name={creator.display_name} color={creator.color} size="xs" /> Started by {creator.display_name} · updated {fmtRelative(project.updated_at)}{lastVisit ? <span className="inline-flex items-center gap-1"><span aria-hidden>·</span><HardHat className="size-3.5" /> {lastVisit}</span> : null}</p>}
-            {project.blocked_on && project.blocked_note && <p className="mt-1.5 max-w-2xl text-[13px] text-[#F6F1E9]/85"><AlertOctagon className="mr-1 inline size-3.5 align-[-2px] text-[#F6C7B8]" />{project.blocked_note} <span className="text-[#F6F1E9]/60">· {blockedFor(project)}</span></p>}
+            <h1 className="mt-2 max-w-3xl text-[30px] leading-[1.05] text-[#F6F1E9] sm:text-[42px] short:text-[26px]">{project.title}</h1>
+            {creator && <p className="mt-2 flex items-center gap-2 text-xs text-[#F6F1E9]/75 short:hidden"><Avatar name={creator.display_name} color={creator.color} size="xs" /> Started by {creator.display_name} · updated {fmtRelative(project.updated_at)}{lastVisit ? <span className="inline-flex items-center gap-1"><span aria-hidden>·</span><HardHat className="size-3.5" /> {lastVisit}</span> : null}</p>}
+            {project.blocked_on && project.blocked_note && <p className="mt-1.5 max-w-2xl text-[13px] text-[#F6F1E9]/85 short:hidden"><AlertOctagon className="mr-1 inline size-3.5 align-[-2px] text-[#F6C7B8]" />{project.blocked_note} <span className="text-[#F6F1E9]/60">· {blockedFor(project)}</span></p>}
           </div>
         </div>
       </motion.div>
@@ -154,7 +166,8 @@ export default function ProjectPage() {
         </div>
 
         {/* Tabs */}
-        <div className="sticky top-0 z-20 -mx-4 mt-6 bg-bg/85 px-4 py-2 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+        <div ref={tabsTop} aria-hidden className="mt-6" />
+        <div className="sticky top-0 z-20 -mx-4 bg-bg/85 px-4 py-2 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
           <div role="tablist" className="flex gap-1 overflow-x-auto scrollbar-none">
             {TABS.map((t) => {
               const active = tab === t.value
@@ -171,7 +184,7 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        <motion.div key={tab} className="mt-4 pb-8" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}>
+        <motion.div key={tab} className="mt-4 pb-8 [overflow-anchor:none]" initial={{ opacity: 0.3, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}>
           {tab === 'overview' && (
             <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
               <div className="flex min-w-0 flex-col gap-6">
@@ -301,7 +314,7 @@ function EditProjectSheet({ open, onOpenChange, projectId }: { open: boolean; on
 function ProjectSkeleton() {
   return (
     <div className="mx-auto w-full max-w-[1400px]">
-      <Skeleton className="h-[46vw] max-h-[420px] min-h-[260px] w-full rounded-none lg:mx-10 lg:mt-6 lg:w-auto lg:rounded-[32px]" />
+      <Skeleton className="h-[46vw] max-h-[min(420px,58dvh)] min-h-[200px] w-full rounded-none lg:mx-10 lg:mt-6 lg:w-auto lg:rounded-[32px]" />
       <div className="grid grid-cols-2 gap-3 px-4 pt-4 sm:grid-cols-4 lg:px-10">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div>
       <div className="px-4 pt-6 lg:px-10"><Skeleton className="h-64 w-full rounded-3xl" /></div>
     </div>

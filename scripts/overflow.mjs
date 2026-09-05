@@ -4,7 +4,17 @@
 import { chromium } from 'playwright'
 
 const base = process.argv[2] || 'http://127.0.0.1:4173'
-const widths = [360, 390, 430]
+// Portrait phones, landscape phones, a tablet and two desktop sizes.
+const viewports = [
+  { name: 'phone-360', width: 360, height: 800, mobile: true },
+  { name: 'phone-390', width: 390, height: 844, mobile: true },
+  { name: 'phone-430', width: 430, height: 932, mobile: true },
+  { name: 'landscape-844', width: 844, height: 390, mobile: true },
+  { name: 'landscape-736', width: 736, height: 414, mobile: true },
+  { name: 'tablet-1024', width: 1024, height: 768, mobile: true },
+  { name: 'desktop-1280', width: 1280, height: 800, mobile: false },
+  { name: 'desktop-1536', width: 1536, height: 900, mobile: false },
+]
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' })
 
 const LONG = {
@@ -29,8 +39,8 @@ const PAGES = (pid) => [
 ]
 
 let problems = 0
-for (const width of widths) {
-  const context = await browser.newContext({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+for (const { name: vpName, width, height, mobile } of viewports) {
+  const context = await browser.newContext({ viewport: { width, height }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: mobile ? 2 : 1 })
   await context.addInitScript(() => { localStorage.setItem('hub-demo-user', 'u-russel'); localStorage.setItem('hub-theme', 'light') })
   const page = await context.newPage()
   // Seed, then lengthen some titles directly in the demo state.
@@ -70,10 +80,10 @@ for (const width of widths) {
     })
     const bad = report.scroll > report.vw + 1 || report.wide.length || report.clipped.length
     if (bad) problems++
-    console.log(`${bad ? '✗' : '✓'} ${width}px ${name}${report.scroll > report.vw + 1 ? ` — page scrolls sideways (${report.scroll} > ${report.vw})` : ''}`)
+    console.log(`${bad ? '✗' : '✓'} ${vpName} ${name}${report.scroll > report.vw + 1 ? ` — page scrolls sideways (${report.scroll} > ${report.vw})` : ''}`)
     for (const w of report.wide) console.log('    wide:', w)
     for (const c of report.clipped) console.log('    clipped:', c)
-    if (bad) await page.screenshot({ path: `qa-shots/overflow-${width}-${name}.png`, fullPage: true })
+    if (bad) await page.screenshot({ path: `qa-shots/overflow-${vpName}-${name}.png`, fullPage: true })
   }
   await context.close()
 }

@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BarChart3, Compass, Home, Plus, Settings, Trophy, Users, Zap, Flame } from 'lucide-react'
-import { useEffect, type ReactNode } from 'react'
+import { Suspense, useEffect, type ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../data/session'
 import { useInbox, useLevel, useRealtimeSync, useXp } from '../../data/hooks'
@@ -44,6 +44,20 @@ export function AppShell() {
   }, [unreadCount])
 
   const badge = (n: typeof NAV[number]) => (n.to === '/' && unreadCount > 0 ? unreadCount : 0)
+
+  // Reserve the desktop scrollbar's space while the shell is up (see `html.in-shell` in index.css).
+  useEffect(() => {
+    document.documentElement.classList.add('in-shell')
+    return () => document.documentElement.classList.remove('in-shell')
+  }, [])
+
+  // Fetch the lazy pages while the person is reading, so tapping Insights or a board never waits on a download.
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number }
+    const preload = () => { void import('../../pages/Insights'); void import('../../pages/Board') }
+    if (w.requestIdleCallback) w.requestIdleCallback(preload)
+    else window.setTimeout(preload, 1200)
+  }, [])
 
   return (
     <div className="min-h-dvh bg-bg">
@@ -105,8 +119,11 @@ export function AppShell() {
       </aside>
 
       {/* Content */}
-      <main className="min-w-0 overflow-x-clip pb-[calc(84px+env(safe-area-inset-bottom))] lg:pb-10 lg:pl-[264px]">
-        <Outlet />
+      <main className="min-w-0 overflow-x-clip pb-[calc(84px+env(safe-area-inset-bottom))] short:pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-10 lg:pl-[264px]">
+        {/* Lazy pages resolve here, inside the shell — never by swapping the whole app for the splash screen. */}
+        <Suspense fallback={<div className="min-h-[60dvh]" aria-busy="true" />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* Floating add — everywhere except the board and the new-project form */}
@@ -115,7 +132,7 @@ export function AppShell() {
           <motion.button
             aria-label="New project"
             onClick={() => navigate('/projects/new')}
-            className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] right-4 z-40 grid size-14 place-items-center rounded-full bg-primary text-on-primary shadow-lg lg:hidden"
+            className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] right-4 z-40 grid size-14 place-items-center rounded-full bg-primary text-on-primary shadow-lg short:bottom-[calc(58px+env(safe-area-inset-bottom))] short:size-12 lg:hidden"
             whileHover={{ scale: 1.06 }}
             whileTap={{ scale: 0.94 }}
             initial={{ scale: 0, rotate: -90 }}
@@ -132,7 +149,7 @@ export function AppShell() {
         <ul className="grid grid-cols-5">
           {NAV.map((n) => (
             <li key={n.to}>
-              <NavLink to={n.to} end={n.end} className={({ isActive }) => cn('relative flex h-[64px] flex-col items-center justify-center gap-1 text-[11px] font-medium', isActive ? 'text-primary-text' : 'text-ink-3')}>
+              <NavLink to={n.to} end={n.end} aria-label={n.label} className={({ isActive }) => cn('relative flex h-[64px] flex-col items-center justify-center gap-1 text-[11px] font-medium short:h-12', isActive ? 'text-primary-text' : 'text-ink-3')}>
                 {({ isActive }) => (
                   <>
                     <span className="relative grid h-7 w-12 place-items-center">
@@ -140,7 +157,7 @@ export function AppShell() {
                       <n.icon className="relative size-[22px]" strokeWidth={isActive ? 2.2 : 1.8} />
                       {badge(n) > 0 && <span className="absolute -right-0.5 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-on-primary ring-2 ring-surface tabular">{badge(n)}</span>}
                     </span>
-                    <span>{n.label}</span>
+                    <span className="short:hidden">{n.label}</span>
                   </>
                 )}
               </NavLink>
@@ -158,9 +175,10 @@ export function Page({ children, className, wide, title, back, actions }: { chil
   return (
     <motion.div
       className={cn('mx-auto w-full px-4 pt-4 sm:px-6 lg:px-10 lg:pt-8', wide ? 'max-w-[1400px]' : 'max-w-6xl', className)}
-      initial={{ opacity: 0, y: 10 }}
+      // Start visible and settle, rather than flashing blank and fading in — a blink reads as flicker on a fast desktop.
+      initial={{ opacity: 0.4, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >
       {(title || back || actions) && (
         <div className="mb-5 flex items-center gap-2">

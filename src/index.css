@@ -3,6 +3,8 @@
 @import '@fontsource-variable/dm-sans/opsz.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+/* A phone held sideways: little height to spare, so chrome gets compact. */
+@custom-variant short (@media (max-height: 520px));
 
 /* ------------------------------------------------------------------ */
 /*  Design tokens — warm, earthy, tactile. Light is default.           */
@@ -200,6 +202,12 @@
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
     overscroll-behavior-y: none;
+  }
+  /* Inside the app shell, keep the scrollbar's space reserved on desktops that show one, so a short page
+     and a long page line up and the content doesn't jump sideways when switching between them.
+     (The full-screen board opts out — it never scrolls.) */
+  html.in-shell {
+    scrollbar-gutter: stable;
   }
   body {
     margin: 0;

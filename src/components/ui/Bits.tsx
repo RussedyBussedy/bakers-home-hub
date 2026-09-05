@@ -106,18 +106,21 @@ export function BudgetBar({ budget, real, className, height = 10 }: { budget: nu
 // ---------------------------------------------------------------------------
 // Animated number
 // ---------------------------------------------------------------------------
+const SESSION_START = typeof performance !== 'undefined' ? performance.now() : 0
+/** Numbers count up on the first screen of a session; after that they appear settled and only animate when they change. */
 export function CountUp({ value, format = (n) => Math.round(n).toLocaleString('en-ZA'), className, duration = 0.9 }: { value: number; format?: (n: number) => string; className?: string; duration?: number }) {
   const ref = useRef<HTMLSpanElement>(null)
   const reduce = useUi((s) => s.reduceMotion)
-  const mv = useMotionValue(0)
+  const settled = useRef(reduce || performance.now() - SESSION_START > 6000)
+  const mv = useMotionValue(settled.current ? value : 0)
   const text = useTransform(mv, (v) => format(v))
   useEffect(() => {
     if (reduce) { mv.set(value); return }
-    const ctrl = animate(mv, value, { duration, ease: [0.16, 1, 0.3, 1] })
+    const ctrl = animate(mv, value, { duration: settled.current ? 0.5 : duration, ease: [0.16, 1, 0.3, 1] })
     return () => ctrl.stop()
   }, [value, mv, duration, reduce])
   useEffect(() => text.on('change', (t) => { if (ref.current) ref.current.textContent = t }), [text])
-  return <span ref={ref} className={className}>{format(reduce ? value : 0)}</span>
+  return <span ref={ref} className={className}>{format(settled.current ? value : 0)}</span>
 }
 
 export function Money({ value, className, compact }: { value: number; className?: string; compact?: boolean }) {
@@ -170,9 +173,9 @@ export function Reveal({ children, index = 0, className, as = 'div' }: { childre
   return (
     <Comp
       className={className}
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0.3, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 12) * 0.045 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 12) * 0.025 }}
     >
       {children}
     </Comp>

@@ -18,9 +18,11 @@ export function CoverImage({ path, alt, className, accent }: { path: string | nu
     )
   }
   return (
-    <div className={cn('relative overflow-hidden bg-surface-2', className)}>
+    // overflow-anchor: a cover that is half off the top of the screen must never be the browser's scroll anchor —
+    // when the content below it changes (switching a project tab), Chrome would "keep it in place" by jumping the page.
+    <div className={cn('relative overflow-hidden bg-surface-2 [overflow-anchor:none]', className)}>
       {url ? (
-        <motion.img src={url} alt={alt} className="h-full w-full object-cover" initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }} loading="lazy" />
+        <motion.img src={url} alt={alt} className="h-full w-full object-cover [overflow-anchor:none]" initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }} loading="lazy" />
       ) : (
         <div className="skeleton h-full w-full rounded-none" />
       )}
