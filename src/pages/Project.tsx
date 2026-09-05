@@ -142,7 +142,8 @@ export default function ProjectPage() {
               {project.blocked_on && <BlockerChip project={project} compact onClick={() => setBlockOpen(true)} className="bg-[#F6F1E9] text-danger" />}
             </div>
             <h1 className="mt-2 max-w-3xl text-[30px] leading-[1.05] text-[#F6F1E9] sm:text-[42px] short:text-[26px]">{project.title}</h1>
-            {creator && <p className="mt-2 flex items-center gap-2 text-xs text-[#F6F1E9]/75 short:hidden"><Avatar name={creator.display_name} color={creator.color} size="xs" /> Started by {creator.display_name} · updated {fmtRelative(project.updated_at)}{lastVisit ? <span className="inline-flex items-center gap-1"><span aria-hidden>·</span><HardHat className="size-3.5" /> {lastVisit}</span> : null}</p>}
+            {/* Plain wrapping text (not a flex row) so a long line breaks naturally on a phone. */}
+            {creator && <p className="mt-2 text-xs leading-5 text-[#F6F1E9]/75 short:hidden"><span className="mr-1.5 inline-block align-middle"><Avatar name={creator.display_name} color={creator.color} size="xs" /></span>Started by {creator.display_name} · updated {fmtRelative(project.updated_at)}{lastVisit ? <> · <HardHat className="inline size-3.5 align-[-2px]" /> {lastVisit}</> : null}</p>}
             {project.blocked_on && project.blocked_note && <p className="mt-1.5 max-w-2xl text-[13px] text-[#F6F1E9]/85 short:hidden"><AlertOctagon className="mr-1 inline size-3.5 align-[-2px] text-[#F6C7B8]" />{project.blocked_note} <span className="text-[#F6F1E9]/60">· {blockedFor(project)}</span></p>}
           </div>
         </div>
