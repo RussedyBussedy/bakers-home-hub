@@ -60,7 +60,7 @@ export function ColorPin({ data }: { data: ColorData }) {
       </div>
       <div className="flex h-[46px] shrink-0 flex-col justify-center px-2.5 leading-tight">
         <p className="truncate text-[12px] font-medium text-[#1e1a16]">{data.name}</p>
-        <p className="text-[10px] uppercase tabular text-[#8a8078]">{data.hex}</p>
+        <p className="truncate text-[10px] text-[#8a8078]"><span className="uppercase tabular">{data.hex}</span>{data.ral ? ` · ${data.ral.replace(/^RAL (\d+).*$/, 'RAL $1')}` : ''}</p>
       </div>
     </div>
   )

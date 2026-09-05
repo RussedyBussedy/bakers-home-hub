@@ -305,7 +305,7 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
     for (const c of colors) {
       const { w, h } = DEFAULT_SIZES.color
       const pos = centerFor(w, h)
-      const data: ColorData = { hex: c.hex, name: c.name, source }
+      const data: ColorData = { hex: c.hex, name: c.name, source, ral: c.ral }
       await addBoardItem({ project_id: project.id, type: 'color', x: pos.x + i * 40, y: pos.y + i * 18, w, h, rotation: jitter(), z: maxZ + 1 + i, data })
       i++
     }

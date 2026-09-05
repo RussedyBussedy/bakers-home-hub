@@ -198,7 +198,7 @@ export interface Task {
 }
 
 export interface PhotoData { path: string; caption?: string; natural_w?: number; natural_h?: number }
-export interface ColorData { hex: string; name: string; source?: string }
+export interface ColorData { hex: string; name: string; source?: string; /** Nearest RAL Classic code, e.g. "RAL 7006 Beige grey". */ ral?: string }
 export interface NoteData { text: string; tint: 'butter' | 'blush' | 'mint' | 'sky' | 'paper' | 'lilac' }
 export interface LinkData { url: string; title: string; domain: string; image_url?: string }
 export interface ProductData { title: string; price: number | null; url?: string; image_path?: string; supplier?: string }

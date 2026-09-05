@@ -46,6 +46,7 @@ Set `VITE_DEMO_ONLY=true` to force the built-in demo mode (sample data in localS
 - `src/components/nudges/` – the Nudge sheet (`useNudge()` opens it from anywhere) and the Hub inbox. Assigning a task to the other person nudges them automatically.
 - `src/components/project/SiteVisits.tsx` / `Blocker.tsx` – the site-day log (who was due, who came; a no-show nudges the other person) and the “blocked on” flag that sits on top of a project's status. Quote expiry is computed from `valid_until` (`quoteExpiry` in `src/lib/xp.ts`), never stored.
 - `src/lib/contacts.ts` – ways to get a contact in without typing: the phone's contact picker (Android Chrome; iPhone Safari behind *Settings → Safari → Advanced → Feature Flags → Contact Picker API*), `.vcf` contact cards, pasted text (WhatsApp messages, signatures, Maps listings) and a Google Maps search hand-off.
+- `src/lib/colorNames.ts` – real names for sampled colours: the nearest of ~5 000 hand-picked names (from [meodai/color-names](https://github.com/meodai/color-names), MIT, bundled as `src/data/colornames.txt` and lazy-loaded) and the nearest RAL Classic paint code (`src/data/ral.ts`, from the MIT `ral-colors` package), both matched with CIEDE2000 in Lab space.
 - `src/components/board/` – the pin board: `Board.tsx` (pan/zoom/drag/resize/rotate), `Pins.tsx` (how each pin type looks), `Eyedropper.tsx` (sample colours from a photo, auto-palette), `PinEditor.tsx` (add/edit sheets).
 - `supabase/schema.sql` – the whole backend.
 

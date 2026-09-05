@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Check, ImagePlus } from 'lucide-react'
 import type { BoardItem, BoardItemData, BoardItemType, ColorData, LabelData, LinkData, NoteData, PhotoData, ProductData } from '../../data/types'
-import { CURATED_PALETTES, isHex, nameColor, normaliseHex, textOn } from '../../lib/colors'
+import { CURATED_PALETTES, isHex, normaliseHex, textOn } from '../../lib/colors'
+import { bestName, closeness, loadColorNames, nearestNames, nearestRal, onColorNamesLoaded, ralLabel } from '../../lib/colorNames'
 import { cn, domainOf, normaliseUrl } from '../../lib/utils'
 import { Button } from '../ui/Button'
 import { Field, Input, Select, Textarea } from '../ui/Field'
@@ -31,7 +32,7 @@ export function PinEditor({ open, onOpenChange, type, item, onSave }: { open: bo
     try {
       let d = data
       if (type === 'link') { const l = d as LinkData; d = { ...l, url: normaliseUrl(l.url), domain: domainOf(l.url), title: l.title.trim() || domainOf(l.url) } }
-      if (type === 'color') { const c = d as ColorData; const hex = normaliseHex(c.hex); d = { ...c, hex, name: c.name.trim() || nameColor(hex) } }
+      if (type === 'color') { const c = d as ColorData; const hex = normaliseHex(c.hex); d = { ...c, hex, name: c.name.trim() || bestName(hex), ral: ralLabel(nearestRal(hex)) } }
       await onSave({ type, data: d, imageFile: file })
       onOpenChange(false)
     } catch { /* toast */ } finally { setBusy(false) }
@@ -142,18 +143,47 @@ function LabelFields({ data, onChange, error }: { data: LabelData; onChange: (d:
 function ColorFields({ data, onChange, error }: { data: ColorData; onChange: (d: ColorData) => void; error: string | null }) {
   const valid = isHex(data.hex)
   const hex = valid ? normaliseHex(data.hex) : '#888888'
+  const [, bump] = useState(0)
+  useEffect(() => {
+    void loadColorNames()
+    return onColorNamesLoaded(() => bump((n) => n + 1))
+  }, [])
+  const pick = (h: string) => onChange({ ...data, hex: h, name: bestName(h), ral: ralLabel(nearestRal(h)) })
+  const ral = valid ? nearestRal(hex) : null
+  const alts = valid ? nearestNames(hex, 4).filter((n) => n.name !== data.name) : []
+  const how = ral ? closeness(ral.dE) : 'nearest'
   return (
     <>
       <div className="flex items-center gap-4">
         <label className="relative grid size-20 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-2xl shadow-sm" style={{ background: hex, color: textOn(hex) }}>
           <span className="text-[11px] font-semibold uppercase">Pick</span>
-          <input type="color" value={hex} onChange={(e) => onChange({ ...data, hex: e.target.value, name: nameColor(e.target.value) })} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Colour picker" />
+          <input type="color" value={hex} onChange={(e) => pick(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Colour picker" />
         </label>
         <div className="flex flex-1 flex-col gap-3">
-          <Field label="Hex code" error={error ?? undefined}>{(id) => <Input id={id} value={data.hex} onChange={(e) => { const v = e.target.value; onChange({ ...data, hex: v, name: isHex(v) ? nameColor(v) : data.name }) }} placeholder="#7A8F6E" className="uppercase tabular" />}</Field>
+          <Field label="Hex code" error={error ?? undefined}>{(id) => <Input id={id} value={data.hex} onChange={(e) => { const v = e.target.value; if (isHex(v)) pick(v); else onChange({ ...data, hex: v }) }} placeholder="#7A8F6E" className="uppercase tabular" />}</Field>
           <Field label="Name">{(id) => <Input id={id} value={data.name} onChange={(e) => onChange({ ...data, name: e.target.value })} placeholder="Dusty Sage" />}</Field>
         </div>
       </div>
+      {valid && (
+        <div className="rounded-2xl bg-surface-2 p-3 text-[13px]">
+          {ral && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink-2">
+              <span className="inline-block size-4 rounded-md shadow-inner" style={{ background: ral.hex }} aria-hidden />
+              <span><b className="font-medium text-ink">{ralLabel(ral)}</b> is the {how === 'exact' ? 'matching' : how === 'close' ? 'closest' : 'nearest'} paint code{how === 'nearest' ? ' — a fair way off, so ask the shop to match a sample' : ''}.</span>
+            </p>
+          )}
+          {alts.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-ink-3">Also known as</span>
+              {alts.map((a) => (
+                <button key={a.name} type="button" onClick={() => onChange({ ...data, name: a.name })} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink">
+                  <span className="inline-block size-3 rounded-full" style={{ background: a.hex }} aria-hidden /> {a.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div>
         <p className="mb-2 text-[13px] font-medium text-ink-2">Or start from a palette</p>
         <div className="flex flex-col gap-2">
@@ -162,7 +192,7 @@ function ColorFields({ data, onChange, error }: { data: ColorData; onChange: (d:
               <span className="w-28 shrink-0 truncate text-xs text-ink-3">{p.name}</span>
               <div className="flex flex-1 gap-1.5">
                 {p.colors.map((c) => (
-                  <button key={c} type="button" onClick={() => onChange({ ...data, hex: c, name: nameColor(c) })} aria-label={`${nameColor(c)} ${c}`} className={cn('h-9 flex-1 rounded-lg transition-transform hover:scale-105', hex.toLowerCase() === c.toLowerCase() && 'ring-2 ring-ink ring-offset-2 ring-offset-surface')} style={{ background: c }} />
+                  <button key={c} type="button" onClick={() => pick(c)} aria-label={`${bestName(c)} ${c}`} className={cn('h-9 flex-1 rounded-lg transition-transform hover:scale-105', hex.toLowerCase() === c.toLowerCase() && 'ring-2 ring-ink ring-offset-2 ring-offset-surface')} style={{ background: c }} />
                 ))}
               </div>
             </div>

@@ -10,7 +10,8 @@
     "lint": "oxlint",
     "qa": "node scripts/qa.mjs",
     "flows": "node scripts/flows.mjs",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "test": "bash scripts/test.sh"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

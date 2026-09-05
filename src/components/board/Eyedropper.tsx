@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Check, Pipette, Sparkles, X } from 'lucide-react'
-import { kmeansPalette, loadImage, nameColor, rgbToHex, samplePixels, textOn, type RGB, type Swatch } from '../../lib/colors'
+import { kmeansPalette, loadImage, rgbToHex, samplePixels, textOn, type RGB, type Swatch } from '../../lib/colors'
+import { bestName, loadColorNames, nearestRal, onColorNamesLoaded, ralLabel } from '../../lib/colorNames'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/Button'
 
-export interface PickedColor { hex: string; name: string }
+export interface PickedColor { hex: string; name: string; ral?: string }
 
 export function Eyedropper({ src, onDone, onCancel, title }: { src: string; onDone: (colors: PickedColor[]) => void; onCancel: () => void; title?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -18,6 +19,13 @@ export function Eyedropper({ src, onDone, onCancel, title }: { src: string; onDo
   const [palette, setPalette] = useState<Swatch[] | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [mode, setMode] = useState<'drop' | 'palette'>('drop')
+  const [, bump] = useState(0)
+
+  // Real names arrive from a lazy chunk; re-render once so the labels upgrade.
+  useEffect(() => {
+    void loadColorNames()
+    return onColorNamesLoaded(() => bump((n) => n + 1))
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -80,7 +88,7 @@ export function Eyedropper({ src, onDone, onCancel, title }: { src: string; onDo
     if (s) setLive({ hex: s.hex, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse' })
   }
   const onPointerUp = () => {
-    if (live) setPicked({ hex: live.hex, name: nameColor(live.hex) })
+    if (live) setPicked({ hex: live.hex, name: bestName(live.hex), ral: ralLabel(nearestRal(live.hex)) })
   }
 
   const extract = () => {
@@ -94,7 +102,7 @@ export function Eyedropper({ src, onDone, onCancel, title }: { src: string; onDo
   }
 
   const finish = () => {
-    if (mode === 'palette' && palette) onDone(palette.filter((p) => chosen.has(p.hex)).map((p) => ({ hex: p.hex, name: nameColor(p.hex) })))
+    if (mode === 'palette' && palette) onDone(palette.filter((p) => chosen.has(p.hex)).map((p) => ({ hex: p.hex, name: bestName(p.hex), ral: ralLabel(nearestRal(p.hex)) })))
     else if (picked) onDone([picked])
   }
 
@@ -145,7 +153,7 @@ export function Eyedropper({ src, onDone, onCancel, title }: { src: string; onDo
                   <button key={p.hex} onClick={() => setChosen((s) => { const n = new Set(s); if (n.has(p.hex)) n.delete(p.hex); else n.add(p.hex); return n })}
                     className={cn('flex h-14 min-w-[92px] flex-1 items-center gap-2 rounded-2xl px-3 text-left transition-transform', on ? 'ring-2 ring-white scale-[1.02]' : 'opacity-70')} style={{ background: p.hex, color: textOn(p.hex) }}>
                     {on && <Check className="size-4 shrink-0" />}
-                    <span className="min-w-0"><span className="block truncate text-[12px] font-semibold">{nameColor(p.hex)}</span><span className="block text-[10px] uppercase opacity-80">{p.hex}</span></span>
+                    <span className="min-w-0"><span className="block truncate text-[12px] font-semibold">{bestName(p.hex)}</span><span className="block text-[10px] uppercase opacity-80">{p.hex}</span></span>
                   </button>
                 )
               })}
@@ -160,8 +168,8 @@ export function Eyedropper({ src, onDone, onCancel, title }: { src: string; onDo
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="size-12 shrink-0 rounded-2xl border border-white/20 shadow-inner transition-colors" style={{ background: picked?.hex ?? live?.hex ?? '#333' }} />
               <div className="min-w-0">
-                <p className="truncate font-medium">{picked ? picked.name : live ? nameColor(live.hex) : 'No colour yet'}</p>
-                <p className="text-xs uppercase tabular text-[#F2EAE0]/60">{picked?.hex ?? live?.hex ?? '—'}</p>
+                <p className="truncate font-medium">{picked ? bestName(picked.hex) : live ? bestName(live.hex) : 'No colour yet'}</p>
+                <p className="truncate text-xs text-[#F2EAE0]/60"><span className="uppercase tabular">{picked?.hex ?? live?.hex ?? '—'}</span>{(picked ?? live) ? <> · {ralLabel(nearestRal((picked ?? live)!.hex))}</> : null}</p>
               </div>
             </div>
             <Button variant="secondary" size="icon" onClick={extract} disabled={!ready} aria-label="Auto palette" title="Auto palette"><Sparkles className="size-5" /></Button>
