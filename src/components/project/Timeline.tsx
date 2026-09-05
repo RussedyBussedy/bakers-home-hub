@@ -22,10 +22,11 @@ export function Timeline({ project, className }: { project: Project; className?:
         <motion.div className={cn('absolute left-0 top-6 h-2 rounded-full', completed ? 'bg-sage' : overdue ? 'bg-danger' : 'bg-primary')} initial={{ width: 0 }} animate={{ width: `${progress * 100}%` }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} />
         <Marker at={0} label="Start" date={project.start_date ?? project.created_at} tone="ink" />
         {target && <Marker at={pos(target)} label="Target" date={project.target_date} tone={overdue ? 'danger' : 'ochre'} bottom />}
+        {/* A marker sitting on top of "Start" takes the lower label row so the two don't print over each other. */}
         {completed ? (
-          <Marker at={pos(completed)} label="Done" date={project.completed_date} tone="sage" />
+          <Marker at={pos(completed)} label="Done" date={project.completed_date} tone="sage" bottom={pos(completed) < 0.12} />
         ) : (
-          today >= start && <Marker at={todayPos} label="Today" tone="primary" pulse />
+          today >= start && <Marker at={todayPos} label="Today" tone="primary" pulse bottom={todayPos < 0.12} />
         )}
       </div>
       <p className="mt-1 text-[13px] text-ink-2">
