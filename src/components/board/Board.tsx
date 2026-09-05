@@ -7,6 +7,8 @@ import type { BoardItem, BoardItemType, ColorData, NewBoardItem, PhotoData, Pres
 import { useActions } from '../../data/hooks'
 import { useAuth, useDb } from '../../data/session'
 import { readImageSize } from '../../lib/images'
+import { isHex, nameColor, normaliseHex } from '../../lib/colors'
+import { bestName, colorNamesReady, loadColorNames, nearestRal, ralLabel } from '../../lib/colorNames'
 import { clamp, cn, throttle, uid } from '../../lib/utils'
 import { Avatar } from '../ui/Bits'
 import { useConfirm } from '../ui/Sheet'
@@ -113,6 +115,25 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
 
   // ---- persistence helpers ------------------------------------------------------
   const liveSync = useMemo(() => throttle((item: BoardItem, patch: Partial<BoardItem>) => { void updateBoardItem(item, patch, { silent: true }) }, 160), [updateBoardItem])
+
+  // Swatches named by the old hue-bucket namer ("Dusty Ochre" for two different
+  // browns) get a real name once the name list is in; hand-typed names are kept
+  // and only gain their RAL code. Idempotent, so both phones can run it.
+  const [namesReady, setNamesReady] = useState(colorNamesReady())
+  useEffect(() => { void loadColorNames().then(() => setNamesReady(true)) }, [])
+  useEffect(() => {
+    if (!namesReady) return
+    for (const item of items) {
+      if (item.type !== 'color' || item.id.startsWith('temp-')) continue
+      const d = item.data as ColorData
+      if (!isHex(d.hex)) continue
+      const hex = normaliseHex(d.hex)
+      const autoNamed = !d.name.trim() || d.name === nameColor(hex)
+      const next: ColorData = { ...d, name: autoNamed ? bestName(hex) : d.name, ral: ralLabel(nearestRal(hex)) }
+      if (next.name === d.name && next.ral === d.ral) continue
+      void updateBoardItem(item, { data: next }, { silent: true })
+    }
+  }, [namesReady, items, updateBoardItem])
 
   const maxZ = useMemo(() => items.reduce((m, i) => Math.max(m, i.z), 0), [items])
   const minZ = useMemo(() => items.reduce((m, i) => Math.min(m, i.z), 1), [items])
