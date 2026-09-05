@@ -19,9 +19,19 @@ export function ScrollManager() {
   // Remember where each page was scrolled to, keyed by history entry.
   useLayoutEffect(() => {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'
-    const onScroll = () => { positions.set(keyRef.current, window.scrollY) }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    const save = () => { positions.set(keyRef.current, window.scrollY) }
+    // Scroll events are throttled or skipped in background tabs, so also snapshot right before anything that can
+    // navigate: a click (capture phase, before the router acts), back/forward, or the tab being hidden.
+    window.addEventListener('scroll', save, { passive: true })
+    document.addEventListener('click', save, true)
+    window.addEventListener('popstate', save, true)
+    document.addEventListener('visibilitychange', save)
+    return () => {
+      window.removeEventListener('scroll', save)
+      document.removeEventListener('click', save, true)
+      window.removeEventListener('popstate', save, true)
+      document.removeEventListener('visibilitychange', save)
+    }
   }, [])
 
   useLayoutEffect(() => {
