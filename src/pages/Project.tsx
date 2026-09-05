@@ -1,7 +1,10 @@
-import { useMemo, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CalendarDays, Camera, ChevronDown, Expand, FileText, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Trash2, Wallet, Zap } from 'lucide-react'
+import { BellRing, CalendarDays, Camera, ChevronDown, Expand, FileText, Link2, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Trash2, Wallet, Zap } from 'lucide-react'
+import { useNudge } from '../components/nudges/NudgeSheet'
+import { absoluteUrl, copyText } from '../lib/share'
+import { useUi } from '../store/ui'
 import { Page } from '../components/layout/AppShell'
 import { useActions, useBoardItems, useEverything, useProject } from '../data/hooks'
 import { useAuth } from '../data/session'
@@ -28,6 +31,7 @@ const TABS: { value: Tab; label: string; icon: typeof Wallet }[] = [
   { value: 'photos', label: 'Photos', icon: Camera },
   { value: 'tasks', label: 'Tasks', icon: ListChecks },
 ]
+const isTab = (v: string | null): v is Tab => TABS.some((t) => t.value === v)
 
 export default function ProjectPage() {
   const { id = '' } = useParams()
@@ -37,10 +41,16 @@ export default function ProjectPage() {
   const data = useEverything()
   const board = useBoardItems(id)
   const { updateProject, deleteProject } = useActions()
-  const { profileById } = useAuth()
+  const { profileById, partner } = useAuth()
   const confirm = useConfirm()
-  const [tab, setTab] = useState<Tab>((location.state as { tab?: Tab } | null)?.tab ?? 'overview')
+  const nudge = useNudge()
+  const toast = useUi((s) => s.toast)
+  const [params, setParams] = useSearchParams()
+  const paramTab = params.get('tab')
+  const [tab, setTab] = useState<Tab>(isTab(paramTab) ? paramTab : (location.state as { tab?: Tab } | null)?.tab ?? 'overview')
   const [editOpen, setEditOpen] = useState(false)
+  // Links from nudges arrive as /projects/:id?tab=tasks — follow them, then tidy the URL.
+  useEffect(() => { if (isTab(paramTab)) { setTab(paramTab); setParams({}, { replace: true }) } }, [paramTab, setParams])
 
   const quotes = useMemo(() => data.quotes.filter((q) => q.project_id === id), [data.quotes, id])
   const expenses = useMemo(() => data.expenses.filter((e) => e.project_id === id), [data.expenses, id])
@@ -84,11 +94,14 @@ export default function ProjectPage() {
               <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div className="flex gap-2">
+              <IconButton label={`Nudge ${partner?.display_name ?? 'partner'}`} variant="secondary" className="glass border-line shadow-md" onClick={() => nudge({ project })}><BellRing className="size-5" /></IconButton>
               <Button variant="secondary" className="glass border-line shadow-md" leading={<Pencil className="size-4" />} onClick={() => setEditOpen(true)}>Edit</Button>
               <Menu trigger={<IconButton label="More" variant="secondary" className="glass border-line shadow-md"><MoreHorizontal className="size-5" /></IconButton>}>
                 <MenuLabel>Move to</MenuLabel>
                 {PROJECT_STATUSES.map((s) => <MenuItem key={s.value} onSelect={() => setStatus(s.value)} disabled={project.status === s.value}>{s.label}</MenuItem>)}
                 <MenuSeparator />
+                <MenuItem icon={<BellRing />} onSelect={() => nudge({ project })}>Nudge {partner?.display_name ?? 'partner'}…</MenuItem>
+                <MenuItem icon={<Link2 />} onSelect={async () => { if (await copyText(absoluteUrl(`/projects/${project.id}`))) toast({ title: 'Link copied', tone: 'success' }) }}>Copy link</MenuItem>
                 <MenuItem icon={<Expand />} onSelect={() => navigate(`/projects/${project.id}/board`)}>Open the board</MenuItem>
                 <MenuItem danger icon={<Trash2 />} onSelect={remove}>Delete project</MenuItem>
               </Menu>

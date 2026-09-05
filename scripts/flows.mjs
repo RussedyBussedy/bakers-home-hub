@@ -42,10 +42,28 @@ await step('add + complete task', async () => {
   if (!t) throw new Error('no task XP')
 })
 
-await step('file quote + accept', async () => {
+await step('nudge Kay from the project', async () => {
+  await page.getByRole('button', { name: 'Nudge Kay' }).first().click()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: 'Have a look at the board' }).click()
+  await page.getByRole('button', { name: 'Send nudge' }).click()
+  await page.waitForTimeout(600)
+  await shot('02b-nudge')
+  const t = await page.locator('text=Nudge sent to Kay').count()
+  if (!t) throw new Error('no nudge toast')
+})
+
+await step('file quote + accept (with contact search)', async () => {
   await page.getByRole('tab', { name: /^Money/ }).click()
   await page.getByRole('button', { name: 'File a quote' }).click()
   await page.getByPlaceholder('Doors, paint & handles').fill('Pergola timber + build')
+  await page.getByRole('button', { name: 'Supplier or contractor' }).click()
+  await page.getByLabel('Search contacts').fill('joinery')
+  await page.waitForTimeout(200)
+  await page.getByRole('option', { name: /Joe Mahlangu/ }).click()
+  await page.waitForTimeout(300)
+  const picked = await page.locator('text=Joe Mahlangu · Joe\'s Joinery').count()
+  if (!picked) throw new Error('contact not picked')
   await page.getByPlaceholder('0').first().fill('18500')
   await page.locator('select').filter({ hasText: 'Received' }).first().selectOption('accepted')
   await page.getByRole('button', { name: 'File quote' }).click()
@@ -104,16 +122,33 @@ await step('board: add note, colour, drag', async () => {
   if (!n) throw new Error('note not persisted')
 })
 
-await step('contacts: add', async () => {
+await step('contacts: add via paste details', async () => {
   await page.goto(base + '/contacts', { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: 'New contact' }).click()
-  await page.getByPlaceholder('Joe Mahlangu').fill('Thabo Timber')
-  await page.getByPlaceholder("Joe's Joinery").fill('Timber City')
+  await page.getByRole('button', { name: 'Paste details' }).click()
+  await page.getByLabel('Pasted details').fill('Thabo Timber\nTimber City (Pty) Ltd\nCell: 082 555 0199\nthabo@timbercity.co.za\nhttps://timbercity.co.za')
+  await page.getByRole('button', { name: 'Pull out the details' }).click()
+  await page.waitForTimeout(300)
+  await shot('05a-paste')
+  const name = await page.getByPlaceholder('Joe Mahlangu').inputValue()
+  const company = await page.getByPlaceholder("Joe's Joinery").inputValue()
+  const wa = await page.getByPlaceholder('27…').inputValue()
+  if (name !== 'Thabo Timber' || company !== 'Timber City (Pty) Ltd' || wa !== '27825550199') throw new Error(`parsed badly: ${name} / ${company} / ${wa}`)
   await page.getByRole('button', { name: 'Add contact' }).click()
   await page.waitForTimeout(600)
   const c = await page.locator('text=Thabo Timber').count()
   if (!c) throw new Error('contact missing')
   await shot('05-contacts')
+})
+
+await step('hub: inbox shows a nudge from Kay', async () => {
+  await page.goto(base + '/', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(600)
+  const inbox = await page.locator('text=waiting for you').count()
+  if (!inbox) throw new Error('inbox not shown')
+  await shot('05b-inbox')
+  await page.getByRole('button', { name: 'Got it' }).first().click()
+  await page.waitForTimeout(400)
 })
 
 await step('complete project → celebration', async () => {

@@ -1,10 +1,10 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BarChart3, Compass, Home, Plus, Settings, Trophy, Users, Zap, Flame } from 'lucide-react'
-import { type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../data/session'
-import { useLevel, useRealtimeSync, useXp } from '../../data/hooks'
+import { useInbox, useLevel, useRealtimeSync, useXp } from '../../data/hooks'
 import { weeklyStreak } from '../../lib/xp'
 import { Avatar } from '../ui/Bits'
 import { Tooltip } from '../ui/Menu'
@@ -18,15 +18,31 @@ const NAV = [
   { to: '/rewards', label: 'Rewards', icon: Trophy },
 ]
 
+const BASE_TITLE = typeof document !== 'undefined' && document.title ? document.title : 'Home Hub'
+
 export function AppShell() {
   useRealtimeSync()
   const { me, household } = useAuth()
   const level = useLevel()
   const { data: xp } = useXp()
+  const { unread } = useInbox()
   const streak = weeklyStreak(xp ?? [])
   const navigate = useNavigate()
   const location = useLocation()
-  const hideFab = location.pathname.startsWith('/projects/new') || location.pathname.includes('/board')
+  const hideFab = location.pathname.startsWith('/projects/new') || location.pathname.includes('/board') || location.pathname.startsWith('/settings')
+  const unreadCount = unread.length
+
+  // Unread nudges show in the tab title and, when installed, on the app icon.
+  useEffect(() => {
+    document.title = unreadCount ? `(${unreadCount}) ${BASE_TITLE}` : BASE_TITLE
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> }
+    try {
+      if (unreadCount) void nav.setAppBadge?.(unreadCount)?.catch(() => {})
+      else void nav.clearAppBadge?.()?.catch(() => {})
+    } catch { /* not supported */ }
+  }, [unreadCount])
+
+  const badge = (n: typeof NAV[number]) => (n.to === '/' && unreadCount > 0 ? unreadCount : 0)
 
   return (
     <div className="min-h-dvh bg-bg">
@@ -56,7 +72,8 @@ export function AppShell() {
                 <>
                   {isActive && <motion.span layoutId="nav-pill" className="absolute inset-0 rounded-2xl bg-primary-soft" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                   <n.icon className={cn('relative size-5', isActive ? 'text-primary-text' : 'text-ink-3 group-hover:text-ink-2')} />
-                  <span className="relative">{n.label}</span>
+                  <span className="relative flex-1">{n.label}</span>
+                  {badge(n) > 0 && <span className="relative grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-on-primary tabular">{badge(n)}</span>}
                 </>
               )}
             </NavLink>
@@ -120,6 +137,7 @@ export function AppShell() {
                     <span className="relative grid h-7 w-12 place-items-center">
                       {isActive && <motion.span layoutId="tab-pill" className="absolute inset-0 rounded-full bg-primary-soft" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                       <n.icon className="relative size-[22px]" strokeWidth={isActive ? 2.2 : 1.8} />
+                      {badge(n) > 0 && <span className="absolute -right-0.5 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-on-primary ring-2 ring-surface tabular">{badge(n)}</span>}
                     </span>
                     <span>{n.label}</span>
                   </>

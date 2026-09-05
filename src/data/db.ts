@@ -1,11 +1,11 @@
 import type {
   Achievement, BoardItem, Contact, Expense, HouseholdBundle, NewBoardItem, NewContact, NewExpense,
-  NewImage, NewProject, NewQuote, NewTask, Presence, Profile, Project, ProjectImage, Quote, Task, XpEvent,
+  NewImage, NewNudge, NewProject, NewQuote, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, Task, XpEvent,
 } from './types'
 
 export type ChangeTable =
   | 'projects' | 'project_images' | 'contacts' | 'quotes' | 'expenses' | 'tasks'
-  | 'board_items' | 'xp_events' | 'achievements' | 'profiles'
+  | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges'
 
 export interface ChangePayload {
   table: ChangeTable
@@ -33,7 +33,13 @@ export interface Db {
 
   // ---- household ---------------------------------------------------
   getBundle(userId: string): Promise<HouseholdBundle>
-  updateProfile(id: string, patch: Partial<Pick<Profile, 'display_name' | 'color'>>): Promise<Profile>
+  updateProfile(id: string, patch: Partial<Pick<Profile, 'display_name' | 'color' | 'phone'>>): Promise<Profile>
+
+  // ---- nudges ------------------------------------------------------
+  listNudges(): Promise<Nudge[]>
+  createNudge(input: NewNudge): Promise<Nudge>
+  markNudgesRead(ids: string[]): Promise<void>
+  deleteNudge(id: string): Promise<void>
 
   // ---- projects ----------------------------------------------------
   listProjects(): Promise<Project[]>

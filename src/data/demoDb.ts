@@ -1,5 +1,5 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Nudge, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
@@ -106,6 +106,26 @@ export function createDemoDb(): Db {
         Object.assign(p, patch)
         return { ...p } as Profile
       })
+    },
+
+    async listNudges() {
+      return delay([...(state.nudges ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+    },
+    async createNudge(input) {
+      return mutate('nudges', 'INSERT', () => {
+        const n: Nudge = { ...input, id: uid(), read_at: null, created_at: nowISO() }
+        state.nudges = [...(state.nudges ?? []), n]
+        return n
+      })
+    },
+    async markNudgesRead(ids) {
+      await mutate('nudges', 'UPDATE', () => {
+        ;(state.nudges ?? []).forEach((n) => { if (ids.includes(n.id)) n.read_at = nowISO() })
+        return undefined
+      }, { ids })
+    },
+    async deleteNudge(id) {
+      await mutate('nudges', 'DELETE', () => { state.nudges = (state.nudges ?? []).filter((n) => n.id !== id); return undefined }, { id })
     },
 
     async listProjects() {

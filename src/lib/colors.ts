@@ -133,7 +133,7 @@ export function nameColor(hex: string): string {
 // ---------------------------------------------------------------------------
 export interface Swatch { hex: string; share: number }
 
-export async function loadImage(src: string): Promise<HTMLImageElement> {
+function loadOnce(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -141,6 +141,21 @@ export async function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('Could not load image'))
     img.src = src
   })
+}
+
+/**
+ * Loads an image for pixel sampling. A photo that was first shown by a plain
+ * <img> may sit in the browser cache without CORS headers, which makes the
+ * same URL fail when loaded with crossOrigin — so retry with a cache-buster.
+ */
+export async function loadImage(src: string): Promise<HTMLImageElement> {
+  try {
+    return await loadOnce(src)
+  } catch (e) {
+    if (!/^https?:/.test(src)) throw e
+    const busted = `${src}${src.includes('?') ? '&' : '?'}cors=${Date.now()}`
+    return loadOnce(busted)
+  }
 }
 
 export function samplePixels(img: CanvasImageSource, width: number, height: number, size = 72): RGB[] {

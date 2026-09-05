@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, ListChecks, Plus, Trash2, UserRound } from 'lucide-react'
+import { BellRing, CalendarDays, ListChecks, Plus, Trash2, UserRound } from 'lucide-react'
 import type { Project, Task } from '../../data/types'
 import { useActions } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { cn, fmtDate, todayISO } from '../../lib/utils'
+import { useNudge } from '../nudges/NudgeSheet'
 import { Avatar, EmptyState, ProgressRing } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
 import { Checkbox } from '../ui/Checkbox'
@@ -14,7 +15,8 @@ import { usePrompt } from '../ui/Sheet'
 
 export function TasksPanel({ project, tasks }: { project: Project; tasks: Task[] }) {
   const { createTask, updateTask, deleteTask } = useActions()
-  const { profiles, profileById } = useAuth()
+  const { profiles, profileById, partner } = useAuth()
+  const nudge = useNudge()
   const [title, setTitle] = useState('')
   const [due, setDue] = useState('')
   const [assignee, setAssignee] = useState<string | null>(null)
@@ -75,6 +77,7 @@ export function TasksPanel({ project, tasks }: { project: Project; tasks: Task[]
                       <MenuItem onSelect={() => updateTask(t.id, { assigned_to: null })}>Nobody</MenuItem>
                       {profiles.map((p) => <MenuItem key={p.id} icon={<Avatar name={p.display_name} color={p.color} size="xs" />} onSelect={() => updateTask(t.id, { assigned_to: p.id })}>{p.display_name}</MenuItem>)}
                       <MenuSeparator />
+                      <MenuItem icon={<BellRing />} onSelect={() => nudge({ project, task: t, link: `/projects/${project.id}?tab=tasks` })}>{t.done ? `Tell ${partner?.display_name ?? 'partner'} it’s done` : `Nudge ${partner?.display_name ?? 'partner'} about this`}</MenuItem>
                       <MenuItem onSelect={async () => { const d = await prompt({ title: 'Due date', type: 'date', initial: t.due_date ?? '', confirmLabel: 'Set date' }); if (d !== null) updateTask(t.id, { due_date: d || null }) }}>Change due date</MenuItem>
                       <MenuItem danger icon={<Trash2 />} onSelect={() => deleteTask(t.id)}>Delete</MenuItem>
                     </Menu>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BadgeCheck, Ban, CircleDollarSign, FileText, MoreHorizontal, Paperclip, Plus, Receipt, Trash2, Wallet } from 'lucide-react'
+import { BadgeCheck, Ban, BellRing, CircleDollarSign, FileText, MoreHorizontal, Paperclip, Plus, Receipt, Trash2, Wallet } from 'lucide-react'
+import { useNudge } from '../nudges/NudgeSheet'
+import { ContactPicker } from '../contacts/ContactPicker'
 import type { Contact, Expense, NewExpense, NewQuote, Project, Quote, QuoteStatus } from '../../data/types'
 import { EXPENSE_CATEGORIES } from '../../data/types'
 import { useActions, useMediaUrl } from '../../data/hooks'
@@ -23,7 +25,8 @@ export function MoneyPanel({ project, quotes, expenses, contacts }: { project: P
   const [expenseOpen, setExpenseOpen] = useState<{ open: boolean; expense?: Expense | null }>({ open: false })
   const { updateQuote, deleteQuote, deleteExpense } = useActions()
   const confirm = useConfirm()
-  const { profileById } = useAuth()
+  const { profileById, partner } = useAuth()
+  const nudge = useNudge()
 
   const sorted = useMemo(() => {
     const order: Record<QuoteStatus, number> = { accepted: 0, paid: 0, received: 1, rejected: 2 }
@@ -100,6 +103,7 @@ export function MoneyPanel({ project, quotes, expenses, contacts }: { project: P
                           {q.status !== 'rejected' && <MenuItem icon={<Ban />} onSelect={() => setStatus(q, 'rejected')}>Decline</MenuItem>}
                           {q.status !== 'received' && <MenuItem icon={<FileText />} onSelect={() => setStatus(q, 'received')}>Back to received</MenuItem>}
                           <MenuSeparator />
+                          <MenuItem icon={<BellRing />} onSelect={() => nudge({ project, quote: q, link: `/projects/${project.id}?tab=money` })}>Ask {partner?.display_name ?? 'partner'} about this</MenuItem>
                           <MenuItem onSelect={() => setQuoteOpen({ open: true, quote: q })}>Edit</MenuItem>
                           <MenuItem danger icon={<Trash2 />} onSelect={async () => { if (await confirm({ title: 'Delete this quote?', description: 'This can’t be undone.', confirmLabel: 'Delete', danger: true })) deleteQuote(q) }}>Delete</MenuItem>
                         </Menu>
@@ -198,12 +202,7 @@ function QuoteSheet({ open, onOpenChange, quote, project, contacts }: { open: bo
         <div className="flex flex-col gap-4 pt-2">
           <Field label="What's it for?">{(id) => <Input id={id} value={v.title} onChange={(e) => set('title', e.target.value)} placeholder="Doors, paint & handles" autoFocus />}</Field>
           <Field label="Supplier or contractor" trailing={<button type="button" className="text-[13px] font-medium text-primary-text" onClick={() => setContactOpen(true)}>+ New contact</button>}>
-            {(id) => (
-              <Select id={id} value={v.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
-                <option value="">— Not linked —</option>
-                {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>)}
-              </Select>
-            )}
+            {(id) => <ContactPicker id={id} value={v.contact_id} onChange={(cid) => set('contact_id', cid)} contacts={contacts} placeholder="Search suppliers & contractors" />}
           </Field>
           <div className="grid grid-cols-[1fr_auto] gap-3">
             <Field label="Amount" required error={err ?? undefined}>{(id) => <Input id={id} prefix="R" inputMode="decimal" value={v.amount || ''} onChange={(e) => set('amount', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" invalid={Boolean(err)} />}</Field>
@@ -293,12 +292,7 @@ function ExpenseSheet({ open, onOpenChange, expense, project, contacts }: { open
             {(id) => <Select id={id} value={v.category} onChange={(e) => set('category', e.target.value)}>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}
           </Field>
           <Field label="Bought from">
-            {(id) => (
-              <Select id={id} value={v.contact_id ?? ''} onChange={(e) => set('contact_id', e.target.value || null)}>
-                <option value="">—</option>
-                {contacts.map((c) => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
-              </Select>
-            )}
+            {(id) => <ContactPicker id={id} value={v.contact_id} onChange={(cid) => set('contact_id', cid)} contacts={contacts} placeholder="Search…" compact />}
           </Field>
         </div>
         {!expense && (

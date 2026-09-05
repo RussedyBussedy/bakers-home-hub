@@ -4,6 +4,7 @@ import { AuthProvider, DbProvider, useAuth } from './data/session'
 import { AppShell } from './components/layout/AppShell'
 import { Celebrations, Toasts, XpPops } from './components/ui/Feedback'
 import { ConfirmHost, PromptHost } from './components/ui/Sheet'
+import { NudgeHost } from './components/nudges/NudgeSheet'
 import { TooltipProvider } from './components/ui/Menu'
 import { Splash } from './components/layout/Splash'
 import LoginPage from './pages/Login'
@@ -64,6 +65,7 @@ export default function App() {
           <Celebrations />
           <ConfirmHost />
           <PromptHost />
+          <NudgeHost />
         </TooltipProvider>
       </AuthProvider>
     </DbProvider>

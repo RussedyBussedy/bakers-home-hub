@@ -3,12 +3,13 @@ import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useAuth, useDb } from './session'
 import type {
   Achievement, BoardItem, Contact, Expense, NewBoardItem, NewContact, NewExpense, NewImage, NewProject, NewQuote,
-  NewTask, Project, ProjectImage, Quote, Task, XpEvent, XpKind,
+  NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, Task, XpEvent, XpKind,
 } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, type GameSnapshot } from '../lib/xp'
 import { useUi } from '../store/ui'
 import { compressImage } from '../lib/images'
 import { todayISO, uid } from '../lib/utils'
+import { softNavigate } from '../lib/share'
 
 export const keys = {
   projects: ['projects'] as QueryKey,
@@ -21,6 +22,7 @@ export const keys = {
   boardAll: ['board'] as QueryKey,
   xp: ['xp'] as QueryKey,
   achievements: ['achievements'] as QueryKey,
+  nudges: ['nudges'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -38,6 +40,15 @@ export function useExpenses() { const { db } = useDb(); return useHouseholdQuery
 export function useTasks() { const { db } = useDb(); return useHouseholdQuery(keys.tasks, () => db.listTasks()) }
 export function useXp() { const { db } = useDb(); return useHouseholdQuery(keys.xp, () => db.listXp()) }
 export function useAchievements() { const { db } = useDb(); return useHouseholdQuery(keys.achievements, () => db.listAchievements()) }
+export function useNudges() { const { db } = useDb(); return useHouseholdQuery(keys.nudges, () => db.listNudges()) }
+
+/** Nudges addressed to me (or to everyone) that I haven't read yet. */
+export function useInbox() {
+  const { userId } = useAuth()
+  const q = useNudges()
+  const unread = useMemo(() => (q.data ?? []).filter((n) => n.from_user !== userId && (n.to_user === null || n.to_user === userId) && !n.read_at), [q.data, userId])
+  return { ...q, unread }
+}
 export function useBoardItems(projectId: string) {
   const { db } = useDb()
   return useHouseholdQuery(keys.board(projectId), () => db.listBoardItems(projectId))
@@ -327,15 +338,26 @@ export function useActions() {
     try { await db.deleteExpense(e.id); if (e.receipt_path) void db.remove([e.receipt_path]) } catch (err) { invalidate(keys.expenses); return fail(err, 'delete the expense') }
   }, [setList, db, invalidate, fail])
 
+  // ---- nudges (quiet) ------------------------------------------------------
+  /** A nudge sent as a side effect (e.g. assigning a task) — never blocks or toasts on failure. */
+  const quietNudge = useCallback(async (input: { to_user: string | null; kind: NudgeKind; message: string; project_id?: string | null; link?: string | null }) => {
+    if (!me || !household) return
+    try {
+      const n = await db.createNudge({ household_id: household.id, from_user: me.id, to_user: input.to_user, kind: input.kind, message: input.message, project_id: input.project_id ?? null, link: input.link ?? null })
+      setList<Nudge>(keys.nudges, (old) => [n, ...old])
+    } catch { /* best effort */ }
+  }, [me, household, db, setList])
+
   // ---- tasks ---------------------------------------------------------------
   const createTask = useCallback(async (input: NewTask) => {
     if (!me) throw new Error('Not signed in')
     try {
       const t = await db.createTask({ ...input, created_by: me.id })
       setList<Task>(keys.tasks, (old) => [...old, t])
+      if (t.assigned_to && t.assigned_to !== me.id) void quietNudge({ to_user: t.assigned_to, kind: 'todo', message: `Assigned to you: ${t.title}`, project_id: t.project_id, link: `/projects/${t.project_id}?tab=tasks` })
       return t
     } catch (e) { return fail(e, 'add the task') }
-  }, [me, db, setList, fail])
+  }, [me, db, setList, quietNudge, fail])
 
   const updateTask = useCallback(async (id: string, patch: Partial<Task>) => {
     const prev = qc.getQueryData<Task[]>(k(keys.tasks))?.find((t) => t.id === id)
@@ -346,13 +368,38 @@ export function useActions() {
     try {
       const saved = await db.updateTask(id, next)
       if (patch.done && !prev?.done) void award('task_completed', saved.project_id, saved.id, { once: true })
+      if (patch.assigned_to && patch.assigned_to !== prev?.assigned_to && patch.assigned_to !== me?.id && !saved.done) {
+        void quietNudge({ to_user: patch.assigned_to, kind: 'todo', message: `Assigned to you: ${saved.title}`, project_id: saved.project_id, link: `/projects/${saved.project_id}?tab=tasks` })
+      }
       return saved
     } catch (e) { invalidate(keys.tasks); return fail(e, 'update the task') }
-  }, [qc, k, setList, db, award, invalidate, fail])
+  }, [qc, k, setList, db, award, me, quietNudge, invalidate, fail])
 
   const deleteTask = useCallback(async (id: string) => {
     setList<Task>(keys.tasks, (old) => old.filter((t) => t.id !== id))
     try { await db.deleteTask(id) } catch (e) { invalidate(keys.tasks); return fail(e, 'delete the task') }
+  }, [setList, db, invalidate, fail])
+
+  // ---- nudges --------------------------------------------------------------
+  const sendNudge = useCallback(async (input: { to_user: string | null; kind: NudgeKind; message: string; project_id?: string | null; link?: string | null }) => {
+    if (!me || !household) throw new Error('Not signed in')
+    try {
+      const n = await db.createNudge({ household_id: household.id, from_user: me.id, to_user: input.to_user, kind: input.kind, message: input.message.trim(), project_id: input.project_id ?? null, link: input.link ?? null })
+      setList<Nudge>(keys.nudges, (old) => [n, ...old])
+      return n
+    } catch (e) { return fail(e, 'send the nudge') }
+  }, [me, household, db, setList, fail])
+
+  const markNudgesRead = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return
+    const now = new Date().toISOString()
+    setList<Nudge>(keys.nudges, (old) => old.map((n) => (ids.includes(n.id) ? { ...n, read_at: now } : n)))
+    try { await db.markNudgesRead(ids) } catch { invalidate(keys.nudges) }
+  }, [setList, db, invalidate])
+
+  const deleteNudge = useCallback(async (id: string) => {
+    setList<Nudge>(keys.nudges, (old) => old.filter((n) => n.id !== id))
+    try { await db.deleteNudge(id) } catch (e) { invalidate(keys.nudges); return fail(e, 'remove the nudge') }
   }, [setList, db, invalidate, fail])
 
   // ---- board ---------------------------------------------------------------
@@ -406,6 +453,7 @@ export function useActions() {
     createExpense, updateExpense, deleteExpense,
     createTask, updateTask, deleteTask,
     addBoardItem, updateBoardItem, updateBoardItems, deleteBoardItem,
+    sendNudge, markNudgesRead, deleteNudge,
   }
 }
 
@@ -436,6 +484,24 @@ export function useRealtimeSync() {
           break
         }
         case 'profiles': qc.invalidateQueries({ queryKey: ['bundle'] }); break
+        case 'nudges': {
+          inv(keys.nudges)
+          const row = p.row as Partial<Nudge> | null
+          if (p.type === 'INSERT' && row && row.from_user && row.from_user !== userId && (!row.to_user || row.to_user === userId)) {
+            const who = profileById(row.from_user)?.display_name ?? 'Your partner'
+            const label = row.kind === 'todo' ? 'needs you' : row.kind === 'done' ? 'got it done' : 'says'
+            const link = row.link, id = row.id
+            toast({
+              title: `${who} ${label}`, description: row.message, tone: row.kind === 'done' ? 'success' : 'neutral', duration: 9000,
+              actionLabel: link ? 'Open' : 'Got it',
+              onAction: () => {
+                if (id) void db.markNudgesRead([id]).then(() => inv(keys.nudges))
+                if (link) softNavigate(link)
+              },
+            })
+          }
+          break
+        }
         case 'xp_events': {
           inv(keys.xp)
           const row = p.row as Partial<XpEvent> | null

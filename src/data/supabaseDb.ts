@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Household, Presence, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Household, Nudge, Presence, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -83,6 +83,20 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
     },
     async updateProfile(id, patch) {
       return one<Profile>(sb.from('profiles').update(patch).eq('id', id).select().single())
+    },
+
+    async listNudges() {
+      return many<Nudge>(sb.from('nudges').select('*').order('created_at', { ascending: false }).limit(200))
+    },
+    async createNudge(input) {
+      return one<Nudge>(sb.from('nudges').insert(input).select().single())
+    },
+    async markNudgesRead(ids) {
+      if (ids.length === 0) return
+      await one(sb.from('nudges').update({ read_at: new Date().toISOString() }).in('id', ids))
+    },
+    async deleteNudge(id) {
+      await one(sb.from('nudges').delete().eq('id', id))
     },
 
     async listProjects() {

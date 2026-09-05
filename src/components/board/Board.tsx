@@ -257,7 +257,7 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
     // Scatter new pins around the centre so consecutive additions don't stack.
     const n = items.length
     const angle = (n * 137.5 * Math.PI) / 180
-    const radius = 60 + (n % 5) * 34
+    const radius = 120 + (n % 5) * 48
     return { x: c.x - w / 2 + Math.cos(angle) * radius, y: c.y - h / 2 + Math.sin(angle) * radius * 0.7 }
   }
   const jitter = () => Math.round((Math.random() - 0.5) * 6)

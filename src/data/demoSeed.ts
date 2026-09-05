@@ -1,6 +1,6 @@
 import { addDays, format, subDays } from 'date-fns'
 import type {
-  Achievement, BoardItem, Contact, Expense, Household, Profile, Project, ProjectImage, Quote, Task, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Household, Nudge, Profile, Project, ProjectImage, Quote, Task, XpEvent,
 } from './types'
 import { SCENES, materialSwatch, roomScene } from '../lib/demoImages'
 
@@ -21,6 +21,7 @@ export interface DemoState {
   boardItems: BoardItem[]
   xp: XpEvent[]
   achievements: Achievement[]
+  nudges?: Nudge[]
 }
 
 const d = (daysAgo: number, hour = 10) => {
@@ -40,8 +41,8 @@ export function buildDemoState(): DemoState {
 
   const household: Household = { id: H, name: 'The Bakers', created_at: d(120) }
   const profiles: Profile[] = [
-    { id: R, household_id: H, display_name: 'Russel', color: '#B84D24', created_at: d(120) },
-    { id: K, household_id: H, display_name: 'Kay', color: '#7F5A9E', created_at: d(120) },
+    { id: R, household_id: H, display_name: 'Russel', color: '#B84D24', phone: '', created_at: d(120) },
+    { id: K, household_id: H, display_name: 'Kay', color: '#7F5A9E', phone: '', created_at: d(120) },
   ]
 
   const P = {
@@ -247,5 +248,11 @@ export function buildDemoState(): DemoState {
     { id: 'a12', household_id: H, user_id: R, key: 'penny_pincher', unlocked_at: d(19) },
   ]
 
-  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements }
+  const nudges: Nudge[] = [
+    { id: 'n1', household_id: H, from_user: K, to_user: R, kind: 'todo', message: 'Can you order the brass handles this week? Joe wants them before he hangs the doors.', project_id: P.kitchen, link: `/projects/${P.kitchen}?tab=tasks`, read_at: null, created_at: d(1, 18) },
+    { id: 'n2', household_id: H, from_user: K, to_user: R, kind: 'done', message: 'Pinned three tile options for the bathroom — have a look and tell me which you hate.', project_id: P.bath, link: `/projects/${P.bath}/board`, read_at: null, created_at: d(2, 20) },
+    { id: 'n3', household_id: H, from_user: R, to_user: K, kind: 'fyi', message: 'Dawie is coming Tuesday 8am to pull the pump.', project_id: P.borehole, link: `/projects/${P.borehole}`, read_at: d(3), created_at: d(4, 9) },
+  ]
+
+  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges }
 }

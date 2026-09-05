@@ -2,8 +2,11 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { format, startOfMonth } from 'date-fns'
-import { ArrowRight, CalendarDays, Check, Flame, Plus, Sparkles, Trophy, Wallet, Zap } from 'lucide-react'
+import { ArrowRight, BellRing, CalendarDays, Check, Flame, Plus, Sparkles, Trophy, Wallet, Zap } from 'lucide-react'
 import { Checkbox } from '../components/ui/Checkbox'
+import { NudgeInbox } from '../components/nudges/NudgeInbox'
+import { useNudge } from '../components/nudges/NudgeSheet'
+import { Tooltip } from '../components/ui/Menu'
 import { Page } from '../components/layout/AppShell'
 import { useAuth } from '../data/session'
 import { useActions, useEverything, useLevel } from '../data/hooks'
@@ -18,6 +21,7 @@ export default function HubPage() {
   const data = useEverything()
   const level = useLevel()
   const { updateTask } = useActions()
+  const nudge = useNudge()
 
   const streak = weeklyStreak(data.xp)
   const active = useMemo(() => data.projects.filter((p) => p.status === 'in_progress' || p.status === 'planning').slice(0, 6), [data.projects])
@@ -60,10 +64,19 @@ export default function HubPage() {
           <p className="text-sm text-ink-2">{greeting()}, {me?.display_name}</p>
           <h1 className="text-[30px] sm:text-[36px]">{household?.name ?? 'Home'} Hub</h1>
         </div>
-        <div className="flex -space-x-2">
-          {profiles.map((p) => <Avatar key={p.id} name={p.display_name} color={p.color} ring />)}
+        <div className="flex items-center gap-3">
+          <Tooltip label={`Nudge ${partner?.display_name ?? 'your partner'}`}>
+            <button onClick={() => nudge({})} aria-label={`Nudge ${partner?.display_name ?? 'your partner'}`} className="grid size-11 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-sm transition-colors hover:border-line-strong hover:text-primary-text">
+              <BellRing className="size-5" />
+            </button>
+          </Tooltip>
+          <div className="flex -space-x-2">
+            {profiles.map((p) => <Avatar key={p.id} name={p.display_name} color={p.color} ring />)}
+          </div>
         </div>
       </div>
+
+      <NudgeInbox projects={data.projects} className="mt-6" />
 
       {/* Level hero */}
       <Reveal className="mt-5">
@@ -189,6 +202,7 @@ export default function HubPage() {
               </ul>
             )}
           </div>
+          <NudgeInbox projects={data.projects} variant="history" className="mt-6" />
           {nextBadge && (
             <Link to="/rewards" className="card card-hover mt-4 flex items-center gap-3 p-4">
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold-soft text-ochre-text"><Trophy className="size-5" /></span>

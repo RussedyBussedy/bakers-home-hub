@@ -42,8 +42,26 @@ export interface Profile {
   household_id: string
   display_name: string
   color: string
+  phone: string
   created_at: string
 }
+
+export type NudgeKind = 'todo' | 'done' | 'fyi'
+
+export interface Nudge {
+  id: string
+  household_id: string
+  from_user: string
+  to_user: string | null
+  kind: NudgeKind
+  message: string
+  project_id: string | null
+  link: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export type NewNudge = Omit<Nudge, 'id' | 'created_at' | 'read_at'>
 
 export interface Project {
   id: string

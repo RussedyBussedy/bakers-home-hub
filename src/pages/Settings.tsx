@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Check, KeyRound, LogOut, Monitor, Moon, RotateCcw, Smartphone, Sun } from 'lucide-react'
+import { Check, KeyRound, LogOut, MessageCircle, Monitor, Moon, MoreHorizontal, Pencil, RotateCcw, Smartphone, Sun } from 'lucide-react'
 import { Page } from '../components/layout/AppShell'
 import { useAuth, useDb } from '../data/session'
 import { useUi, type Theme } from '../store/ui'
 import { cn } from '../lib/utils'
 import { textOn } from '../lib/colors'
+import { normalisePhone, prettyPhone } from '../lib/share'
 import { Avatar } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
 import { Field, Input, Segmented } from '../components/ui/Field'
-import { useConfirm } from '../components/ui/Sheet'
+import { Menu, MenuItem } from '../components/ui/Menu'
+import { useConfirm, usePrompt } from '../components/ui/Sheet'
 import { useQueryClient } from '@tanstack/react-query'
 import { resetDemo } from '../data/demoDb'
 import { ACCENTS } from '../components/project/ProjectForm'
@@ -22,9 +24,11 @@ export default function SettingsPage() {
   const setTheme = useUi((s) => s.setTheme)
   const toast = useUi((s) => s.toast)
   const confirm = useConfirm()
+  const prompt = usePrompt()
   const qc = useQueryClient()
   const [name, setName] = useState(me?.display_name ?? '')
   const [color, setColor] = useState(me?.color ?? COLORS[0]!)
+  const [phone, setPhone] = useState(me?.phone ?? '')
   const [busy, setBusy] = useState(false)
   const [installHint, setInstallHint] = useState(false)
   const [pw, setPw] = useState('')
@@ -32,7 +36,7 @@ export default function SettingsPage() {
   const [pwBusy, setPwBusy] = useState(false)
   const recovery = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('recovery') === '1'
 
-  useEffect(() => { if (me) { setName(me.display_name); setColor(me.color) } }, [me])
+  useEffect(() => { if (me) { setName(me.display_name); setColor(me.color); setPhone(me.phone ?? '') } }, [me])
   useEffect(() => {
     const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone
     setInstallHint(!standalone)
@@ -42,13 +46,29 @@ export default function SettingsPage() {
     if (!me || !name.trim()) return
     setBusy(true)
     try {
-      await db.updateProfile(me.id, { display_name: name.trim(), color })
+      await db.updateProfile(me.id, { display_name: name.trim(), color, phone: normalisePhone(phone) })
       await qc.invalidateQueries({ queryKey: ['bundle'] })
       toast({ title: 'Saved', tone: 'success' })
     } catch (e) {
       toast({ title: "Couldn't save", description: e instanceof Error ? e.message : '', tone: 'danger' })
     } finally { setBusy(false) }
   }
+
+  const editMember = async (id: string, field: 'display_name' | 'phone', current: string) => {
+    const value = await prompt(field === 'display_name'
+      ? { title: 'Their name', description: 'How it shows across the app.', label: 'Display name', initial: current, confirmLabel: 'Save' }
+      : { title: 'Their WhatsApp number', description: 'Lets the Nudge button open WhatsApp straight to them.', label: 'Number', placeholder: '082 555 0141', initial: prettyPhone(current) || current, confirmLabel: 'Save' })
+    if (value === null) return
+    if (field === 'display_name' && !value.trim()) return
+    try {
+      await db.updateProfile(id, field === 'display_name' ? { display_name: value.trim() } : { phone: normalisePhone(value) })
+      await qc.invalidateQueries({ queryKey: ['bundle'] })
+      toast({ title: 'Saved', tone: 'success' })
+    } catch (e) {
+      toast({ title: "Couldn't save", description: e instanceof Error ? e.message : '', tone: 'danger' })
+    }
+  }
+  const dirty = name.trim() !== me?.display_name || color !== me?.color || normalisePhone(phone) !== (me?.phone ?? '')
 
   return (
     <Page title="Settings" className="max-w-3xl">
@@ -61,6 +81,11 @@ export default function SettingsPage() {
               <Field label="Display name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
             </div>
           </div>
+          <div className="mt-4">
+            <Field label="WhatsApp number" hint="So a nudge can open WhatsApp straight to you. Kept between the two of you.">
+              {(id) => <Input id={id} type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="082 555 0141" />}
+            </Field>
+          </div>
           <p className="mt-4 mb-2 text-[13px] font-medium text-ink-2">Your colour</p>
           <div className="flex flex-wrap gap-2">
             {[...new Set([...COLORS, ...ACCENTS])].slice(0, 12).map((c) => (
@@ -69,7 +94,7 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <div className="mt-5 flex justify-end"><Button onClick={save} loading={busy} disabled={!name.trim() || (name.trim() === me?.display_name && color === me?.color)}>Save</Button></div>
+          <div className="mt-5 flex justify-end"><Button onClick={save} loading={busy} disabled={!name.trim() || !dirty}>Save</Button></div>
         </section>
 
         <section className="card p-5">
@@ -79,7 +104,16 @@ export default function SettingsPage() {
             {profiles.map((p) => (
               <li key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2">
                 <Avatar name={p.display_name} color={p.color} size="sm" />
-                <span className="flex-1 text-[15px] text-ink">{p.display_name}{p.id === me?.id ? <span className="text-ink-3"> (you)</span> : ''}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] text-ink">{p.display_name}{p.id === me?.id ? <span className="text-ink-3"> (you)</span> : ''}</span>
+                  <span className="block truncate text-xs text-ink-3">{p.phone ? <><MessageCircle className="mr-1 inline size-3 align-[-2px]" />{prettyPhone(p.phone)}</> : 'No WhatsApp number yet'}</span>
+                </span>
+                {p.id !== me?.id && (
+                  <Menu trigger={<button className="grid size-9 place-items-center rounded-full text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label={`Edit ${p.display_name}`}><MoreHorizontal className="size-5" /></button>}>
+                    <MenuItem icon={<Pencil />} onSelect={() => editMember(p.id, 'display_name', p.display_name)}>Fix their name</MenuItem>
+                    <MenuItem icon={<MessageCircle />} onSelect={() => editMember(p.id, 'phone', p.phone ?? '')}>{p.phone ? 'Change' : 'Add'} their WhatsApp number</MenuItem>
+                  </Menu>
+                )}
               </li>
             ))}
           </ul>
@@ -139,7 +173,7 @@ export default function SettingsPage() {
               </>
             )}
           </div>
-          <p className="mt-4 text-[12px] text-ink-3">{isDemo ? 'Demo mode — data lives only in this browser.' : 'Synced live with Supabase.'} · Home Hub v1.0</p>
+          <p className="mt-4 text-[12px] text-ink-3">{isDemo ? 'Demo mode — data lives only in this browser.' : 'Synced live with Supabase.'} · Home Hub v1.1</p>
         </section>
       </div>
     </Page>
