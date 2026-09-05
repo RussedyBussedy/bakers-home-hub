@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BellRing, CalendarDays, Camera, ChevronDown, Expand, FileText, Link2, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Trash2, Wallet, Zap } from 'lucide-react'
+import { AlertOctagon, BellRing, CalendarDays, Camera, ChevronDown, Expand, FileText, HardHat, Link2, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Trash2, Wallet, Zap } from 'lucide-react'
+import { BlockerChip, BlockerSheet, blockedFor } from '../components/project/Blocker'
+import { SiteVisitsCard, lastVisitLine } from '../components/project/SiteVisits'
 import { useNudge } from '../components/nudges/NudgeSheet'
 import { absoluteUrl, copyText } from '../lib/share'
 import { useUi } from '../store/ui'
@@ -9,7 +11,7 @@ import { Page } from '../components/layout/AppShell'
 import { useActions, useBoardItems, useEverything, useProject } from '../data/hooks'
 import { useAuth } from '../data/session'
 import { PROJECT_STATUSES, type ProjectStatus } from '../data/types'
-import { XP_RULES, projectCosts } from '../lib/xp'
+import { XP_RULES, projectCosts, quoteExpiry } from '../lib/xp'
 import { cn, daysUntil, fmtRelative, money, pluralise } from '../lib/utils'
 import { CoverImage } from '../components/project/ProjectCard'
 import { ProjectFormFields, fromProject, validateProject, type ProjectFormValue } from '../components/project/ProjectForm'
@@ -40,7 +42,7 @@ export default function ProjectPage() {
   const { project, isPending } = useProject(id)
   const data = useEverything()
   const board = useBoardItems(id)
-  const { updateProject, deleteProject } = useActions()
+  const { updateProject, deleteProject, setBlocker } = useActions()
   const { profileById, partner } = useAuth()
   const confirm = useConfirm()
   const nudge = useNudge()
@@ -49,6 +51,7 @@ export default function ProjectPage() {
   const paramTab = params.get('tab')
   const [tab, setTab] = useState<Tab>(isTab(paramTab) ? paramTab : (location.state as { tab?: Tab } | null)?.tab ?? 'overview')
   const [editOpen, setEditOpen] = useState(false)
+  const [blockOpen, setBlockOpen] = useState(false)
   // Links from nudges arrive as /projects/:id?tab=tasks — follow them, then tidy the URL.
   useEffect(() => { if (isTab(paramTab)) { setTab(paramTab); setParams({}, { replace: true }) } }, [paramTab, setParams])
 
@@ -57,6 +60,7 @@ export default function ProjectPage() {
   const tasks = useMemo(() => data.tasks.filter((t) => t.project_id === id), [data.tasks, id])
   const images = useMemo(() => data.images.filter((i) => i.project_id === id), [data.images, id])
   const xp = useMemo(() => data.xp.filter((e) => e.project_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at)), [data.xp, id])
+  const visits = useMemo(() => data.visits.filter((v) => v.project_id === id), [data.visits, id])
 
   if (isPending || data.loading) return <ProjectSkeleton />
   if (!project) {
@@ -72,6 +76,10 @@ export default function ProjectPage() {
   const days = daysUntil(project.target_date)
   const creator = profileById(project.created_by)
   const items = board.data ?? []
+  const lastVisit = lastVisitLine(visits, data.contacts)
+  const showVisits = visits.length > 0 || project.status === 'in_progress' || project.status === 'planning'
+  const quoteContactIds = [...quotes].sort((a, b) => (a.status === 'accepted' || a.status === 'paid' ? -1 : 0) - (b.status === 'accepted' || b.status === 'paid' ? -1 : 0)).map((q) => q.contact_id).filter((c): c is string => Boolean(c))
+  const expiredQuotes = quotes.filter((q) => quoteExpiry(q).expired).length
 
   const setStatus = (s: ProjectStatus) => updateProject(project.id, { status: s })
 
@@ -100,6 +108,8 @@ export default function ProjectPage() {
                 <MenuLabel>Move to</MenuLabel>
                 {PROJECT_STATUSES.map((s) => <MenuItem key={s.value} onSelect={() => setStatus(s.value)} disabled={project.status === s.value}>{s.label}</MenuItem>)}
                 <MenuSeparator />
+                <MenuItem icon={<AlertOctagon />} onSelect={() => setBlockOpen(true)}>{project.blocked_on ? 'Change what it’s blocked on…' : 'Mark as blocked…'}</MenuItem>
+                {project.blocked_on && <MenuItem onSelect={() => setBlocker(project.id, null)}>Unblock</MenuItem>}
                 <MenuItem icon={<BellRing />} onSelect={() => nudge({ project })}>Nudge {partner?.display_name ?? 'partner'}…</MenuItem>
                 <MenuItem icon={<Link2 />} onSelect={async () => { if (await copyText(absoluteUrl(`/projects/${project.id}`))) toast({ title: 'Link copied', tone: 'success' }) }}>Copy link</MenuItem>
                 <MenuItem icon={<Expand />} onSelect={() => navigate(`/projects/${project.id}/board`)}>Open the board</MenuItem>
@@ -115,9 +125,11 @@ export default function ProjectPage() {
               </Menu>
               <span className="text-xs text-[#F6F1E9]/80">{project.room}{project.category ? ` · ${project.category}` : ''}</span>
               {project.priority === 'high' && <span className="rounded-full bg-[#C4552B] px-2 py-0.5 text-[11px] font-semibold">High priority</span>}
+              {project.blocked_on && <BlockerChip project={project} compact onClick={() => setBlockOpen(true)} className="bg-[#F6F1E9] text-danger" />}
             </div>
             <h1 className="mt-2 max-w-3xl text-[30px] leading-[1.05] text-[#F6F1E9] sm:text-[42px]">{project.title}</h1>
-            {creator && <p className="mt-2 flex items-center gap-2 text-xs text-[#F6F1E9]/75"><Avatar name={creator.display_name} color={creator.color} size="xs" /> Started by {creator.display_name} · updated {fmtRelative(project.updated_at)}</p>}
+            {creator && <p className="mt-2 flex items-center gap-2 text-xs text-[#F6F1E9]/75"><Avatar name={creator.display_name} color={creator.color} size="xs" /> Started by {creator.display_name} · updated {fmtRelative(project.updated_at)}{lastVisit ? <span className="inline-flex items-center gap-1"><span aria-hidden>·</span><HardHat className="size-3.5" /> {lastVisit}</span> : null}</p>}
+            {project.blocked_on && project.blocked_note && <p className="mt-1.5 max-w-2xl text-[13px] text-[#F6F1E9]/85"><AlertOctagon className="mr-1 inline size-3.5 align-[-2px] text-[#F6C7B8]" />{project.blocked_note} <span className="text-[#F6F1E9]/60">· {blockedFor(project)}</span></p>}
           </div>
         </div>
       </motion.div>
@@ -171,6 +183,7 @@ export default function ProjectPage() {
                   <div className="flex items-center justify-between"><h2 className="text-xl">Timeline</h2>{project.target_date && <span className="inline-flex items-center gap-1 text-xs text-ink-3"><CalendarDays className="size-3.5" /> target {project.target_date}</span>}</div>
                   <Timeline project={project} className="mt-4" />
                 </div>
+                {showVisits && <SiteVisitsCard project={project} visits={visits} contacts={data.contacts} quoteContactIds={quoteContactIds} />}
                 <button onClick={() => navigate(`/projects/${project.id}/board`)} className="card card-hover group overflow-hidden text-left">
                   <div className="flex items-center justify-between p-4 pb-2">
                     <div><h2 className="text-xl">Inspiration board</h2><p className="text-[13px] text-ink-3">{items.length === 0 ? 'Start pinning ideas' : `${pluralise(items.length, 'pin')} · tap to open`}</p></div>
@@ -190,6 +203,7 @@ export default function ProjectPage() {
                     <p className="text-[13px] text-ink-2">of {money(costs.budget)} budget</p>
                     <BudgetBar budget={costs.budget} real={costs.real} className="mt-2" height={6} />
                     <button onClick={() => setTab('money')} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary-text"><FileText className="size-4" /> {quotes.length ? `${pluralise(quotes.length, 'quote')} filed` : 'File the first quote'}</button>
+                    {expiredQuotes > 0 && <p className="mt-1 text-[12px] font-medium text-danger">{pluralise(expiredQuotes, 'quote has', 'quotes have')} expired — ask for a fresh price.</p>}
                   </div>
                 </div>
                 <div className="card p-5">
@@ -239,6 +253,7 @@ export default function ProjectPage() {
       </div>
 
       <EditProjectSheet open={editOpen} onOpenChange={setEditOpen} projectId={project.id} />
+      <BlockerSheet open={blockOpen} onOpenChange={setBlockOpen} project={project} />
     </div>
   )
 }

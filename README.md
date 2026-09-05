@@ -9,7 +9,7 @@ Built with Vite + React + TypeScript, Tailwind v4, Framer Motion, TanStack Query
 ### 1. Supabase (database, photos, sync)
 1. Create a project at supabase.com.
 2. Open **SQL Editor → New query**, paste the whole of `supabase/schema.sql`, click **Run**. This creates every table, the row-level security that locks data to your household, the private `media` bucket, and the live-sync publication.
-   Then run each file in `supabase/migrations/` in order the same way (they're additive — `002` adds nudges and WhatsApp numbers).
+   Then run each file in `supabase/migrations/` in order the same way (they're additive — `002` nudges and WhatsApp numbers, `003` deposits on quotes, `004` site days and blockers).
 3. **Authentication → Users → Add user → Create new user** for each of you (tick *Auto Confirm User*). A profile is created automatically for every user.
 4. Copy **Project URL** and the **anon public key** from *Project Settings → API*.
 
@@ -44,6 +44,7 @@ Set `VITE_DEMO_ONLY=true` to force the built-in demo mode (sample data in localS
 - `src/data/hooks.ts` – TanStack Query hooks plus `useActions()`, the one place every write goes through so XP, badges and optimistic cache updates happen consistently. `useRealtimeSync()` listens to Supabase Realtime and invalidates queries.
 - `src/lib/xp.ts` – XP rules, levels, streaks, achievements and cost maths.
 - `src/components/nudges/` – the Nudge sheet (`useNudge()` opens it from anywhere) and the Hub inbox. Assigning a task to the other person nudges them automatically.
+- `src/components/project/SiteVisits.tsx` / `Blocker.tsx` – the site-day log (who was due, who came; a no-show nudges the other person) and the “blocked on” flag that sits on top of a project's status. Quote expiry is computed from `valid_until` (`quoteExpiry` in `src/lib/xp.ts`), never stored.
 - `src/lib/contacts.ts` – ways to get a contact in without typing: the phone's contact picker (Android Chrome; iPhone Safari behind *Settings → Safari → Advanced → Feature Flags → Contact Picker API*), `.vcf` contact cards, pasted text (WhatsApp messages, signatures, Maps listings) and a Google Maps search hand-off.
 - `src/components/board/` – the pin board: `Board.tsx` (pan/zoom/drag/resize/rotate), `Pins.tsx` (how each pin type looks), `Eyedropper.tsx` (sample colours from a photo, auto-palette), `PinEditor.tsx` (add/edit sheets).
 - `supabase/schema.sql` – the whole backend.

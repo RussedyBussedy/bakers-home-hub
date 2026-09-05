@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Household, Nudge, Presence, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Household, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent } from './types'
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -163,6 +163,19 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
     },
     async deleteExpense(id) {
       await one(sb.from('expenses').delete().eq('id', id))
+    },
+
+    async listVisits() {
+      return many<SiteVisit>(sb.from('site_visits').select('*').order('visit_date', { ascending: false }).order('created_at', { ascending: false }))
+    },
+    async createVisit(input) {
+      return one<SiteVisit>(sb.from('site_visits').insert(input).select().single())
+    },
+    async updateVisit(id, patch) {
+      return one<SiteVisit>(sb.from('site_visits').update(patch).eq('id', id).select().single())
+    },
+    async deleteVisit(id) {
+      await one(sb.from('site_visits').delete().eq('id', id))
     },
 
     async listTasks() {

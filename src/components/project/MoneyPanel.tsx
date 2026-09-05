@@ -7,7 +7,7 @@ import type { Contact, Expense, NewExpense, NewQuote, Project, Quote, QuoteStatu
 import { EXPENSE_CATEGORIES, QUOTE_PAYMENT_CATEGORY } from '../../data/types'
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
-import { projectCosts, quoteProgress } from '../../lib/xp'
+import { projectCosts, quoteExpiry, quoteProgress } from '../../lib/xp'
 import { cn, fmtDate, money, todayISO } from '../../lib/utils'
 import { Avatar, BudgetBar, EmptyState, Money, Pill } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
@@ -31,7 +31,7 @@ export function MoneyPanel({ project, quotes, expenses, contacts }: { project: P
 
   const sorted = useMemo(() => {
     const order: Record<QuoteStatus, number> = { accepted: 0, paid: 0, received: 1, rejected: 2 }
-    return [...quotes].sort((a, b) => order[a.status] - order[b.status] || a.amount - b.amount)
+    return [...quotes].sort((a, b) => order[a.status] - order[b.status] || Number(quoteExpiry(a).expired) - Number(quoteExpiry(b).expired) || a.amount - b.amount)
   }, [quotes])
 
   const setStatus = (q: Quote, status: QuoteStatus) => updateQuote(q.id, { status })
@@ -106,6 +106,7 @@ export function MoneyPanel({ project, quotes, expenses, contacts }: { project: P
                   const lowest = costs.lowestQuote === q.amount && quotes.length > 1
                   const live = q.status === 'accepted' || q.status === 'paid'
                   const prog = quoteProgress(q, expenses)
+                  const exp = quoteExpiry(q)
                   return (
                     <motion.div key={q.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} className="flex items-start gap-3 p-4">
                       <span className={cn('mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl', live ? 'bg-sage-soft text-sage-text' : q.status === 'rejected' ? 'bg-surface-3 text-ink-3' : 'bg-sky-soft text-sky-text')}>
@@ -116,8 +117,11 @@ export function MoneyPanel({ project, quotes, expenses, contacts }: { project: P
                           <p className={cn('font-medium text-ink', q.status === 'rejected' && 'text-ink-3 line-through')}>{q.title || 'Quote'}</p>
                           <Pill tone={quoteTone[q.status]} size="sm">{quoteLabel[q.status]}</Pill>
                           {lowest && q.status !== 'rejected' && <Pill tone="gold" size="sm">Lowest</Pill>}
+                          {exp.expired && <Pill tone="danger" size="sm" dot>Expired</Pill>}
+                          {exp.soon && <Pill tone="ochre" size="sm" dot>{exp.daysLeft === 0 ? 'Expires today' : `Expires in ${exp.daysLeft}d`}</Pill>}
                         </div>
-                        <p className="mt-0.5 truncate text-[13px] text-ink-2">{c ? `${c.name}${c.company ? ` · ${c.company}` : ''}` : 'No contact'}{q.quote_date ? ` · ${fmtDate(q.quote_date)}` : ''}{q.valid_until && q.status === 'received' ? ` · valid until ${fmtDate(q.valid_until)}` : ''}</p>
+                        <p className="mt-0.5 truncate text-[13px] text-ink-2">{c ? `${c.name}${c.company ? ` · ${c.company}` : ''}` : 'No contact'}{q.quote_date ? ` · ${fmtDate(q.quote_date)}` : ''}{q.valid_until && q.status === 'received' ? (exp.expired ? ` · was valid until ${fmtDate(q.valid_until)}` : ` · valid until ${fmtDate(q.valid_until)}`) : ''}</p>
+                        {exp.expired && <p className="mt-1 text-[13px] text-danger">Ask them to confirm the price still stands before accepting.</p>}
                         {q.notes && <p className="mt-1 text-[13px] text-ink-3">{q.notes}</p>}
                         {(live || prog.payments.length > 0) && (
                           <div className="mt-2.5">

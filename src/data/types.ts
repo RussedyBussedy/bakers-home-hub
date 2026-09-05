@@ -66,6 +66,17 @@ export interface Nudge {
 
 export type NewNudge = Omit<Nudge, 'id' | 'created_at' | 'read_at'>
 
+export type BlockerKind = 'contractor' | 'parts' | 'decision' | 'weather' | 'payment' | 'other'
+
+export const BLOCKERS: { value: BlockerKind; label: string; hint: string }[] = [
+  { value: 'contractor', label: 'Contractor', hint: 'Waiting on someone to show up or confirm' },
+  { value: 'parts', label: 'Parts', hint: 'Materials or parts not here yet' },
+  { value: 'decision', label: 'Decision', hint: 'One of you needs to choose' },
+  { value: 'weather', label: 'Weather', hint: 'Rain stopped play' },
+  { value: 'payment', label: 'Payment', hint: 'Money needs to move first' },
+  { value: 'other', label: 'Other', hint: 'Something else' },
+]
+
 export interface Project {
   id: string
   household_id: string
@@ -81,11 +92,39 @@ export interface Project {
   start_date: string | null
   target_date: string | null
   completed_date: string | null
+  /** What the project is stuck on, if anything — independent of status. */
+  blocked_on: BlockerKind | null
+  blocked_note: string
+  blocked_since: string | null
   sort_order: number
   created_by: string
   created_at: string
   updated_at: string
 }
+
+export type VisitOutcome = 'scheduled' | 'arrived' | 'partial' | 'no_show' | 'cancelled'
+
+export const VISIT_OUTCOMES: { value: VisitOutcome; label: string; tone: Tone }[] = [
+  { value: 'scheduled', label: 'Scheduled', tone: 'sky' },
+  { value: 'arrived', label: 'Arrived', tone: 'sage' },
+  { value: 'partial', label: 'Partial', tone: 'ochre' },
+  { value: 'no_show', label: 'No-show', tone: 'danger' },
+  { value: 'cancelled', label: 'Cancelled', tone: 'neutral' },
+]
+
+/** One expected or actual contractor visit to the site. */
+export interface SiteVisit {
+  id: string
+  project_id: string
+  contact_id: string | null
+  visit_date: string
+  outcome: VisitOutcome
+  notes: string
+  logged_by: string
+  created_at: string
+}
+
+export type NewSiteVisit = Omit<SiteVisit, 'id' | 'logged_by' | 'created_at'>
 
 export interface ProjectImage {
   id: string
@@ -187,6 +226,7 @@ export type XpKind =
   | 'project_created' | 'photo_added' | 'pin_added' | 'swatch_added' | 'quote_added'
   | 'quote_accepted' | 'contact_added' | 'expense_added' | 'task_completed'
   | 'project_completed' | 'under_budget' | 'on_time' | 'board_started' | 'project_started'
+  | 'visit_logged'
 
 export interface XpEvent {
   id: string
@@ -219,7 +259,7 @@ export interface HouseholdBundle {
   profiles: Profile[]
 }
 
-export type NewProject = Omit<Project, 'id' | 'household_id' | 'created_by' | 'created_at' | 'updated_at' | 'sort_order'>
+export type NewProject = Omit<Project, 'id' | 'household_id' | 'created_by' | 'created_at' | 'updated_at' | 'sort_order' | 'blocked_on' | 'blocked_note' | 'blocked_since'>
 export type NewContact = Omit<Contact, 'id' | 'household_id' | 'created_by' | 'created_at'>
 export type NewQuote = Omit<Quote, 'id' | 'created_by' | 'created_at'>
 export type NewExpense = Omit<Expense, 'id' | 'created_by' | 'created_at'>

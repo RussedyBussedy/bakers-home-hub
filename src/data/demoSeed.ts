@@ -1,6 +1,6 @@
 import { addDays, format, subDays } from 'date-fns'
 import type {
-  Achievement, BoardItem, Contact, Expense, Household, Nudge, Profile, Project, ProjectImage, Quote, Task, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Household, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent,
 } from './types'
 import { SCENES, materialSwatch, roomScene } from '../lib/demoImages'
 
@@ -22,6 +22,7 @@ export interface DemoState {
   xp: XpEvent[]
   achievements: Achievement[]
   nudges?: Nudge[]
+  visits?: SiteVisit[]
 }
 
 const d = (daysAgo: number, hour = 10) => {
@@ -55,48 +56,56 @@ export function buildDemoState(): DemoState {
       id: P.kitchen, household_id: H, title: 'Kitchen cabinet refresh', description: 'Repaint the existing carcasses in sage, replace the doors with shaker fronts and swap the handles for brushed brass. Keep the granite tops.',
       room: 'Kitchen', category: 'Renovation', status: 'in_progress', priority: 'high', budget_estimate: 28000,
       cover_path: roomScene(SCENES.kitchen!), accent: '#5C7C5A', start_date: day(-26), target_date: day(40), completed_date: null,
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 1, created_by: K, created_at: d(40), updated_at: d(1),
     },
     {
       id: P.borehole, household_id: H, title: 'Borehole pump replacement', description: 'Pump trips the earth-leakage when switched on. Pull the pump, test the motor, replace if needed and fit a new control box next to the pool pump.',
       room: 'Garden', category: 'Electrical', status: 'in_progress', priority: 'high', budget_estimate: 15000,
       cover_path: roomScene(SCENES.garden!), accent: '#4F7291', start_date: day(-8), target_date: day(15), completed_date: null,
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 2, created_by: R, created_at: d(12), updated_at: d(0, 8),
     },
     {
       id: P.lapa, household_id: H, title: 'Lapa re-thatch & gutters', description: 'The thatch on the lapa is thinning on the north side. Re-thatch the worn sections, treat for fire and fit proper gutters so the rain stops washing out the paving.',
       room: 'Lapa', category: 'Repair', status: 'planning', priority: 'medium', budget_estimate: 45000,
       cover_path: roomScene(SCENES.lapa!), accent: '#B5563A', start_date: null, target_date: day(86), completed_date: null,
+      blocked_on: 'contractor', blocked_note: 'Waiting for Pieter to confirm he starts Monday', blocked_since: day(-2),
       sort_order: 3, created_by: R, created_at: d(30), updated_at: d(3),
     },
     {
       id: P.study, household_id: H, title: 'Study built-in shelves', description: 'Floor-to-ceiling shelving on the long wall with a desk nook. Dark stained oak with a brass rail for the ladder.',
       room: 'Study', category: 'Furniture', status: 'planning', priority: 'low', budget_estimate: 18000,
       cover_path: roomScene(SCENES.study!), accent: '#2E3A3F', start_date: null, target_date: day(100), completed_date: null,
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 4, created_by: K, created_at: d(20), updated_at: d(6),
     },
     {
       id: P.bath, household_id: H, title: 'Main bathroom refresh', description: 'New vanity, walk-in shower with a rain head, and terrazzo-look floor tiles. Keep the bath, replace the taps.',
       room: 'Bathroom', category: 'Renovation', status: 'idea', priority: 'medium', budget_estimate: 60000,
       cover_path: roomScene(SCENES.bath!), accent: '#4F7291', start_date: null, target_date: null, completed_date: null,
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 5, created_by: K, created_at: d(15), updated_at: d(2),
     },
     {
       id: P.garden, household_id: H, title: 'Front garden makeover', description: 'Replace the tired lawn strip with indigenous beds, a gravel path and low-voltage lighting up to the front door.',
       room: 'Garden', category: 'Landscaping', status: 'on_hold', priority: 'low', budget_estimate: 12000,
       cover_path: roomScene({ ...SCENES.garden!, wall: '#F3E7D3', wall2: '#E3D0B3' }), accent: '#7A9A77', start_date: null, target_date: null, completed_date: null,
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 6, created_by: R, created_at: d(60), updated_at: d(25),
     },
     {
       id: P.pool, household_id: H, title: 'Pool pump & filter service', description: 'Sand filter was channelling and the pump was noisy. Replace the sand, new pump seals and a proper backwash routine.',
       room: 'Pool', category: 'Repair', status: 'done', priority: 'high', budget_estimate: 6500,
       cover_path: roomScene(SCENES.pool!), accent: '#2F7F97', start_date: day(-62), target_date: day(-36), completed_date: day(-47),
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 7, created_by: R, created_at: d(64), updated_at: d(47),
     },
     {
       id: P.bedroom, household_id: H, title: 'Guest bedroom repaint', description: 'Warm white walls with a dusty plum feature wall behind the bed. New curtain rail.',
       room: 'Bedroom', category: 'Painting', status: 'done', priority: 'low', budget_estimate: 4000,
       cover_path: roomScene(SCENES.bed!), accent: '#7F5A9E', start_date: day(-95), target_date: day(-67), completed_date: day(-83),
+      blocked_on: null, blocked_note: '', blocked_since: null,
       sort_order: 8, created_by: K, created_at: d(100), updated_at: d(83),
     },
   ]
@@ -136,7 +145,7 @@ export function buildDemoState(): DemoState {
     { id: 'q6', project_id: P.lapa, contact_id: C.thatch1, title: 'Re-thatch north side + gutters', amount: 48000, vat_included: true, status: 'received', quote_date: day(-12), valid_until: day(18), file_path: null, notes: 'Fire retardant + 5-year guarantee', created_by: R, created_at: d(12) },
     { id: 'q7', project_id: P.lapa, contact_id: C.thatch2, title: 'Re-thatch only', amount: 41500, vat_included: false, status: 'received', quote_date: day(-10), valid_until: day(20), file_path: null, notes: 'Gutters extra, approx R6 500', created_by: R, created_at: d(10) },
     { id: 'q8', project_id: P.borehole, contact_id: C.borehole, title: 'Pull, test & replace pump', amount: 13600, vat_included: true, status: 'accepted', quote_date: day(-9), valid_until: day(21), file_path: null, notes: '0.75kW Franklin pump', created_by: R, created_at: d(9) },
-    { id: 'q9', project_id: P.borehole, contact_id: C.sparky, title: 'New control box & CoC', amount: 3200, vat_included: true, status: 'received', quote_date: day(-7), valid_until: day(23), file_path: null, notes: '', created_by: R, created_at: d(7) },
+    { id: 'q9', project_id: P.borehole, contact_id: C.sparky, title: 'New control box & CoC', amount: 3200, vat_included: true, status: 'received', quote_date: day(-27), valid_until: day(-3), file_path: null, notes: '', created_by: R, created_at: d(7) },
   ]
 
   const expenses: Expense[] = [
@@ -256,5 +265,13 @@ export function buildDemoState(): DemoState {
     { id: 'n3', household_id: H, from_user: R, to_user: K, kind: 'fyi', message: 'Dawie is coming Tuesday 8am to pull the pump.', project_id: P.borehole, link: `/projects/${P.borehole}`, read_at: d(3), created_at: d(4, 9) },
   ]
 
-  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges }
+  const visits: SiteVisit[] = [
+    { id: 'v1', project_id: P.kitchen, contact_id: C.joe, visit_date: day(-6), outcome: 'arrived', notes: 'Two guys, took all the doors off and primed the carcasses.', logged_by: K, created_at: d(6, 17) },
+    { id: 'v2', project_id: P.kitchen, contact_id: C.joe, visit_date: day(-2), outcome: 'partial', notes: 'Only Joe came — hung six doors, back Thursday for the rest.', logged_by: R, created_at: d(2, 16) },
+    { id: 'v3', project_id: P.kitchen, contact_id: C.joe, visit_date: day(2), outcome: 'scheduled', notes: 'Remaining doors + handles.', logged_by: R, created_at: d(2, 16) },
+    { id: 'v4', project_id: P.lapa, contact_id: C.thatch1, visit_date: day(-3), outcome: 'no_show', notes: 'Supposed to come and measure. No answer on his phone.', logged_by: R, created_at: d(3, 15) },
+    { id: 'v5', project_id: P.borehole, contact_id: C.borehole, visit_date: day(-4), outcome: 'arrived', notes: 'Pulled the pump, motor is toast. New one ordered.', logged_by: R, created_at: d(4, 12) },
+  ]
+
+  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges, visits }
 }

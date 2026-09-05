@@ -173,7 +173,7 @@ export default function SettingsPage() {
               </>
             )}
           </div>
-          <p className="mt-4 text-[12px] text-ink-3">{isDemo ? 'Demo mode — data lives only in this browser.' : 'Synced live with Supabase.'} · Home Hub v1.1</p>
+          <p className="mt-4 text-[12px] text-ink-3">{isDemo ? 'Demo mode — data lives only in this browser.' : 'Synced live with Supabase.'} · Home Hub v1.2</p>
         </section>
       </div>
     </Page>

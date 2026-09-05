@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useAuth, useDb } from './session'
 import type {
-  Achievement, BoardItem, Contact, Expense, NewBoardItem, NewContact, NewExpense, NewImage, NewProject, NewQuote,
-  NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, Task, XpEvent, XpKind,
+  Achievement, BlockerKind, BoardItem, Contact, Expense, NewBoardItem, NewContact, NewExpense, NewImage, NewProject, NewQuote,
+  NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent, XpKind,
 } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
 import { useUi } from '../store/ui'
 import { compressImage } from '../lib/images'
-import { todayISO, uid } from '../lib/utils'
+import { fmtDate, todayISO, uid } from '../lib/utils'
 import { softNavigate } from '../lib/share'
 
 export const keys = {
@@ -23,6 +23,7 @@ export const keys = {
   xp: ['xp'] as QueryKey,
   achievements: ['achievements'] as QueryKey,
   nudges: ['nudges'] as QueryKey,
+  visits: ['visits'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -41,6 +42,7 @@ export function useTasks() { const { db } = useDb(); return useHouseholdQuery(ke
 export function useXp() { const { db } = useDb(); return useHouseholdQuery(keys.xp, () => db.listXp()) }
 export function useAchievements() { const { db } = useDb(); return useHouseholdQuery(keys.achievements, () => db.listAchievements()) }
 export function useNudges() { const { db } = useDb(); return useHouseholdQuery(keys.nudges, () => db.listNudges()) }
+export function useVisits() { const { db } = useDb(); return useHouseholdQuery(keys.visits, () => db.listVisits()) }
 
 /** Nudges addressed to me (or to everyone) that I haven't read yet. */
 export function useInbox() {
@@ -62,7 +64,7 @@ export function useProject(id: string | undefined) {
 /** All the data the game and analytics need, in one place. */
 export function useEverything() {
   const projects = useProjects(), images = useImages(), contacts = useContacts(), quotes = useQuotes()
-  const expenses = useExpenses(), tasks = useTasks(), xp = useXp(), achievements = useAchievements()
+  const expenses = useExpenses(), tasks = useTasks(), xp = useXp(), achievements = useAchievements(), visits = useVisits()
   const loading = [projects, images, contacts, quotes, expenses, tasks, xp, achievements].some((q) => q.isPending)
   return {
     loading,
@@ -74,6 +76,7 @@ export function useEverything() {
     tasks: tasks.data ?? [],
     xp: xp.data ?? [],
     achievements: achievements.data ?? [],
+    visits: visits.data ?? [],
   }
 }
 
@@ -113,7 +116,7 @@ export function useMediaUrl(path: string | null | undefined): string | null {
 export function useActions() {
   const { db } = useDb()
   const qc = useQueryClient()
-  const { me, household, profiles } = useAuth()
+  const { me, household, profiles, partner } = useAuth()
   const popXp = useUi((s) => s.popXp)
   const celebrate = useUi((s) => s.celebrate)
   const toast = useUi((s) => s.toast)
@@ -418,6 +421,39 @@ export function useActions() {
     try { await db.deleteTask(id) } catch (e) { invalidate(keys.tasks); return fail(e, 'delete the task') }
   }, [setList, db, invalidate, fail])
 
+  // ---- site visits ---------------------------------------------------------
+  const logVisit = useCallback(async (input: NewSiteVisit) => {
+    if (!me) throw new Error('Not signed in')
+    try {
+      const v = await db.createVisit({ ...input, logged_by: me.id })
+      setList<SiteVisit>(keys.visits, (old) => [v, ...old])
+      void award('visit_logged', v.project_id, v.id)
+      if (v.outcome === 'no_show' && partner) {
+        const project = qc.getQueryData<Project[]>(k(keys.projects))?.find((p) => p.id === v.project_id)
+        const who = qc.getQueryData<Contact[]>(k(keys.contacts))?.find((c) => c.id === v.contact_id)
+        void quietNudge({ to_user: partner.id, kind: 'fyi', message: `${who ? who.name : 'The contractor'} didn't show up${v.visit_date === todayISO() ? ' today' : ` on ${fmtDate(v.visit_date, 'EEE d MMM')}`}${project ? ` — ${project.title}` : ''}${v.notes ? `. ${v.notes}` : ''}`, project_id: v.project_id, link: `/projects/${v.project_id}` })
+      }
+      return v
+    } catch (e) { return fail(e, 'log the visit') }
+  }, [me, partner, db, setList, award, qc, k, quietNudge, fail])
+
+  const updateVisit = useCallback(async (id: string, patch: Partial<SiteVisit>) => {
+    setList<SiteVisit>(keys.visits, (old) => old.map((v) => (v.id === id ? { ...v, ...patch } : v)))
+    try { return await db.updateVisit(id, patch) } catch (e) { invalidate(keys.visits); return fail(e, 'update the visit') }
+  }, [setList, db, invalidate, fail])
+
+  const deleteVisit = useCallback(async (id: string) => {
+    setList<SiteVisit>(keys.visits, (old) => old.filter((v) => v.id !== id))
+    try { await db.deleteVisit(id) } catch (e) { invalidate(keys.visits); return fail(e, 'remove the visit') }
+  }, [setList, db, invalidate, fail])
+
+  // ---- blockers ------------------------------------------------------------
+  const setBlocker = useCallback(async (projectId: string, kind: BlockerKind | null, note = '') => {
+    const prev = qc.getQueryData<Project[]>(k(keys.projects))?.find((p) => p.id === projectId)
+    const since = kind ? (prev?.blocked_on ? prev.blocked_since ?? todayISO() : todayISO()) : null
+    return updateProject(projectId, { blocked_on: kind, blocked_note: kind ? note.trim() : '', blocked_since: since })
+  }, [qc, k, updateProject])
+
   // ---- nudges --------------------------------------------------------------
   const sendNudge = useCallback(async (input: { to_user: string | null; kind: NudgeKind; message: string; project_id?: string | null; link?: string | null }) => {
     if (!me || !household) throw new Error('Not signed in')
@@ -490,6 +526,7 @@ export function useActions() {
     createQuote, updateQuote, deleteQuote,
     createExpense, updateExpense, deleteExpense,
     createTask, updateTask, deleteTask,
+    logVisit, updateVisit, deleteVisit, setBlocker,
     addBoardItem, updateBoardItem, updateBoardItems, deleteBoardItem,
     sendNudge, markNudgesRead, deleteNudge,
   }
@@ -516,6 +553,7 @@ export function useRealtimeSync() {
         case 'quotes': inv(keys.quotes); break
         case 'expenses': inv(keys.expenses); break
         case 'tasks': inv(keys.tasks); break
+        case 'site_visits': inv(keys.visits); break
         case 'board_items': {
           const pid = (p.row?.project_id ?? p.old?.project_id) as string | undefined
           if (pid) inv(keys.board(pid)); else qc.invalidateQueries({ queryKey: keys.boardAll })

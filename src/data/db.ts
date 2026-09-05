@@ -1,11 +1,11 @@
 import type {
   Achievement, BoardItem, Contact, Expense, HouseholdBundle, NewBoardItem, NewContact, NewExpense,
-  NewImage, NewNudge, NewProject, NewQuote, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, Task, XpEvent,
+  NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent,
 } from './types'
 
 export type ChangeTable =
   | 'projects' | 'project_images' | 'contacts' | 'quotes' | 'expenses' | 'tasks'
-  | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges'
+  | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges' | 'site_visits'
 
 export interface ChangePayload {
   table: ChangeTable
@@ -68,6 +68,12 @@ export interface Db {
   createExpense(input: NewExpense & { created_by: string }): Promise<Expense>
   updateExpense(id: string, patch: Partial<Expense>): Promise<Expense>
   deleteExpense(id: string): Promise<void>
+
+  // ---- site visits -------------------------------------------------
+  listVisits(): Promise<SiteVisit[]>
+  createVisit(input: NewSiteVisit & { logged_by: string }): Promise<SiteVisit>
+  updateVisit(id: string, patch: Partial<SiteVisit>): Promise<SiteVisit>
+  deleteVisit(id: string): Promise<void>
 
   // ---- tasks -------------------------------------------------------
   listTasks(): Promise<Task[]>

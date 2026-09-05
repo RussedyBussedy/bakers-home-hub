@@ -17,6 +17,7 @@ export const XP_RULES: Record<XpKind, { points: number; label: string }> = {
   contact_added: { points: 10, label: 'Contact saved' },
   expense_added: { points: 5, label: 'Expense logged' },
   task_completed: { points: 10, label: 'Task ticked off' },
+  visit_logged: { points: 5, label: 'Site day logged' },
   project_completed: { points: 150, label: 'Quest complete!' },
   under_budget: { points: 100, label: 'Finished under budget' },
   on_time: { points: 50, label: 'Finished on time' },
@@ -138,6 +139,17 @@ export function projectCosts(project: Project, quotes: Quote[], expenses: Expens
     highestQuote: highest,
     savedByChoosing: acceptedAmount != null && highest != null ? Math.max(0, highest - acceptedAmount) : 0,
   }
+}
+
+/**
+ * A received quote goes stale after its valid-until date; an accepted one
+ * doesn't (the deal is done). `daysLeft` is null when there is no date.
+ */
+export function quoteExpiry(quote: Quote, today = new Date()): { expired: boolean; daysLeft: number | null; soon: boolean } {
+  if (quote.status !== 'received' || !quote.valid_until) return { expired: false, daysLeft: null, soon: false }
+  const until = new Date(`${quote.valid_until}T23:59:59`)
+  const daysLeft = Math.ceil((until.getTime() - today.getTime()) / 86_400_000)
+  return { expired: daysLeft < 0, daysLeft, soon: daysLeft >= 0 && daysLeft <= 14 }
 }
 
 /** What has been paid toward one quote, and what is still to go. */

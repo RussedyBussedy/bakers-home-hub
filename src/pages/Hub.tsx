@@ -24,7 +24,8 @@ export default function HubPage() {
   const nudge = useNudge()
 
   const streak = weeklyStreak(data.xp)
-  const active = useMemo(() => data.projects.filter((p) => p.status === 'in_progress' || p.status === 'planning').slice(0, 6), [data.projects])
+  // Blocked projects float to the front — they're the ones needing a decision or a phone call.
+  const active = useMemo(() => data.projects.filter((p) => p.status === 'in_progress' || p.status === 'planning').sort((a, b) => Number(Boolean(b.blocked_on)) - Number(Boolean(a.blocked_on))).slice(0, 6), [data.projects])
   const upNext = useMemo(() => {
     const today = todayISO()
     return data.tasks

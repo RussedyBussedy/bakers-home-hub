@@ -1,9 +1,9 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Nudge, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent } from './types'
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
-const STORAGE_KEY = 'hub-demo-state-v1'
+const STORAGE_KEY = 'hub-demo-state-v2'
 const SESSION_KEY = 'hub-demo-user'
 const CHANNEL = 'hub-demo-sync'
 
@@ -133,7 +133,7 @@ export function createDemoDb(): Db {
     },
     async createProject(input) {
       return mutate('projects', 'INSERT', () => {
-        const p: Project = { ...input, id: uid(), sort_order: state.projects.length + 1, created_at: nowISO(), updated_at: nowISO() }
+        const p: Project = { blocked_on: null, blocked_note: '', blocked_since: null, ...input, id: uid(), sort_order: state.projects.length + 1, created_at: nowISO(), updated_at: nowISO() }
         state.projects.unshift(p)
         return p
       })
@@ -153,8 +153,30 @@ export function createDemoDb(): Db {
         state.expenses = state.expenses.filter((x) => x.project_id !== id)
         state.tasks = state.tasks.filter((x) => x.project_id !== id)
         state.boardItems = state.boardItems.filter((x) => x.project_id !== id)
+        state.visits = (state.visits ?? []).filter((x) => x.project_id !== id)
         return undefined
       }, { id })
+    },
+
+    async listVisits() {
+      return delay([...(state.visits ?? [])].sort((a, b) => b.visit_date.localeCompare(a.visit_date) || b.created_at.localeCompare(a.created_at)))
+    },
+    async createVisit(input) {
+      return mutate('site_visits', 'INSERT', () => {
+        const v: SiteVisit = { ...input, id: uid(), created_at: nowISO() }
+        state.visits = [...(state.visits ?? []), v]
+        return v
+      })
+    },
+    async updateVisit(id, patch) {
+      return mutate('site_visits', 'UPDATE', () => {
+        const v = (state.visits ?? []).find((x) => x.id === id)!
+        Object.assign(v, patch)
+        return { ...v }
+      })
+    },
+    async deleteVisit(id) {
+      await mutate('site_visits', 'DELETE', () => { state.visits = (state.visits ?? []).filter((x) => x.id !== id); return undefined }, { id })
     },
 
     async listImages() {

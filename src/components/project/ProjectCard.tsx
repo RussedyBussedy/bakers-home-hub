@@ -6,6 +6,7 @@ import { useMediaUrl } from '../../data/hooks'
 import { projectCosts } from '../../lib/xp'
 import { cn, daysUntil, money } from '../../lib/utils'
 import { BudgetBar, StatusPill } from '../ui/Bits'
+import { BlockerChip } from './Blocker'
 
 export function CoverImage({ path, alt, className, accent }: { path: string | null; alt: string; className?: string; accent?: string }) {
   const url = useMediaUrl(path)
@@ -46,8 +47,8 @@ export function ProjectCard({ project, quotes, expenses, tasks, index = 0, compa
       <Link to={`/projects/${project.id}`} className="card block overflow-hidden transition-shadow duration-300 hover:shadow-md focus-visible:outline-2 focus-visible:outline-primary">
         <div className="relative">
           <CoverImage path={project.cover_path} alt="" accent={project.accent} className={compact ? 'aspect-[16/10]' : 'aspect-[16/10]'} />
-          <div className="absolute inset-x-0 top-0 flex items-start justify-between p-3">
-            <StatusPill status={project.status} size="sm" />
+          <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5"><StatusPill status={project.status} size="sm" /><BlockerChip project={project} compact className="shadow-sm" /></span>
             {project.status === 'done' && <span className="grid size-7 place-items-center rounded-full bg-sage text-on-dark shadow-sm"><CheckCircle2 className="size-4" /></span>}
           </div>
           <span className="absolute bottom-0 left-0 h-1 w-full" style={{ background: project.accent }} aria-hidden />

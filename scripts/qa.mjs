@@ -38,7 +38,7 @@ for (const theme of ['light', 'dark']) {
     await context.addInitScript((t) => {
       localStorage.setItem('hub-theme', t)
       localStorage.setItem('hub-demo-user', 'u-russel')
-      localStorage.removeItem('hub-demo-state-v1')
+      localStorage.removeItem('hub-demo-state-v2')
     }, theme)
     const page = await context.newPage()
     page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${theme}/${vpName}] ${page.url()} :: ${m.text()}`) })
