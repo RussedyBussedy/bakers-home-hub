@@ -1,0 +1,337 @@
+import type { ChangePayload, ChangeTable, Db } from './db'
+import type { Achievement, BoardItem, Contact, Expense, Profile, Project, ProjectImage, Quote, Task, XpEvent } from './types'
+import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
+import { uid } from '../lib/utils'
+
+const STORAGE_KEY = 'hub-demo-state-v1'
+const SESSION_KEY = 'hub-demo-user'
+const CHANNEL = 'hub-demo-sync'
+
+function nowISO() {
+  return new Date().toISOString()
+}
+
+function load(): DemoState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as DemoState
+      if (parsed && parsed.projects && parsed.household) return parsed
+    }
+  } catch {
+    /* ignore */
+  }
+  return buildDemoState()
+}
+
+/**
+ * In-memory implementation used when no Supabase credentials are configured,
+ * or when someone taps "Explore the demo". State persists to localStorage and
+ * syncs across open tabs with a BroadcastChannel so the "live sync" story can
+ * still be seen without a backend.
+ */
+export function createDemoDb(): Db {
+  let state = load()
+  const listeners = new Set<(p: ChangePayload) => void>()
+  const authListeners = new Set<(id: string | null) => void>()
+  const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null
+
+  const persist = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    } catch {
+      /* quota exceeded — keep going in memory */
+    }
+  }
+
+  const emit = (payload: ChangePayload, broadcast = true) => {
+    listeners.forEach((l) => l(payload))
+    if (broadcast) bc?.postMessage({ kind: 'change', payload })
+  }
+
+  bc?.addEventListener('message', (e) => {
+    const msg = e.data as { kind: string; payload: ChangePayload }
+    if (msg?.kind === 'change') {
+      state = load()
+      emit(msg.payload, false)
+    }
+  })
+
+  // Always hand out copies: the UI keeps what it receives in its cache and
+  // compares old vs new, so the live state must never be shared by reference.
+  const delay = <T,>(v: T, ms = 60): Promise<T> => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms))
+
+  const mutate = <T,>(table: ChangeTable, type: ChangePayload['type'], fn: () => T, row?: unknown): Promise<T> => {
+    const out = fn()
+    persist()
+    emit({ table, type, row: (row ?? out ?? null) as Record<string, unknown> | null, old: null })
+    return delay(out, 40)
+  }
+
+  const currentUser = () => localStorage.getItem(SESSION_KEY)
+
+  const db: Db = {
+    mode: 'demo',
+
+    async signIn(email) {
+      const id = /kay/i.test(email) ? DEMO_USERS.kay : DEMO_USERS.russel
+      localStorage.setItem(SESSION_KEY, id)
+      authListeners.forEach((l) => l(id))
+      return {}
+    },
+    async signOut() {
+      localStorage.removeItem(SESSION_KEY)
+      authListeners.forEach((l) => l(null))
+    },
+    async getUserId() {
+      return currentUser()
+    },
+    onAuthChange(cb) {
+      authListeners.add(cb)
+      return () => authListeners.delete(cb)
+    },
+    async resetPassword() {
+      return {}
+    },
+    async updatePassword() {
+      return {}
+    },
+
+    async getBundle() {
+      return delay({ household: state.household, profiles: state.profiles })
+    },
+    async updateProfile(id, patch) {
+      return mutate('profiles', 'UPDATE', () => {
+        const p = state.profiles.find((x) => x.id === id)!
+        Object.assign(p, patch)
+        return { ...p } as Profile
+      })
+    },
+
+    async listProjects() {
+      return delay([...state.projects])
+    },
+    async createProject(input) {
+      return mutate('projects', 'INSERT', () => {
+        const p: Project = { ...input, id: uid(), sort_order: state.projects.length + 1, created_at: nowISO(), updated_at: nowISO() }
+        state.projects.unshift(p)
+        return p
+      })
+    },
+    async updateProject(id, patch) {
+      return mutate('projects', 'UPDATE', () => {
+        const p = state.projects.find((x) => x.id === id)!
+        Object.assign(p, patch, { updated_at: nowISO() })
+        return { ...p }
+      })
+    },
+    async deleteProject(id) {
+      await mutate('projects', 'DELETE', () => {
+        state.projects = state.projects.filter((x) => x.id !== id)
+        state.images = state.images.filter((x) => x.project_id !== id)
+        state.quotes = state.quotes.filter((x) => x.project_id !== id)
+        state.expenses = state.expenses.filter((x) => x.project_id !== id)
+        state.tasks = state.tasks.filter((x) => x.project_id !== id)
+        state.boardItems = state.boardItems.filter((x) => x.project_id !== id)
+        return undefined
+      }, { id })
+    },
+
+    async listImages() {
+      return delay([...state.images])
+    },
+    async addImage(input) {
+      return mutate('project_images', 'INSERT', () => {
+        const i: ProjectImage = { ...input, id: uid(), created_at: nowISO() }
+        state.images.push(i)
+        return i
+      })
+    },
+    async updateImage(id, patch) {
+      return mutate('project_images', 'UPDATE', () => {
+        const i = state.images.find((x) => x.id === id)!
+        Object.assign(i, patch)
+        return { ...i }
+      })
+    },
+    async deleteImage(id) {
+      await mutate('project_images', 'DELETE', () => { state.images = state.images.filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listContacts() {
+      return delay([...state.contacts])
+    },
+    async createContact(input) {
+      return mutate('contacts', 'INSERT', () => {
+        const c: Contact = { ...input, id: uid(), created_at: nowISO() }
+        state.contacts.push(c)
+        return c
+      })
+    },
+    async updateContact(id, patch) {
+      return mutate('contacts', 'UPDATE', () => {
+        const c = state.contacts.find((x) => x.id === id)!
+        Object.assign(c, patch)
+        return { ...c }
+      })
+    },
+    async deleteContact(id) {
+      await mutate('contacts', 'DELETE', () => {
+        state.contacts = state.contacts.filter((x) => x.id !== id)
+        state.quotes.forEach((q) => { if (q.contact_id === id) q.contact_id = null })
+        return undefined
+      }, { id })
+    },
+
+    async listQuotes() {
+      return delay([...state.quotes])
+    },
+    async createQuote(input) {
+      return mutate('quotes', 'INSERT', () => {
+        const q: Quote = { ...input, id: uid(), created_at: nowISO() }
+        state.quotes.push(q)
+        return q
+      })
+    },
+    async updateQuote(id, patch) {
+      return mutate('quotes', 'UPDATE', () => {
+        const q = state.quotes.find((x) => x.id === id)!
+        Object.assign(q, patch)
+        return { ...q }
+      })
+    },
+    async deleteQuote(id) {
+      await mutate('quotes', 'DELETE', () => { state.quotes = state.quotes.filter((x) => x.id !== id); return undefined }, { id })
+    },
+    async listExpenses() {
+      return delay([...state.expenses])
+    },
+    async createExpense(input) {
+      return mutate('expenses', 'INSERT', () => {
+        const e: Expense = { ...input, id: uid(), created_at: nowISO() }
+        state.expenses.push(e)
+        return e
+      })
+    },
+    async updateExpense(id, patch) {
+      return mutate('expenses', 'UPDATE', () => {
+        const e = state.expenses.find((x) => x.id === id)!
+        Object.assign(e, patch)
+        return { ...e }
+      })
+    },
+    async deleteExpense(id) {
+      await mutate('expenses', 'DELETE', () => { state.expenses = state.expenses.filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listTasks() {
+      return delay([...state.tasks])
+    },
+    async createTask(input) {
+      return mutate('tasks', 'INSERT', () => {
+        const siblings = state.tasks.filter((t) => t.project_id === input.project_id)
+        const t: Task = { ...input, sort_order: input.sort_order ?? siblings.length + 1, id: uid(), completed_at: null, created_at: nowISO() }
+        state.tasks.push(t)
+        return t
+      })
+    },
+    async updateTask(id, patch) {
+      return mutate('tasks', 'UPDATE', () => {
+        const t = state.tasks.find((x) => x.id === id)!
+        Object.assign(t, patch)
+        return { ...t }
+      })
+    },
+    async deleteTask(id) {
+      await mutate('tasks', 'DELETE', () => { state.tasks = state.tasks.filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listBoardItems(projectId) {
+      return delay(state.boardItems.filter((b) => b.project_id === projectId))
+    },
+    async createBoardItem(input) {
+      return mutate('board_items', 'INSERT', () => {
+        const b: BoardItem = { ...input, id: uid(), created_at: nowISO(), updated_at: nowISO() }
+        state.boardItems.push(b)
+        return b
+      })
+    },
+    async updateBoardItem(id, patch) {
+      return mutate('board_items', 'UPDATE', () => {
+        const b = state.boardItems.find((x) => x.id === id)!
+        Object.assign(b, patch, { updated_at: nowISO() })
+        return { ...b }
+      })
+    },
+    async updateBoardItems(patches) {
+      await mutate('board_items', 'UPDATE', () => {
+        patches.forEach(({ id, patch }) => {
+          const b = state.boardItems.find((x) => x.id === id)
+          if (b) Object.assign(b, patch, { updated_at: nowISO() })
+        })
+        return undefined
+      }, { ids: patches.map((p) => p.id) })
+    },
+    async deleteBoardItem(id) {
+      await mutate('board_items', 'DELETE', () => { state.boardItems = state.boardItems.filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listXp() {
+      return delay([...state.xp])
+    },
+    async addXp(input) {
+      return mutate('xp_events', 'INSERT', () => {
+        const e: XpEvent = { ...input, id: uid(), created_at: nowISO() }
+        state.xp.push(e)
+        return e
+      })
+    },
+    async listAchievements() {
+      return delay([...state.achievements])
+    },
+    async unlockAchievement(input) {
+      if (state.achievements.some((a) => a.key === input.key)) return null
+      return mutate('achievements', 'INSERT', () => {
+        const a: Achievement = { ...input, id: uid(), unlocked_at: nowISO() }
+        state.achievements.push(a)
+        return a
+      })
+    },
+
+    async upload(blob) {
+      // Store as a data URL so it survives a refresh (within localStorage limits).
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(blob)
+      })
+    },
+    async resolveUrl(path) {
+      return path
+    },
+    async remove() {
+      /* nothing to do for data URLs */
+    },
+
+    subscribe(onChange) {
+      listeners.add(onChange)
+      return () => listeners.delete(onChange)
+    },
+    presence(_channel, me, onSync) {
+      // Show the other half of the household "viewing" after a moment — a little demo magic.
+      const other = state.profiles.find((p) => p.id !== me.user_id)
+      onSync([me])
+      const t = setTimeout(() => {
+        if (other) onSync([me, { user_id: other.id, name: other.display_name, color: other.color }])
+      }, 2500)
+      return () => clearTimeout(t)
+    },
+  }
+
+  return db
+}
+
+export function resetDemo() {
+  localStorage.removeItem(STORAGE_KEY)
+}

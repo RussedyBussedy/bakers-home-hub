@@ -1,0 +1,205 @@
+// Domain types shared by the Supabase and demo data layers.
+
+export type ProjectStatus = 'idea' | 'planning' | 'in_progress' | 'done' | 'on_hold'
+export type Priority = 'low' | 'medium' | 'high'
+export type ContactRole = 'contractor' | 'supplier' | 'designer' | 'other'
+export type QuoteStatus = 'received' | 'accepted' | 'rejected' | 'paid'
+export type ImageKind = 'before' | 'space' | 'after' | 'other'
+export type BoardItemType = 'photo' | 'color' | 'note' | 'link' | 'product' | 'label'
+
+export const PROJECT_STATUSES: { value: ProjectStatus; label: string; tone: Tone }[] = [
+  { value: 'idea', label: 'Idea', tone: 'sky' },
+  { value: 'planning', label: 'Planning', tone: 'ochre' },
+  { value: 'in_progress', label: 'In progress', tone: 'primary' },
+  { value: 'done', label: 'Done', tone: 'sage' },
+  { value: 'on_hold', label: 'On hold', tone: 'neutral' },
+]
+
+export type Tone = 'primary' | 'sage' | 'ochre' | 'sky' | 'plum' | 'neutral' | 'gold' | 'danger'
+
+export const ROOMS = [
+  'Kitchen', 'Lounge', 'Dining room', 'Main bedroom', 'Bedroom', 'Bathroom', 'Guest bathroom',
+  'Study', 'Garage', 'Garden', 'Pool', 'Lapa', 'Patio', 'Roof', 'Exterior', 'Whole house', 'Other',
+] as const
+
+export const CATEGORIES = [
+  'Renovation', 'Repair', 'Decor', 'Landscaping', 'Electrical', 'Plumbing', 'Painting',
+  'Furniture', 'Security', 'Energy', 'Storage', 'Other',
+] as const
+
+export const EXPENSE_CATEGORIES = [
+  'Materials', 'Labour', 'Tools', 'Paint', 'Fixtures', 'Furniture', 'Plants', 'Delivery', 'Permits', 'Other',
+] as const
+
+export interface Household {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface Profile {
+  id: string
+  household_id: string
+  display_name: string
+  color: string
+  created_at: string
+}
+
+export interface Project {
+  id: string
+  household_id: string
+  title: string
+  description: string
+  room: string
+  category: string
+  status: ProjectStatus
+  priority: Priority
+  budget_estimate: number
+  cover_path: string | null
+  accent: string
+  start_date: string | null
+  target_date: string | null
+  completed_date: string | null
+  sort_order: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProjectImage {
+  id: string
+  project_id: string
+  path: string
+  caption: string
+  kind: ImageKind
+  width: number | null
+  height: number | null
+  created_by: string
+  created_at: string
+}
+
+export interface Contact {
+  id: string
+  household_id: string
+  name: string
+  company: string
+  role: ContactRole
+  phone: string
+  email: string
+  whatsapp: string
+  notes: string
+  rating: number | null
+  created_by: string
+  created_at: string
+}
+
+export interface Quote {
+  id: string
+  project_id: string
+  contact_id: string | null
+  title: string
+  amount: number
+  vat_included: boolean
+  status: QuoteStatus
+  quote_date: string | null
+  valid_until: string | null
+  file_path: string | null
+  notes: string
+  created_by: string
+  created_at: string
+}
+
+export interface Expense {
+  id: string
+  project_id: string
+  title: string
+  amount: number
+  date: string
+  category: string
+  contact_id: string | null
+  receipt_path: string | null
+  created_by: string
+  created_at: string
+}
+
+export interface Task {
+  id: string
+  project_id: string
+  title: string
+  done: boolean
+  due_date: string | null
+  assigned_to: string | null
+  sort_order: number
+  completed_at: string | null
+  created_by: string
+  created_at: string
+}
+
+export interface PhotoData { path: string; caption?: string; natural_w?: number; natural_h?: number }
+export interface ColorData { hex: string; name: string; source?: string }
+export interface NoteData { text: string; tint: 'butter' | 'blush' | 'mint' | 'sky' | 'paper' | 'lilac' }
+export interface LinkData { url: string; title: string; domain: string; image_url?: string }
+export interface ProductData { title: string; price: number | null; url?: string; image_path?: string; supplier?: string }
+export interface LabelData { text: string; style: 'tag' | 'measure' | 'arrow' }
+
+export type BoardItemData = PhotoData | ColorData | NoteData | LinkData | ProductData | LabelData
+
+export interface BoardItem {
+  id: string
+  project_id: string
+  type: BoardItemType
+  x: number
+  y: number
+  w: number
+  h: number
+  rotation: number
+  z: number
+  data: BoardItemData
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export type XpKind =
+  | 'project_created' | 'photo_added' | 'pin_added' | 'swatch_added' | 'quote_added'
+  | 'quote_accepted' | 'contact_added' | 'expense_added' | 'task_completed'
+  | 'project_completed' | 'under_budget' | 'on_time' | 'board_started' | 'project_started'
+
+export interface XpEvent {
+  id: string
+  household_id: string
+  user_id: string
+  kind: XpKind
+  points: number
+  project_id: string | null
+  ref_id: string | null
+  created_at: string
+}
+
+export interface Achievement {
+  id: string
+  household_id: string
+  user_id: string | null
+  key: string
+  unlocked_at: string
+}
+
+export interface Presence {
+  user_id: string
+  name: string
+  color: string
+}
+
+/** Everything the app needs for one household, loaded together. */
+export interface HouseholdBundle {
+  household: Household
+  profiles: Profile[]
+}
+
+export type NewProject = Omit<Project, 'id' | 'household_id' | 'created_by' | 'created_at' | 'updated_at' | 'sort_order'>
+export type NewContact = Omit<Contact, 'id' | 'household_id' | 'created_by' | 'created_at'>
+export type NewQuote = Omit<Quote, 'id' | 'created_by' | 'created_at'>
+export type NewExpense = Omit<Expense, 'id' | 'created_by' | 'created_at'>
+export type NewTask = Omit<Task, 'id' | 'created_by' | 'created_at' | 'completed_at' | 'sort_order'> & { sort_order?: number }
+export type NewBoardItem = Omit<BoardItem, 'id' | 'created_by' | 'created_at' | 'updated_at'>
+export type NewImage = Omit<ProjectImage, 'id' | 'created_by' | 'created_at'>
