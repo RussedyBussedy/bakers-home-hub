@@ -425,18 +425,18 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
       {/* Presence + top chrome */}
       {chrome && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-3 safe-top">
-          <div className="pointer-events-auto flex items-center gap-2">
+          <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2">
             {onExit && (
               <button onClick={onExit} className="glass grid size-11 place-items-center rounded-full border border-line text-ink shadow-md" aria-label="Back to project">
                 <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
               </button>
             )}
-            <div className="glass rounded-full border border-line px-4 py-2 shadow-md">
-              <p className="max-w-[46vw] truncate font-display text-[15px] leading-tight text-ink sm:max-w-xs">{project.title}</p>
+            <div className="glass min-w-0 rounded-full border border-line px-4 py-2 shadow-md">
+              <p className="truncate font-display text-[15px] leading-tight text-ink sm:max-w-xs">{project.title}</p>
               <p className="text-[11px] text-ink-3">{items.length} pin{items.length === 1 ? '' : 's'} · {Math.round(view.scale * 100)}%</p>
             </div>
           </div>
-          <div className="pointer-events-auto flex items-center gap-2">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-2">
             <div className="glass flex items-center rounded-full border border-line p-1 shadow-md">
               <AnimatePresence>
                 {presence.map((p) => (
@@ -445,7 +445,7 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
                   </motion.span>
                 ))}
               </AnimatePresence>
-              {presence.length > 1 && <span className="px-2 text-xs text-ink-2">{presence.filter((p) => p.user_id !== me?.id).map((p) => p.name).join(', ')} here too</span>}
+              {presence.length > 1 && <span className="hidden whitespace-nowrap px-2 text-xs text-ink-2 sm:inline">{presence.filter((p) => p.user_id !== me?.id).map((p) => p.name).join(', ')} here too</span>}
             </div>
             <Tooltip label="Fit to board"><button onClick={() => fit()} className="glass grid size-11 place-items-center rounded-full border border-line text-ink shadow-md" aria-label="Fit to board"><Maximize2 className="size-5" /></button></Tooltip>
           </div>

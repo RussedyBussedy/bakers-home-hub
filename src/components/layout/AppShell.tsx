@@ -29,7 +29,8 @@ export function AppShell() {
   const streak = weeklyStreak(xp ?? [])
   const navigate = useNavigate()
   const location = useLocation()
-  const hideFab = location.pathname.startsWith('/projects/new') || location.pathname.includes('/board') || location.pathname.startsWith('/settings')
+  // The floating button starts a new project, so it only belongs where projects are the subject.
+  const hideFab = !(location.pathname === '/' || location.pathname === '/projects')
   const unreadCount = unread.length
 
   // Unread nudges show in the tab title and, when installed, on the app icon.

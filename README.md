@@ -34,6 +34,8 @@ npm run dev          # http://localhost:5173
 npm run build        # type-check + production build
 npm run qa           # screenshots of every screen (phone + desktop, light + dark) into qa-shots/
 npm run flows        # click-through smoke test of the main flows
+npm run overflow     # phone-width layout check: anything wider than the screen, clipped text, sideways scroll
+npm test             # build + flows in one go
 ```
 
 Set `VITE_DEMO_ONLY=true` to force the built-in demo mode (sample data in localStorage, no backend). The login page also has an "Explore the demo" link.

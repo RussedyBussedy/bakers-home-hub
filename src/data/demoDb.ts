@@ -43,6 +43,8 @@ export function createDemoDb(): Db {
       /* quota exceeded — keep going in memory */
     }
   }
+  // Write the freshly seeded state straight away so a second tab (or a test) sees the same data.
+  if (!localStorage.getItem(STORAGE_KEY)) persist()
 
   const emit = (payload: ChangePayload, broadcast = true) => {
     listeners.forEach((l) => l(payload))

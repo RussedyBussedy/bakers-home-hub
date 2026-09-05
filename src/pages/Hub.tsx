@@ -152,7 +152,7 @@ export default function HubPage() {
                   <Link to={`/projects/${t.project_id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2/60">
                     <Checkbox checked={t.done} onChange={(v) => updateTask(t.id, { done: v })} label={`Mark “${t.title}” done`} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] text-ink">{t.title}</span>
+                      <span className="line-clamp-2 text-[15px] leading-snug text-ink">{t.title}</span>
                       <span className="block truncate text-xs text-ink-3">{p?.title}</span>
                     </span>
                     {t.assigned_to && (() => { const a = profileById(t.assigned_to); return a ? <Avatar name={a.display_name} color={a.color} size="xs" /> : null })()}

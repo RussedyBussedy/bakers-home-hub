@@ -189,6 +189,12 @@
   * {
     border-color: var(--line);
   }
+  /* A grid cell's automatic minimum is its content's min-content width, so one
+     truncated (nowrap) line could push a whole column past the phone's edge.
+     Let cells shrink to their track instead; the text inside then truncates. */
+  .grid > * {
+    min-width: 0;
+  }
   html {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
