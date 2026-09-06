@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BarChart3, Compass, Home, Plus, Settings, Trophy, Users, Zap, Flame } from 'lucide-react'
 import { Suspense, useEffect, type ReactNode } from 'react'
-import { cn } from '../../lib/utils'
+import { cn, homeTitle } from '../../lib/utils'
 import { useAuth } from '../../data/session'
 import { useCalm } from '../../store/ui'
 import { useInbox, useLevel, useRealtimeSync, useXp } from '../../data/hooks'
@@ -67,7 +67,7 @@ export function AppShell() {
         <div className="flex items-center gap-3 px-6 pt-7 pb-5">
           <HouseMark className="size-10" />
           <div className="min-w-0">
-            <p className="font-display text-[19px] leading-tight text-ink">{household?.name ?? 'Home'} Hub</p>
+            <p className="font-display text-[19px] leading-tight text-ink">{homeTitle(household?.name)}</p>
             <p className="truncate text-xs text-ink-3">Level {level.level} · {level.title}</p>
           </div>
         </div>

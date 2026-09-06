@@ -6,7 +6,7 @@ import { useActions } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { useUi } from '../../store/ui'
 import { absoluteUrl, canWebShare, openExternal, webShare, whatsappLink } from '../../lib/share'
-import { cn, money } from '../../lib/utils'
+import { cn, homeTitle, money } from '../../lib/utils'
 import { Avatar } from '../ui/Bits'
 import { Button } from '../ui/Button'
 import { Segmented, Textarea } from '../ui/Field'
@@ -96,7 +96,7 @@ export function NudgeHost() {
 
   const composed = () => {
     const from = me?.display_name ?? 'Someone'
-    const where = c.project ? ` · ${c.project.title}` : household ? ` · ${household.name} Hub` : ''
+    const where = c.project ? ` · ${c.project.title}` : household ? ` · ${homeTitle(household.name)}` : ''
     return `${KIND_LABEL[kind]} from ${from}${where}\n${text.trim()}\n${absoluteUrl(link)}`
   }
 

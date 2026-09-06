@@ -11,7 +11,7 @@ import { Page } from '../components/layout/AppShell'
 import { useAuth } from '../data/session'
 import { useActions, useEverything, useLevel } from '../data/hooks'
 import { ACHIEVEMENTS, XP_RULES, projectCosts, weeklyStreak } from '../lib/xp'
-import { cn, fmtRelative, greeting, money, pluralise, todayISO } from '../lib/utils'
+import { cn, fmtRelative, greeting, homeTitle, money, pluralise, todayISO } from '../lib/utils'
 import { ProjectCard } from '../components/project/ProjectCard'
 import { Avatar, CountUp, EmptyState, Reveal, SectionTitle, Skeleton } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
@@ -63,7 +63,7 @@ export default function HubPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm text-ink-2">{greeting()}, {me?.display_name}</p>
-          <h1 className="text-[30px] sm:text-[36px]">{household?.name ?? 'Home'} Hub</h1>
+          <h1 className="text-[30px] sm:text-[36px]">{homeTitle(household?.name)}</h1>
         </div>
         <div className="flex items-center gap-3">
           <Tooltip label={`Nudge ${partner?.display_name ?? 'your partner'}`}>

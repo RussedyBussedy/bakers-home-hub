@@ -80,7 +80,7 @@ interface AuthContextValue {
   partner: Profile | null
   profileById: (id: string | null | undefined) => Profile | undefined
   signIn: (email: string, password: string) => Promise<{ error?: string }>
-  signUp: (input: { email: string; password: string; displayName: string; inviteCode?: string | null }) => Promise<{ error?: string; needsConfirmation?: boolean }>
+  signUp: (input: { email: string; password: string; displayName: string; householdName?: string | null; inviteCode?: string | null }) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
   bundleError: string | null
 }

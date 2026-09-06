@@ -55,12 +55,19 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       const { error } = await sb.auth.signInWithPassword({ email, password })
       return error ? { error: friendlyAuthError(error.message) } : {}
     },
-    async signUp({ email, password, displayName, inviteCode }) {
+    async signUp({ email, password, displayName, householdName, inviteCode }) {
       const { data, error } = await sb.auth.signUp({
         email,
         password,
-        // The trigger on the auth table reads these: the name to show, and the invite to redeem.
-        options: { data: { display_name: displayName, ...(inviteCode ? { invite_code: inviteCode } : {}) } },
+        // The trigger on the auth table reads these: the name to show, what to call the new home,
+        // and the invite to redeem (which wins — you join a home that is already named).
+        options: {
+          data: {
+            display_name: displayName,
+            ...(householdName ? { household_name: householdName } : {}),
+            ...(inviteCode ? { invite_code: inviteCode } : {}),
+          },
+        },
       })
       if (error) return { error: friendlyAuthError(error.message) }
       // No session back means Supabase wants the address confirmed before they can sign in.

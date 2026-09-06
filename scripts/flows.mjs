@@ -369,6 +369,8 @@ await step('invite: make a link, see it pending, then cancel it', async () => {
     for (const label of ['Your name', 'Email', 'Password']) {
       if (!(await visitor.getByLabel(label).count())) throw new Error(`the register form has no ${label} field`)
     }
+    // ...except naming a home, which makes no sense when you are joining one that is already named.
+    if (await visitor.getByLabel("What's your home called").count()) throw new Error('the join form asks you to name a home you are joining')
     if (!(await visitor.getByRole('button', { name: /Join The Bakers/ }).count())) throw new Error('no way to accept the invite')
 
     // A code that was never issued is turned away rather than offering a way in.

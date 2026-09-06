@@ -26,7 +26,7 @@ export interface Db {
   // ---- auth --------------------------------------------------------
   signIn(email: string, password: string): Promise<AuthResult>
   /** Registers an account. With a live invite code the person joins that home; without one they get their own. */
-  signUp(input: { email: string; password: string; displayName: string; inviteCode?: string | null }): Promise<AuthResult & { needsConfirmation?: boolean }>
+  signUp(input: { email: string; password: string; displayName: string; householdName?: string | null; inviteCode?: string | null }): Promise<AuthResult & { needsConfirmation?: boolean }>
   signOut(): Promise<void>
   getUserId(): Promise<string | null>
   onAuthChange(cb: (userId: string | null) => void): () => void

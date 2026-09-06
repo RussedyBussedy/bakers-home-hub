@@ -3,6 +3,7 @@ import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../data/session'
 import { Button } from '../ui/Button'
 import { Field, Input } from '../ui/Field'
+import { homeTitle } from '../../lib/utils'
 
 /**
  * Registering, used both for "start your own home" on the login screen and for accepting an
@@ -12,6 +13,7 @@ import { Field, Input } from '../ui/Field'
 export function RegisterForm({ inviteCode, joining, onDone }: { inviteCode?: string | null; joining?: string; onDone?: () => void }) {
   const { signUp } = useAuth()
   const [name, setName] = useState('')
+  const [home, setHome] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -23,7 +25,7 @@ export function RegisterForm({ inviteCode, joining, onDone }: { inviteCode?: str
     e.preventDefault()
     if (password.length < 6) { setError('Pick a password of at least six characters.'); return }
     setBusy(true); setError(null)
-    const res = await signUp({ email: email.trim(), password, displayName: name.trim(), inviteCode })
+    const res = await signUp({ email: email.trim(), password, displayName: name.trim(), householdName: joining ? null : home.trim(), inviteCode })
     setBusy(false)
     if (res.error) { setError(res.error); return }
     if (res.needsConfirmation) setCheck(true)
@@ -48,6 +50,11 @@ export function RegisterForm({ inviteCode, joining, onDone }: { inviteCode?: str
       <Field label="Your name" hint="What the others in the home will see.">
         {(id) => <Input id={id} autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Russel" />}
       </Field>
+      {!joining && (
+        <Field label="What's your home called" hint={`It shows across the app as "${homeTitle(home.trim() || 'The Bakers')}". You can change it later.`}>
+          {(id) => <Input id={id} value={home} onChange={(e) => setHome(e.target.value)} placeholder="The Bakers" maxLength={60} />}
+        </Field>
+      )}
       <Field label="Email">
         {(id) => <Input id={id} type="email" autoComplete="email" inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />}
       </Field>

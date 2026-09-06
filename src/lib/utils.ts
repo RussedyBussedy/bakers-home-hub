@@ -152,3 +152,14 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
     timer = setTimeout(() => fn(...args), ms)
   }
 }
+
+/**
+ * What to call a household on screen. Homes are named by their people — "The Bakers" wants "Hub"
+ * after it, but a new account's home defaults to "Gran's Home", and "Gran's Home Hub" is clumsy.
+ * So the word is only added when the name doesn't already end in one like it.
+ */
+export function homeTitle(name: string | null | undefined): string {
+  const n = (name ?? '').trim()
+  if (!n) return 'Home Hub'
+  return /\b(hub|home|house|place)$/i.test(n) ? n : `${n} Hub`
+}
