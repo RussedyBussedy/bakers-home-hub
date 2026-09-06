@@ -13,11 +13,30 @@ export function onBoard(items: BoardItem[]): BoardItem[] {
 export function priced(items: BoardItem[]): BoardItem[] {
   return items
     .filter((i) => i.type === 'product')
-    .sort((a, b) => ((b.data as ProductData).price ?? 0) - ((a.data as ProductData).price ?? 0) || a.created_at.localeCompare(b.created_at))
+    .sort((a, b) => lineTotal(b.data as ProductData) - lineTotal(a.data as ProductData) || a.created_at.localeCompare(b.created_at))
+}
+
+/**
+ * How many of a thing. Whole, at least one, and capped — a stray keypress that turns four handles
+ * into forty thousand shouldn't quietly rewrite the shopping total.
+ */
+export function qtyOf(d: ProductData): number {
+  const n = Math.floor(Number(d.qty ?? 1))
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), 9999) : 1
+}
+
+/** What this line costs: the price times how many. */
+export function lineTotal(d: ProductData): number {
+  return (d.price ?? 0) * qtyOf(d)
 }
 
 export function pricedTotal(items: BoardItem[]): number {
-  return items.reduce((sum, i) => (i.type === 'product' ? sum + ((i.data as ProductData).price ?? 0) : sum), 0)
+  return items.reduce((sum, i) => (i.type === 'product' ? sum + lineTotal(i.data as ProductData) : sum), 0)
+}
+
+/** Everything counted individually — four handles are four things, not one line. */
+export function pricedUnits(items: BoardItem[]): number {
+  return items.reduce((sum, i) => (i.type === 'product' ? sum + qtyOf(i.data as ProductData) : sum), 0)
 }
 
 /**

@@ -31,8 +31,9 @@ type Tab = 'overview' | 'board' | 'money' | 'prices' | 'photos' | 'tasks'
 const TABS: { value: Tab; label: string; icon: typeof Wallet }[] = [
   { value: 'overview', label: 'Overview', icon: Sparkles },
   { value: 'board', label: 'Board', icon: Palette },
-  { value: 'money', label: 'Money', icon: Wallet },
+  // Prices comes first: you price things up long before there is a quote to file against them.
   { value: 'prices', label: 'Prices', icon: Tag },
+  { value: 'money', label: 'Money', icon: Wallet },
   { value: 'photos', label: 'Photos', icon: Camera },
   { value: 'tasks', label: 'Tasks', icon: ListChecks },
 ]

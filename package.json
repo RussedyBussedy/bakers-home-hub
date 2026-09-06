@@ -19,7 +19,8 @@
     "currency-test": "npx --yes vite-node scripts/currency-test.mts",
     "search-test": "npx --yes vite-node scripts/search-test.mts",
     "errors-test": "npx --yes vite-node scripts/errors-test.mts",
-    "units": "npm run unfurl-test && npm run hometitle-test && npm run currency-test && npm run search-test && npm run errors-test"
+    "board-test": "npx --yes vite-node scripts/board-test.mts",
+    "units": "npm run unfurl-test && npm run hometitle-test && npm run currency-test && npm run search-test && npm run errors-test && npm run board-test"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

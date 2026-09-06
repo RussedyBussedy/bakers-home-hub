@@ -232,6 +232,8 @@ export interface ProductData {
   /** Picture straight off the web page, used when we couldn't store a copy of our own. */
   image_url?: string
   supplier?: string
+  /** How many of them. Absent means one — most things are, so most cards say nothing about it. */
+  qty?: number
   /** In the project's price list but kept off the inspiration board. */
   off_board?: boolean
 }

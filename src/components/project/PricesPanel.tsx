@@ -5,7 +5,7 @@ import { DEFAULT_SIZES } from '../board/Pins'
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useDb } from '../../data/session'
 import { useUi } from '../../store/ui'
-import { nextSlot, priced, pricedTotal } from '../../lib/board'
+import { lineTotal, nextSlot, priced, pricedTotal, pricedUnits, qtyOf } from '../../lib/board'
 import { compressImage } from '../../lib/images'
 import { openExternal } from '../../lib/share'
 import { useCurrency } from '../../lib/currency'
@@ -25,6 +25,7 @@ export function PricesPanel({ project, items }: { project: Project; items: Board
   const [sheet, setSheet] = useState<{ open: boolean; item?: BoardItem | null }>({ open: false })
   const list = useMemo(() => priced(items), [items])
   const total = useMemo(() => pricedTotal(list), [list])
+  const units = useMemo(() => pricedUnits(list), [list])
   const pinned = list.filter((i) => !(i.data as ProductData).off_board).length
 
   return (
@@ -44,7 +45,7 @@ export function PricesPanel({ project, items }: { project: Project; items: Board
             <p className="font-display-tight text-2xl text-ink tabular"><Money value={total} /></p>
           </div>
           <div className="text-right text-[13px] text-ink-2">
-            <p>{pluralise(list.length, 'item')} priced</p>
+            <p>{pluralise(list.length, 'item')} priced{units > list.length ? <span className="text-ink-3"> · {units} in all</span> : null}</p>
             {pinned > 0 && <p className="text-ink-3">{pinned} also on the board</p>}
           </div>
         </div>
@@ -84,6 +85,7 @@ function PriceCard({ item, onEdit }: { item: BoardItem; onEdit: () => void }) {
   const host = data.url ? domainOf(normaliseUrl(data.url)) : ''
   const favicon = host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64` : null
   const url = normaliseUrl(data.url ?? '')
+  const qty = qtyOf(data)
   const { updateBoardItem, deleteBoardItem } = useActions()
   const confirm = useConfirm()
   const onTheBoard = !data.off_board
@@ -99,6 +101,7 @@ function PriceCard({ item, onEdit }: { item: BoardItem; onEdit: () => void }) {
             ? <div className="grid h-full place-items-center"><img src={favicon} alt="" className="size-8 opacity-80" /></div>
             : <div className="grid h-full place-items-center text-ink-3"><ImageOff className="size-7" /></div>}
         {onTheBoard && <span className="absolute left-2 top-2"><Pill tone="sage" size="sm">On the board</Pill></span>}
+        {qty > 1 && <span className="absolute bottom-2 left-2"><Pill size="sm" className="bg-ink/85 text-bg tabular">× {qty}</Pill></span>}
         <div className="absolute right-1.5 top-1.5">
           <Menu trigger={<IconButton label="Item actions" size="icon-sm" className="bg-surface/90 text-ink shadow-sm hover:bg-surface"><MoreHorizontal className="size-4" /></IconButton>}>
             <MenuItem icon={<Tag />} onSelect={onEdit}>Edit</MenuItem>
@@ -112,9 +115,10 @@ function PriceCard({ item, onEdit }: { item: BoardItem; onEdit: () => void }) {
       <div className="flex min-w-0 flex-1 flex-col p-3">
         <p className="line-clamp-2 text-[13px] font-medium leading-snug text-ink">{data.title}</p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
-          <span className="font-display-tight text-[17px] text-ink tabular">{data.price != null ? money(data.price) : '—'}</span>
+          <span className="font-display-tight text-[17px] text-ink tabular">{data.price != null ? money(lineTotal(data)) : '—'}</span>
           {data.supplier && <span className="truncate text-[11px] text-ink-3">{data.supplier}</span>}
         </div>
+        {qty > 1 && data.price != null && <p className="text-[11px] text-ink-3 tabular">{qty} × {money(data.price)} each</p>}
         {url && (
           <button onClick={() => openExternal(url)} className="mt-2 inline-flex items-center gap-1 self-start text-[12px] font-medium text-primary-text hover:underline">
             <ExternalLink className="size-3.5" /> {domainOf(url)}
@@ -125,7 +129,7 @@ function PriceCard({ item, onEdit }: { item: BoardItem; onEdit: () => void }) {
   )
 }
 
-type Draft = { url: string; title: string; price: string; supplier: string; image: string | null; image_path?: string; image_url?: string; onBoard: boolean }
+type Draft = { url: string; title: string; price: string; qty: string; supplier: string; image: string | null; image_path?: string; image_url?: string; onBoard: boolean }
 
 function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolean; onOpenChange: (o: boolean) => void; item: BoardItem | null; project: Project; items: BoardItem[] }) {
   const existing = item ? (item.data as ProductData) : null
@@ -137,6 +141,7 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
     url: existing?.url ?? '',
     title: existing?.title ?? '',
     price: existing?.price != null ? String(existing.price) : '',
+    qty: String(existing ? qtyOf(existing) : 1),
     supplier: existing?.supplier ?? '',
     image: null,
     image_path: existing?.image_path,
@@ -216,8 +221,10 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
         const blob = await (await fetch(d.image)).blob()
         image_path = await uploadFile(await compressImage(blob, { maxSize: 900 }), `${project.id}/prices`)
       }
+      const qty = qtyOf({ title: '', price: null, qty: Number(d.qty) })
       const data: ProductData = {
         title, price, url: url || undefined, supplier: d.supplier.trim() || undefined,
+        ...(qty > 1 ? { qty } : {}),
         image_path, image_url: image_path ? undefined : d.image_url, off_board: !d.onBoard,
       }
       if (item) await updateBoardItem(item, { data })
@@ -289,9 +296,14 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
           {(id) => <Input id={id} value={d.title} onChange={(e) => setD((s) => ({ ...s, title: e.target.value }))} placeholder="Sage enamel 5 L" />}
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Price">
-            {(id) => <Input id={id} inputMode="decimal" prefix={cur.symbol} value={d.price} onChange={(e) => setD((s) => ({ ...s, price: e.target.value }))} placeholder="0" />}
-          </Field>
+          <div className="flex gap-3">
+            <Field label="Price" className="flex-1">
+              {(id) => <Input id={id} inputMode="decimal" prefix={cur.symbol} value={d.price} onChange={(e) => setD((s) => ({ ...s, price: e.target.value }))} placeholder="0" />}
+            </Field>
+            <Field label="How many" className="w-24 shrink-0">
+              {(id) => <Input id={id} inputMode="numeric" value={d.qty} onChange={(e) => setD((s) => ({ ...s, qty: e.target.value.replace(/[^\d]/g, '') }))} onBlur={() => setD((s) => ({ ...s, qty: String(qtyOf({ title: '', price: null, qty: Number(s.qty) })) }))} placeholder="1" />}
+            </Field>
+          </div>
           <Field label="Where from">
             {(id) => <Input id={id} value={d.supplier} onChange={(e) => setD((s) => ({ ...s, supplier: e.target.value }))} placeholder="Builders Warehouse" />}
           </Field>

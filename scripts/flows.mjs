@@ -224,12 +224,18 @@ await step('prices: add one from a link, keep it out of the money figures', asyn
   const fetched = await sheet.getByLabel('Price', { exact: true }).inputValue()
   if (!Number(fetched)) throw new Error(`no price came back (${fetched})`)
   await sheet.getByLabel('Price', { exact: true }).fill('1450')
+  await sheet.getByLabel('How many').fill('3')
   await sheet.getByRole('button', { name: 'Add it' }).click()
   await page.waitForTimeout(1200)
   await shot('06a-prices')
   if (!(await page.locator(`text=${title}`).count())) throw new Error('the new item is not in the list')
   const after = await page.locator('.card', { hasText: 'If you bought the lot' }).innerText()
   if (after === before) throw new Error('the shopping total did not move')
+  // Three of them: the card shows the line total and the unit price, and the summary counts things.
+  const card = page.locator('.card', { hasText: title }).first()
+  if (!/×\s*3/.test(await card.innerText())) throw new Error(`no quantity on the card: ${(await card.innerText()).replace(/\n/g, ' | ')}`)
+  if (!/4\u2009350/.test(await card.innerText())) throw new Error('the card is not showing 3 × 1 450')
+  if (!/in all/.test(after)) throw new Error(`the summary does not count the extras: ${after.replace(/\n/g, ' | ')}`)
 
   // It was added off the board, so the board must not have grown...
   const pinsAfter = await page.locator('[role=tab]', { hasText: /^Board/ }).innerText()

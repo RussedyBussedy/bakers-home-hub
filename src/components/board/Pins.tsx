@@ -3,6 +3,7 @@ import { openExternal } from '../../lib/share'
 import type { BoardItem, ColorData, LabelData, LinkData, NoteData, PhotoData, ProductData } from '../../data/types'
 import { useMediaUrl } from '../../data/hooks'
 import { textOn } from '../../lib/colors'
+import { lineTotal, qtyOf } from '../../lib/board'
 import { cn, money, normaliseUrl } from '../../lib/utils'
 
 export const NOTE_TINTS: Record<NoteData['tint'], { bg: string; ink: string; label: string }> = {
@@ -123,6 +124,7 @@ export function LinkPin({ data, preview }: { data: LinkData; preview?: boolean }
 export function ProductPin({ data, preview }: { data: ProductData; preview?: boolean }) {
   const url = useMediaUrl(data.image_path ?? null)
   const shop = normaliseUrl(data.url ?? '')
+  const qty = qtyOf(data)
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-[#e6dccf] bg-[#fffdfa] shadow-pin">
       <div className="min-h-0 flex-1 bg-[#f4ede3]">
@@ -132,8 +134,10 @@ export function ProductPin({ data, preview }: { data: ProductData; preview?: boo
       <div className="shrink-0 p-3">
         <p className="line-clamp-2 text-[13px] font-medium leading-snug text-[#1e1a16]">{data.title}</p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
-          <span className="font-display-tight text-[17px] text-[#1e1a16] tabular">{data.price != null ? money(data.price) : '—'}</span>
-          {data.supplier && <span className="truncate text-[11px] text-[#8a8078]">{data.supplier}</span>}
+          <span className="font-display-tight text-[17px] text-[#1e1a16] tabular">{data.price != null ? money(lineTotal(data)) : '—'}</span>
+          {qty > 1
+            ? <span className="shrink-0 text-[11px] text-[#8a8078] tabular">× {qty}</span>
+            : data.supplier ? <span className="truncate text-[11px] text-[#8a8078]">{data.supplier}</span> : null}
         </div>
       </div>
     </div>

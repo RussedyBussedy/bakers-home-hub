@@ -4,6 +4,7 @@ import type { BoardItem, BoardItemData, BoardItemType, ColorData, LabelData, Lin
 import { CURATED_PALETTES, isHex, normaliseHex, textOn } from '../../lib/colors'
 import { bestName, closeness, loadColorNames, nearestNames, nearestRal, onColorNamesLoaded, ralLabel } from '../../lib/colorNames'
 import { useCurrency } from '../../lib/currency'
+import { qtyOf } from '../../lib/board'
 import { fileFromDataUrl } from '../../lib/images'
 import { cn, domainOf, normaliseUrl } from '../../lib/utils'
 import { Button } from '../ui/Button'
@@ -134,7 +135,10 @@ function ProductFields({ data, onChange, error, file, setFile }: { data: Product
 
       <Field label="Product" required error={error ?? undefined}>{(id) => <Input id={id} value={data.title} onChange={(e) => onChange({ ...data, title: e.target.value })} placeholder="Brass bar handle 160mm" autoFocus={how === 'own'} />}</Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Price">{(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" value={data.price ?? ''} onChange={(e) => onChange({ ...data, price: e.target.value === '' ? null : Number(e.target.value.replace(/[^\d.]/g, '')) || 0 })} placeholder="0" />}</Field>
+        <div className="flex gap-3">
+          <Field label="Price" className="flex-1">{(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" value={data.price ?? ''} onChange={(e) => onChange({ ...data, price: e.target.value === '' ? null : Number(e.target.value.replace(/[^\d.]/g, '')) || 0 })} placeholder="0" />}</Field>
+          <Field label="How many" className="w-[68px] shrink-0">{(id) => <Input id={id} inputMode="numeric" value={data.qty ?? ''} onChange={(e) => onChange({ ...data, qty: e.target.value === '' ? undefined : Number(e.target.value.replace(/[^\d]/g, '')) || 1 })} onBlur={() => onChange({ ...data, qty: qtyOf(data) > 1 ? qtyOf(data) : undefined })} placeholder="1" />}</Field>
+        </div>
         <Field label="Supplier">{(id) => <Input id={id} value={data.supplier ?? ''} onChange={(e) => onChange({ ...data, supplier: e.target.value })} placeholder="Builders" />}</Field>
       </div>
       <Field label="Link (optional)">{(id) => <Input id={id} type="url" inputMode="url" value={data.url ?? ''} onChange={(e) => onChange({ ...data, url: e.target.value })} placeholder="https://" />}</Field>
