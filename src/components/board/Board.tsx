@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  ArrowDownToLine, ArrowUpToLine, Copy, Image as ImageIcon, Link2, LayoutGrid, Maximize2, Minus, Palette, Pencil, Pipette, Plus, ShoppingBag, StickyNote, Tag, Trash2, X,
+  ArrowDownToLine, ArrowUpToLine, Copy, ExternalLink, Image as ImageIcon, Link2, LayoutGrid, Maximize2, Minus, Palette, Pencil, Pipette, Plus, ShoppingBag, StickyNote, Tag, Trash2, X,
 } from 'lucide-react'
 import type { BoardItem, BoardItemType, ColorData, NewBoardItem, PhotoData, Presence, ProductData, Project } from '../../data/types'
 import { useActions } from '../../data/hooks'
@@ -15,7 +15,8 @@ import { useConfirm } from '../ui/Sheet'
 import { Tooltip } from '../ui/Menu'
 import { Eyedropper, type PickedColor } from './Eyedropper'
 import { PinEditor, type PinDraft } from './PinEditor'
-import { DEFAULT_SIZES, Pin } from './Pins'
+import { DEFAULT_SIZES, Pin, pinUrl } from './Pins'
+import { openExternal } from '../../lib/share'
 import { useUi } from '../../store/ui'
 
 interface View { x: number; y: number; scale: number }
@@ -371,6 +372,9 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
         ref={containerRef}
         className="board-dots absolute inset-0 touch-none"
         style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${dotSpacing(view.scale)}px ${dotSpacing(view.scale)}px` }}
+        // Every fresh press clears the "was a drag" flag, even one on a button inside a pin (which stops
+        // propagation before the board sees it) — otherwise the guard below would swallow the next click.
+        onPointerDownCapture={() => { gesture.current.moved = false }}
         onPointerDown={onBackgroundPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -414,6 +418,19 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
                     </div>
                     {/* resize handle */}
                     <button aria-label="Resize" onPointerDown={(e) => startItemGesture(e, item, 'resize')} className="absolute bottom-0 right-0 cursor-nwse-resize rounded-full border-2 border-primary bg-surface shadow-md" style={{ width: HANDLE * 1.6, height: HANDLE * 1.6, transform: `translate(50%, 50%) scale(${1 / view.scale})`, transformOrigin: 'center' }} />
+                    {/* open-link pill for pins that point somewhere */}
+                    {pinUrl(item) && (
+                      <div className="absolute bottom-0 left-1/2" style={{ transform: `translate(-50%, calc(100% + 10px)) scale(${1 / view.scale})`, transformOrigin: 'top center' }}>
+                        <button
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); openExternal(pinUrl(item)!) }}
+                          className="flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full bg-ink px-4 text-[13px] font-medium text-bg shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.97]"
+                        >
+                          <ExternalLink className="size-4" /> Open {item.type === 'product' ? 'shop' : 'link'}
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -457,6 +474,7 @@ export function Board({ project, items, chrome = true, onExit }: { project: Proj
         <AnimatePresence mode="wait">
           {selectedItem ? (
             <motion.div key="sel" initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="pointer-events-auto glass flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-line p-1.5 shadow-lg scrollbar-none">
+              {pinUrl(selectedItem) && <ToolButton label={selectedItem.type === 'product' ? 'Open the shop page' : 'Open the link'} onClick={() => openExternal(pinUrl(selectedItem)!)}><ExternalLink /></ToolButton>}
               <ToolButton label="Edit" onClick={() => setEditor({ open: true, type: selectedItem.type, item: selectedItem })}><Pencil /></ToolButton>
               {selectedItem.type === 'photo' && <ToolButton label="Pick colours" onClick={() => openEyedropForPhoto(selectedItem)}><Pipette /></ToolButton>}
               <ToolButton label="Duplicate" onClick={() => duplicate(selectedItem)}><Copy /></ToolButton>

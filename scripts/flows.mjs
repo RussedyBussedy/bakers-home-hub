@@ -13,8 +13,9 @@ page.on('console', (m) => { if (m.type() === 'error' && !/TUNNEL|favicon/.test(m
 fs.mkdirSync('qa-shots/flows', { recursive: true })
 const shot = (n) => page.screenshot({ path: `qa-shots/flows/${n}.png` })
 
+let failed = 0
 const step = async (name, fn) => {
-  try { await fn(); console.log('✓', name) } catch (e) { console.log('✗', name, e.message.split('\n')[0]); await shot(`fail-${name.replace(/\W+/g, '-')}`) }
+  try { await fn(); console.log('✓', name) } catch (e) { failed++; console.log('✗', name, e.message.split('\n')[0]); await shot(`fail-${name.replace(/\W+/g, '-')}`) }
 }
 
 await step('create project', async () => {
@@ -143,6 +144,51 @@ await step('board: add note, colour, drag', async () => {
   if (!n) throw new Error('note not persisted')
 })
 
+await step('board: open a link pin', async () => {
+  await page.goto(base + '/projects/p-kitchen/board', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(900)
+  // Record where the app would send the browser, rather than actually opening pinterest.com.
+  await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return { closed: false, focus() {} } } })
+  const opened = () => page.evaluate(() => window.__opened)
+
+  // the arrow button on the pin itself
+  await page.getByRole('button', { name: /^Open pinterest\.com$/ }).click()
+  await page.waitForTimeout(200)
+  let urls = await opened()
+  if (urls.length !== 1 || !/pinterest\.com/.test(urls[0])) throw new Error(`icon opened ${JSON.stringify(urls)}`)
+
+  // tapping the pin selects it (rather than navigating) and offers a big Open button
+  await page.locator('text=Sage shaker kitchens').first().click()
+  await page.waitForTimeout(400)
+  await shot('04b-link-selected')
+  await page.getByRole('button', { name: 'Open link', exact: true }).click()
+  await page.waitForTimeout(200)
+  urls = await opened()
+  if (urls.length !== 2 || !/pinterest\.com/.test(urls[1])) throw new Error(`pill opened ${JSON.stringify(urls)}`)
+
+  // and the same action from the selected-pin toolbar
+  await page.getByRole('button', { name: 'Open the link' }).click()
+  await page.waitForTimeout(200)
+  urls = await opened()
+  if (urls.length !== 3) throw new Error(`toolbar opened ${JSON.stringify(urls)}`)
+
+  // opening must not have navigated the board away
+  if (!/\/board$/.test(page.url())) throw new Error('board navigated away: ' + page.url())
+
+  // ...and the arrow still works straight after dragging a pin (a stale "that was a drag" flag used to eat the click)
+  const pin = page.locator('text=Sage shaker kitchens').first()
+  const box = await pin.boundingBox()
+  await page.mouse.move(box.x + 40, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 40 + 70, box.y + box.height / 2 + 50, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /^Open pinterest\.com$/ }).click()
+  await page.waitForTimeout(200)
+  urls = await opened()
+  if (urls.length !== 4) throw new Error(`arrow after a drag opened ${JSON.stringify(urls)}`)
+})
+
 await step('contacts: add via paste details', async () => {
   await page.goto(base + '/contacts', { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: 'New contact' }).click()
@@ -235,3 +281,4 @@ await step('settings: theme toggle + rename', async () => {
 
 console.log(errors.length ? `\n${errors.length} errors:\n${errors.join('\n')}` : '\nNo console/page errors.')
 await browser.close()
+if (failed || errors.length) process.exit(1)

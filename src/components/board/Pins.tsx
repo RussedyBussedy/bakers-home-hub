@@ -1,8 +1,9 @@
 import { ExternalLink, Globe, Ruler, Tag, ArrowRight, ImageOff, ShoppingBag } from 'lucide-react'
+import { openExternal } from '../../lib/share'
 import type { BoardItem, ColorData, LabelData, LinkData, NoteData, PhotoData, ProductData } from '../../data/types'
 import { useMediaUrl } from '../../data/hooks'
 import { textOn } from '../../lib/colors'
-import { cn, money } from '../../lib/utils'
+import { cn, money, normaliseUrl } from '../../lib/utils'
 
 export const NOTE_TINTS: Record<NoteData['tint'], { bg: string; ink: string; label: string }> = {
   butter: { bg: '#FBEBB5', ink: '#4A3A0F', label: 'Butter' },
@@ -29,7 +30,7 @@ export function Pin({ item, preview }: { item: BoardItem; preview?: boolean }) {
     case 'color': return <ColorPin data={item.data as ColorData} />
     case 'note': return <NotePin data={item.data as NoteData} />
     case 'link': return <LinkPin data={item.data as LinkData} preview={preview} />
-    case 'product': return <ProductPin data={item.data as ProductData} />
+    case 'product': return <ProductPin data={item.data as ProductData} preview={preview} />
     case 'label': return <LabelPin data={item.data as LabelData} />
   }
 }
@@ -76,17 +77,36 @@ export function NotePin({ data }: { data: NoteData }) {
   )
 }
 
+/** The web address a pin points at, if it has one (link pins, and products with a shop link). */
+export function pinUrl(item: BoardItem): string | null {
+  const raw = item.type === 'link' ? (item.data as LinkData).url : item.type === 'product' ? (item.data as ProductData).url : null
+  const url = normaliseUrl(raw ?? '')
+  return url || null
+}
+
+/** The little ↗ on a pin. Swallows the pointer so the board doesn't read the press as the start of a drag. */
+function OpenButton({ url, label, className }: { url: string; label: string; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); openExternal(url) }}
+      className={cn('grid size-7 shrink-0 place-items-center rounded-full text-[#8a8078] transition-colors hover:bg-[#f4ede3] hover:text-[#1e1a16]', className)}
+    >
+      <ExternalLink className="size-4" />
+    </button>
+  )
+}
+
+// Not an <a>: a tap selects the pin (so it can be dragged like everything else) and the board shows an
+// "Open" button for it — a plain link would either navigate on every touch or never fire under drag handling.
 export function LinkPin({ data, preview }: { data: LinkData; preview?: boolean }) {
   const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(data.domain)}&sz=64`
+  const url = normaliseUrl(data.url ?? '')
   return (
-    <a
-      href={preview ? undefined : data.url}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(e) => { if (preview) e.preventDefault() }}
-      draggable={false}
-      className="flex h-full w-full items-center gap-3 overflow-hidden rounded-2xl border border-[#e6dccf] bg-[#fffdfa] p-3.5 shadow-pin"
-    >
+    <div className="flex h-full w-full items-center gap-3 overflow-hidden rounded-2xl border border-[#e6dccf] bg-[#fffdfa] p-3.5 shadow-pin">
       <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#f4ede3] text-[#8a8078]">
         {data.image_url ? <img src={data.image_url} alt="" className="h-full w-full object-cover" draggable={false} /> : <img src={favicon} alt="" className="size-6" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextSibling as HTMLElement).style.display = 'block' }} draggable={false} />}
         <Globe className="hidden size-5" />
@@ -95,18 +115,20 @@ export function LinkPin({ data, preview }: { data: LinkData; preview?: boolean }
         <span className="line-clamp-2 text-[14px] font-medium leading-snug text-[#1e1a16]">{data.title || data.domain}</span>
         <span className="mt-0.5 block truncate text-[11px] text-[#8a8078]">{data.domain}</span>
       </span>
-      <ExternalLink className="size-4 shrink-0 text-[#b3a79a]" />
-    </a>
+      {preview || !url ? <ExternalLink className="size-4 shrink-0 text-[#b3a79a]" /> : <OpenButton url={url} label={`Open ${data.domain}`} />}
+    </div>
   )
 }
 
-export function ProductPin({ data }: { data: ProductData }) {
+export function ProductPin({ data, preview }: { data: ProductData; preview?: boolean }) {
   const url = useMediaUrl(data.image_path ?? null)
+  const shop = normaliseUrl(data.url ?? '')
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-[#e6dccf] bg-[#fffdfa] shadow-pin">
+    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-[#e6dccf] bg-[#fffdfa] shadow-pin">
       <div className="min-h-0 flex-1 bg-[#f4ede3]">
         {url ? <img src={url} alt="" className="h-full w-full object-cover" draggable={false} /> : <div className="grid h-full place-items-center text-[#b7a891]"><ShoppingBag className="size-8" /></div>}
       </div>
+      {shop && !preview && <OpenButton url={shop} label="Open the shop page" className="absolute right-1.5 top-1.5 bg-[#fffdfa]/90 shadow-sm hover:bg-[#fffdfa]" />}
       <div className="shrink-0 p-3">
         <p className="line-clamp-2 text-[13px] font-medium leading-snug text-[#1e1a16]">{data.title}</p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
