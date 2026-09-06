@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { format, startOfMonth } from 'date-fns'
-import { ArrowRight, BellRing, CalendarDays, Check, Flame, Plus, Sparkles, Trophy, Wallet, Zap } from 'lucide-react'
+import { ArrowRight, BellRing, CalendarDays, Check, Flame, Plus, Settings, Sparkles, Trophy, Wallet, Zap } from 'lucide-react'
 import { Checkbox } from '../components/ui/Checkbox'
 import { NudgeInbox } from '../components/nudges/NudgeInbox'
 import { useNudge } from '../components/nudges/NudgeSheet'
@@ -71,9 +71,18 @@ export default function HubPage() {
               <BellRing className="size-5" />
             </button>
           </Tooltip>
-          <div className="flex -space-x-2">
-            {profiles.map((p) => <Avatar key={p.id} name={p.display_name} color={p.color} ring />)}
-          </div>
+          {/* Tapping the faces opens Settings. On a phone there is no sidebar, so this is the only
+              way in — hence the gear, which shows where the sidebar isn't. */}
+          <Tooltip label="You and your home">
+            <Link to="/settings" aria-label="You and your home — settings" className="relative shrink-0 rounded-full transition-transform hover:scale-[1.04] active:scale-95">
+              <span className="flex -space-x-2">
+                {profiles.map((p) => <Avatar key={p.id} name={p.display_name} color={p.color} ring />)}
+              </span>
+              <span aria-hidden className="absolute -bottom-1 -right-1 grid size-[18px] place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-sm lg:hidden">
+                <Settings className="size-[11px]" />
+              </span>
+            </Link>
+          </Tooltip>
         </div>
       </div>
 

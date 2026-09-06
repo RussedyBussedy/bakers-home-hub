@@ -405,6 +405,26 @@ await step('login: signed out, the demo build offers its two people', async () =
   } finally { await guest.close() }
 })
 
+await step('settings: reachable on a phone, not just the desktop sidebar', async () => {
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+  await phone.addInitScript(() => { localStorage.setItem('hub-demo-user', 'u-russel'); localStorage.setItem('hub-theme', 'light') })
+  const small = await phone.newPage()
+  try {
+    await small.goto(base + '/', { waitUntil: 'networkidle' })
+    await small.waitForTimeout(900)
+    // The sidebar that holds the Settings link is desktop-only, so there must be another way in.
+    const sidebar = await small.locator('aside a[href="/settings"]').isVisible().catch(() => false)
+    if (sidebar) throw new Error('the desktop sidebar is showing on a phone')
+    const way = small.getByRole('link', { name: /settings/i })
+    if (!(await way.count())) throw new Error('no way to reach Settings from a phone')
+    await way.first().click()
+    await small.waitForURL(/\/settings$/, { timeout: 5000 })
+    await small.waitForTimeout(700)
+    if (!/Who's in this home/.test(await small.locator('body').innerText())) throw new Error('Settings did not open')
+    await small.screenshot({ path: 'qa-shots/flows/08-settings-phone.png' })
+  } finally { await phone.close() }
+})
+
 await step('settings: theme toggle + rename', async () => {
   await page.goto(base + '/settings', { waitUntil: 'networkidle' })
   await page.getByRole('tab', { name: /Dark/ }).click()
