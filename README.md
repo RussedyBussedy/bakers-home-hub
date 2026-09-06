@@ -1,6 +1,6 @@
-# The Bakers' Home Hub
+# The Home Hub
 
-A shared home-improvement app for two people: projects ("quests") with photos, budgets, real quotes and contractor contacts, an inspiration pin board per project, live sync between phones, nudges between the two of you (in-app, with a WhatsApp hand-off), a bit of XP-and-badges gamification, and an Insights page for costs and timelines.
+A shared home-improvement app for a household: projects ("quests") with photos, budgets, real quotes and contractor contacts, an inspiration pin board per project, live sync between phones, nudges between the two of you (in-app, with a WhatsApp hand-off), a bit of XP-and-badges gamification, and an Insights page for costs and timelines.
 
 Built with Vite + React + TypeScript, Tailwind v4, Framer Motion, TanStack Query and Supabase (Postgres, Storage, Realtime, Auth). Installs to the phone home screen as a PWA.
 

@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
-        name: "The Bakers' Home Hub",
+        name: 'The Home Hub',
         short_name: 'Home Hub',
-        description: 'Our home improvement quests, quotes and inspiration boards.',
+        description: 'Home improvement, shared — quests, quotes, prices and inspiration boards.',
         theme_color: '#F6F1E9',
         background_color: '#F6F1E9',
         display: 'standalone',
