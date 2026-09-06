@@ -9,7 +9,7 @@ Built with Vite + React + TypeScript, Tailwind v4, Framer Motion, TanStack Query
 ### 1. Supabase (database, photos, sync)
 1. Create a project at supabase.com.
 2. Open **SQL Editor → New query**, paste the whole of `supabase/schema.sql`, click **Run**. This creates every table, the row-level security that locks data to your household, the private `media` bucket, and the live-sync publication.
-   Then run each file in `supabase/migrations/` in order the same way (they're additive — `002` nudges and WhatsApp numbers, `003` deposits on quotes, `004` site days and blockers, `005` a new account gets its own household).
+   Then run each file in `supabase/migrations/` in order the same way (they're additive — `002` nudges and WhatsApp numbers, `003` deposits on quotes, `004` site days and blockers, `005` a new account gets its own household, `006` invites).
 3. **Authentication → Users → Add user → Create new user** for each of you (tick *Auto Confirm User*). A profile is created automatically for every user, in a household of its own.
 
    Sign-ups are open by default on a Supabase project and the anon key ships in the browser bundle, so **anyone can create an account**. Before `005` that put them straight into the one hard-coded household with full access; now a new account only ever gets an empty home of its own, and a profile can't be moved between households (`profiles_no_household_hop`). Until there's an invite flow there is no way for a second person to join an existing home except by an admin editing `profiles.household_id` in the dashboard. If you don't want strangers creating accounts at all, turn off *Authentication → Sign In / Providers → Allow new users to sign up*.
