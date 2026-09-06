@@ -1,6 +1,6 @@
 import type {
   Achievement, BoardItem, Contact, Expense, HouseholdBundle, NewBoardItem, NewContact, NewExpense,
-  NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent,
+  NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent,
 } from './types'
 
 export type ChangeTable =
@@ -93,6 +93,10 @@ export interface Db {
   addXp(input: Omit<XpEvent, 'id' | 'created_at'>): Promise<XpEvent>
   listAchievements(): Promise<Achievement[]>
   unlockAchievement(input: { household_id: string; user_id: string | null; key: string }): Promise<Achievement | null>
+
+  // ---- the web -----------------------------------------------------
+  /** Reads a pasted product page and returns its title, price and picture. */
+  unfurl(url: string): Promise<Unfurled>
 
   // ---- media -------------------------------------------------------
   /** Uploads a blob and returns the storage path to persist. */

@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Household, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Household, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -226,6 +226,13 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       return (data as Achievement | null) ?? null
     },
 
+    async unfurl(url) {
+      const { data, error } = await sb.functions.invoke<Unfurled & { error?: string }>('unfurl', { body: { url } })
+      if (error) throw new Error('Could not reach the link reader. Is the "unfurl" function deployed?')
+      if (!data) throw new Error('The link reader sent nothing back.')
+      if (data.error) throw new Error(data.error)
+      return data
+    },
     async upload(blob, path) {
       const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false })
       if (error) fail(error)

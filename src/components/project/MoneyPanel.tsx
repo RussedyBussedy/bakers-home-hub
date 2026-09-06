@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BadgeCheck, Ban, BellRing, CircleDollarSign, FileText, HandCoins, MoreHorizontal, Paperclip, Plus, Receipt, Trash2, Wallet } from 'lucide-react'
+import { BadgeCheck, Ban, BellRing, CircleDollarSign, FileText, HandCoins, MoreHorizontal, Paperclip, Plus, Receipt, Tag, Trash2, Wallet } from 'lucide-react'
 import { useNudge } from '../nudges/NudgeSheet'
 import { ContactPicker } from '../contacts/ContactPicker'
 import type { Contact, Expense, NewExpense, NewQuote, Project, Quote, QuoteStatus } from '../../data/types'
@@ -8,7 +8,7 @@ import { EXPENSE_CATEGORIES, QUOTE_PAYMENT_CATEGORY } from '../../data/types'
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { projectCosts, quoteExpiry, quoteProgress } from '../../lib/xp'
-import { cn, fmtDate, money, todayISO } from '../../lib/utils'
+import { cn, fmtDate, money, pluralise, todayISO } from '../../lib/utils'
 import { Avatar, BudgetBar, EmptyState, Money, Pill } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
 import { DateInput, Field, Input, Select, Textarea } from '../ui/Field'
@@ -19,7 +19,7 @@ import { ContactSheet } from '../contacts/ContactForm'
 const quoteTone: Record<QuoteStatus, 'sky' | 'sage' | 'neutral' | 'gold'> = { received: 'sky', accepted: 'sage', paid: 'gold', rejected: 'neutral' }
 const quoteLabel: Record<QuoteStatus, string> = { received: 'Received', accepted: 'Accepted', paid: 'Paid', rejected: 'Declined' }
 
-export function MoneyPanel({ project, quotes, expenses, contacts }: { project: Project; quotes: Quote[]; expenses: Expense[]; contacts: Contact[] }) {
+export function MoneyPanel({ project, quotes, expenses, contacts, priced }: { project: Project; quotes: Quote[]; expenses: Expense[]; contacts: Contact[]; priced?: { count: number; total: number; onOpen: () => void } }) {
   const costs = projectCosts(project, quotes, expenses)
   const [quoteOpen, setQuoteOpen] = useState<{ open: boolean; quote?: Quote | null }>({ open: false })
   const [expenseOpen, setExpenseOpen] = useState<{ open: boolean; expense?: Expense | null }>({ open: false })
@@ -60,6 +60,14 @@ export function MoneyPanel({ project, quotes, expenses, contacts }: { project: P
             </div>
           </div>
           <BudgetBar budget={costs.budget} real={costs.real} className="mt-4" height={12} />
+          {priced && priced.count > 0 && (
+            // Prices are window shopping, not money owed — they sit outside every figure above.
+            <button onClick={priced.onOpen} className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-line-strong px-3 py-2 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
+              <Tag className="size-4 shrink-0 text-ink-3" />
+              <span className="min-w-0 flex-1">{pluralise(priced.count, 'item')} priced up · {money(priced.total)}<span className="text-ink-3"> — not counted here</span></span>
+              <span className="shrink-0 font-medium text-primary-text">See prices →</span>
+            </button>
+          )}
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-ink-2">
             <span><span className="mr-1.5 inline-block size-2.5 rounded-full bg-sage align-middle" />Committed quotes {money(costs.committed)}</span>
             <span><span className="mr-1.5 inline-block size-2.5 rounded-full bg-line-strong align-middle" />Other expenses {money(costs.real - costs.committed)}</span>

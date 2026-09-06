@@ -1,6 +1,7 @@
 import { differenceInCalendarWeeks, startOfWeek, subWeeks } from 'date-fns'
 import type { Achievement, BoardItem, Contact, Expense, Profile, Project, ProjectImage, Quote, Task, XpEvent, XpKind } from '../data/types'
 import { sum } from './utils'
+import { onBoard } from './board'
 
 // ---------------------------------------------------------------------------
 // XP rules
@@ -214,7 +215,8 @@ export function evaluateAchievements(s: GameSnapshot, now = new Date()): string[
 
   check('first_quest', s.projects.length >= 1)
   const pinsByProject = new Map<string, number>()
-  s.boardItems.forEach((b) => pinsByProject.set(b.project_id, (pinsByProject.get(b.project_id) ?? 0) + 1))
+  // Priced items kept off the board are a shopping list, not pins — they don't fill a board.
+  onBoard(s.boardItems).forEach((b) => pinsByProject.set(b.project_id, (pinsByProject.get(b.project_id) ?? 0) + 1))
   check('dreamer', [...pinsByProject.values()].some((n) => n >= 10))
   check('mood_master', [...pinsByProject.values()].some((n) => n >= 25))
   check('colour_theorist', s.boardItems.filter((b) => b.type === 'color').length >= 10)

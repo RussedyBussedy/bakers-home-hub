@@ -203,6 +203,10 @@ export function buildDemoState(): DemoState {
     pin('b22', P.bath, 'color', 800, 80, 150, 150, 3, 3, { hex: '#4F7291', name: 'Marine' }, K, 13),
     pin('b23', P.bath, 'color', 970, 100, 150, 150, -2, 4, { hex: '#EAE3D2', name: 'Bone White' }, K, 13),
     pin('b24', P.bath, 'note', 80, 420, 260, 170, -1, 5, { text: 'Black taps or brushed nickel? Kay: nickel. Russel: black.', tint: 'sky' }, K, 12),
+    // Priced up but deliberately not pinned — these show on the project's Prices tab only.
+    pin('b26', P.kitchen, 'product', 0, 0, 250, 300, 0, 1, { title: 'Sage enamel 5 L — dried sample match', price: 1299, supplier: 'Plascon', url: 'https://example.com/sage-enamel', image_path: materialSwatch('#7A8F6E', 'plain'), off_board: true }, R, 6),
+    pin('b27', P.kitchen, 'product', 0, 0, 250, 300, 0, 1, { title: 'Soft-close hinge, 110° (pack of 10)', price: 449.9, supplier: 'Builders Warehouse', url: 'https://example.com/hinges', image_path: materialSwatch('#B9B2A8', 'plain'), off_board: true }, R, 4),
+    pin('b28', P.kitchen, 'product', 0, 0, 250, 300, 0, 1, { title: 'Undermount sink 1.5 bowl', price: 3499, supplier: 'Livingstone', url: 'https://example.com/sink', image_path: materialSwatch('#9AA3A8', 'plain'), off_board: true }, K, 2),
     pin('b25', P.bath, 'product', 380, 400, 250, 300, 2, 6, { title: 'Oak floating vanity 1200', price: 8990, supplier: 'Vanity Bar', image_path: materialSwatch('#B08D57', 'wood') }, K, 10),
     pin('b26', P.bath, 'label', 700, 420, 190, 56, 0, 7, { text: 'Shower 900 × 1200', style: 'measure' }, R, 9),
     pin('b27', P.bath, 'photo', 700, 500, 260, 260, -4, 8, { path: materialSwatch('#7BA3B0', 'tile'), caption: 'Sea-glass wall tile' }, R, 8),

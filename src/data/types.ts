@@ -201,7 +201,30 @@ export interface PhotoData { path: string; caption?: string; natural_w?: number;
 export interface ColorData { hex: string; name: string; source?: string; /** Nearest RAL Classic code, e.g. "RAL 7006 Beige grey". */ ral?: string }
 export interface NoteData { text: string; tint: 'butter' | 'blush' | 'mint' | 'sky' | 'paper' | 'lilac' }
 export interface LinkData { url: string; title: string; domain: string; image_url?: string }
-export interface ProductData { title: string; price: number | null; url?: string; image_path?: string; supplier?: string }
+export interface ProductData {
+  title: string
+  price: number | null
+  url?: string
+  image_path?: string
+  /** Picture straight off the web page, used when we couldn't store a copy of our own. */
+  image_url?: string
+  supplier?: string
+  /** In the project's price list but kept off the inspiration board. */
+  off_board?: boolean
+}
+
+/** What the `unfurl` edge function makes of a pasted product page. */
+export interface Unfurled {
+  url: string
+  domain: string
+  title: string
+  price: number | null
+  currency: string | null
+  supplier: string
+  /** The page's picture as a data URL, ready to compress and store. */
+  image: string | null
+  imageUrl: string | null
+}
 export interface LabelData { text: string; style: 'tag' | 'measure' | 'arrow' }
 
 export type BoardItemData = PhotoData | ColorData | NoteData | LinkData | ProductData | LabelData

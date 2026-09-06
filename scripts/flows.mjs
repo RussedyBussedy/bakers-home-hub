@@ -13,6 +13,18 @@ page.on('console', (m) => { if (m.type() === 'error' && !/TUNNEL|favicon/.test(m
 fs.mkdirSync('qa-shots/flows', { recursive: true })
 const shot = (n) => page.screenshot({ path: `qa-shots/flows/${n}.png` })
 
+/** Reads text once the number has stopped counting up — figures animate on a fresh page load. */
+const settledText = async (locator) => {
+  let last = null
+  for (let i = 0; i < 20; i++) {
+    const now = (await locator.innerText()).trim()
+    if (now === last) return now
+    last = now
+    await page.waitForTimeout(150)
+  }
+  return last
+}
+
 let failed = 0
 const step = async (name, fn) => {
   try { await fn(); console.log('✓', name) } catch (e) { failed++; console.log('✗', name, e.message.split('\n')[0]); await shot(`fail-${name.replace(/\W+/g, '-')}`) }
@@ -187,6 +199,58 @@ await step('board: open a link pin', async () => {
   await page.waitForTimeout(200)
   urls = await opened()
   if (urls.length !== 4) throw new Error(`arrow after a drag opened ${JSON.stringify(urls)}`)
+})
+
+await step('prices: add one from a link, keep it out of the money figures', async () => {
+  await page.goto(base + '/projects/p-kitchen?tab=money', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(900)
+  const realCost = await settledText(page.locator('text=Real cost so far').locator('xpath=following-sibling::*[1]').first())
+  const pinsBefore = await page.locator('[role=tab]', { hasText: /^Board/ }).innerText()
+
+  await page.getByRole('tab', { name: /^Prices/ }).click()
+  await page.waitForTimeout(500)
+  const before = await page.locator('.card', { hasText: 'If you bought the lot' }).innerText()
+  await page.getByRole('button', { name: 'Add a price' }).first().click()
+  await page.waitForTimeout(400)
+  const sheet = page.locator('[role=dialog]')
+  await sheet.getByLabel('Link', { exact: true }).fill('https://leroymerlin.co.za/tap/matte-black-mixer')
+  await sheet.getByRole('button', { name: 'Fetch' }).click()
+  await page.waitForTimeout(1400)
+  const title = await sheet.getByLabel('What is it').inputValue()
+  if (!title) throw new Error('the link reader filled in no name')
+  const fetched = await sheet.getByLabel('Price', { exact: true }).inputValue()
+  if (!Number(fetched)) throw new Error(`no price came back (${fetched})`)
+  await sheet.getByLabel('Price', { exact: true }).fill('1450')
+  await sheet.getByRole('button', { name: 'Add it' }).click()
+  await page.waitForTimeout(1200)
+  await shot('06a-prices')
+  if (!(await page.locator(`text=${title}`).count())) throw new Error('the new item is not in the list')
+  const after = await page.locator('.card', { hasText: 'If you bought the lot' }).innerText()
+  if (after === before) throw new Error('the shopping total did not move')
+
+  // It was added off the board, so the board must not have grown...
+  const pinsAfter = await page.locator('[role=tab]', { hasText: /^Board/ }).innerText()
+  if (pinsAfter !== pinsBefore) throw new Error(`board count changed (${pinsBefore} -> ${pinsAfter})`)
+  // ...and none of this may reach the budget figures.
+  await page.getByRole('tab', { name: /^Money/ }).click()
+  await page.waitForTimeout(600)
+  const realCostAfter = await settledText(page.locator('text=Real cost so far').locator('xpath=following-sibling::*[1]').first())
+  if (realCostAfter !== realCost) throw new Error(`real cost moved: ${realCost} -> ${realCostAfter}`)
+  if (!(await page.getByRole('button', { name: /priced up/ }).count())) throw new Error('no price summary on the Money tab')
+})
+
+await step('prices: pinning one puts it on the board', async () => {
+  await page.goto(base + '/projects/p-kitchen?tab=prices', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(900)
+  const boardTab = page.locator('[role=tab]', { hasText: /^Board/ })
+  const n = Number((await boardTab.innerText()).replace(/\D+/g, '')) || 0
+  await page.getByRole('button', { name: 'Item actions' }).first().click()
+  await page.waitForTimeout(300)
+  await page.getByRole('menuitem', { name: /Pin it on the board/ }).click()
+  await page.waitForTimeout(900)
+  const n2 = Number((await boardTab.innerText()).replace(/\D+/g, '')) || 0
+  if (n2 !== n + 1) throw new Error(`board count ${n} -> ${n2}, expected ${n + 1}`)
+  if (!(await page.locator('text=On the board').count())) throw new Error('no "On the board" badge on the card')
 })
 
 await step('contacts: add via paste details', async () => {

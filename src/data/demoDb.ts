@@ -1,5 +1,5 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
@@ -344,6 +344,38 @@ export function createDemoDb(): Db {
       })
     },
 
+    async unfurl(url) {
+      // No backend in demo mode: invent a plausible listing and paint a placeholder picture,
+      // so the whole add-a-price flow can be walked through (and tested) offline.
+      await new Promise((r) => setTimeout(r, 450))
+      const clean = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`
+      let host = clean
+      try { host = new URL(clean).hostname.replace(/^www\./, '') } catch { /* keep the raw text */ }
+      const slug = clean.split('?')[0].split('#')[0].replace(/\/$/, '').split('/').pop() || 'Item'
+      const title = decodeURIComponent(slug).replace(/[-_+]/g, ' ').replace(/\.\w{2,4}$/, '').replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 60)
+      // A stable pseudo-price per link, so the same paste always looks the same.
+      let seed = 0
+      for (const ch of clean) seed = (seed * 31 + ch.charCodeAt(0)) % 100000
+      const price = Math.round((60 + (seed % 4000)) * 100) / 100
+      const supplier = host.split('.')[0].replace(/\b\w/g, (c) => c.toUpperCase())
+      let image: string | null = null
+      try {
+        const c = document.createElement('canvas')
+        c.width = 400; c.height = 300
+        const g = c.getContext('2d')!
+        const hue = seed % 360
+        const grad = g.createLinearGradient(0, 0, 400, 300)
+        grad.addColorStop(0, `hsl(${hue} 32% 82%)`)
+        grad.addColorStop(1, `hsl(${(hue + 40) % 360} 28% 62%)`)
+        g.fillStyle = grad; g.fillRect(0, 0, 400, 300)
+        g.fillStyle = 'rgba(30,26,22,0.72)'
+        g.font = '600 22px system-ui, sans-serif'
+        g.textAlign = 'center'
+        g.fillText(title.slice(0, 22) || 'Sample', 200, 158)
+        image = c.toDataURL('image/png')
+      } catch { /* no canvas — the card falls back to the site's icon */ }
+      return { url: clean, domain: host, title, price, currency: 'ZAR', supplier, image, imageUrl: null } satisfies Unfurled
+    },
     async upload(blob) {
       // Store as a data URL so it survives a refresh (within localStorage limits).
       return new Promise<string>((resolve, reject) => {

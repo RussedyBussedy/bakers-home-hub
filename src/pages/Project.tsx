@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { AlertOctagon, BellRing, CalendarDays, Camera, ChevronDown, Expand, FileText, HardHat, Link2, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Trash2, Wallet, Zap } from 'lucide-react'
+import { AlertOctagon, BellRing, CalendarDays, Camera, ChevronDown, Expand, FileText, HardHat, Link2, ListChecks, MoreHorizontal, Palette, Pencil, Sparkles, Tag, Trash2, Wallet, Zap } from 'lucide-react'
 import { BlockerChip, BlockerSheet, blockedFor } from '../components/project/Blocker'
 import { SiteVisitsCard, lastVisitLine } from '../components/project/SiteVisits'
 import { useNudge } from '../components/nudges/NudgeSheet'
@@ -12,10 +12,12 @@ import { useActions, useBoardItems, useEverything, useProject } from '../data/ho
 import { useAuth } from '../data/session'
 import { PROJECT_STATUSES, type ProjectStatus } from '../data/types'
 import { XP_RULES, projectCosts, quoteExpiry } from '../lib/xp'
+import { onBoard, priced, pricedTotal } from '../lib/board'
 import { cn, daysUntil, fmtRelative, money, pluralise } from '../lib/utils'
 import { CoverImage } from '../components/project/ProjectCard'
 import { ProjectFormFields, fromProject, validateProject, type ProjectFormValue } from '../components/project/ProjectForm'
 import { MoneyPanel } from '../components/project/MoneyPanel'
+import { PricesPanel } from '../components/project/PricesPanel'
 import { PhotosPanel } from '../components/project/PhotosPanel'
 import { TasksPanel } from '../components/project/TasksPanel'
 import { Timeline } from '../components/project/Timeline'
@@ -25,11 +27,12 @@ import { Button, IconButton } from '../components/ui/Button'
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/ui/Menu'
 import { Sheet, useConfirm } from '../components/ui/Sheet'
 
-type Tab = 'overview' | 'board' | 'money' | 'photos' | 'tasks'
+type Tab = 'overview' | 'board' | 'money' | 'prices' | 'photos' | 'tasks'
 const TABS: { value: Tab; label: string; icon: typeof Wallet }[] = [
   { value: 'overview', label: 'Overview', icon: Sparkles },
   { value: 'board', label: 'Board', icon: Palette },
   { value: 'money', label: 'Money', icon: Wallet },
+  { value: 'prices', label: 'Prices', icon: Tag },
   { value: 'photos', label: 'Photos', icon: Camera },
   { value: 'tasks', label: 'Tasks', icon: ListChecks },
 ]
@@ -72,6 +75,10 @@ export default function ProjectPage() {
   const images = useMemo(() => data.images.filter((i) => i.project_id === id), [data.images, id])
   const xp = useMemo(() => data.xp.filter((e) => e.project_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at)), [data.xp, id])
   const visits = useMemo(() => data.visits.filter((v) => v.project_id === id), [data.visits, id])
+  const allPins = useMemo(() => board.data ?? [], [board.data])
+  // The price list and the board share one set of items; some are priced but deliberately not pinned.
+  const items = useMemo(() => onBoard(allPins), [allPins])
+  const pricedPins = useMemo(() => priced(allPins), [allPins])
 
   if (isPending || data.loading) return <ProjectSkeleton />
   if (!project) {
@@ -86,7 +93,6 @@ export default function ProjectPage() {
   const doneTasks = tasks.filter((t) => t.done).length
   const days = daysUntil(project.target_date)
   const creator = profileById(project.created_by)
-  const items = board.data ?? []
   const lastVisit = lastVisitLine(visits, data.contacts)
   const showVisits = visits.length > 0 || project.status === 'in_progress' || project.status === 'planning'
   const quoteContactIds = [...quotes].sort((a, b) => (a.status === 'accepted' || a.status === 'paid' ? -1 : 0) - (b.status === 'accepted' || b.status === 'paid' ? -1 : 0)).map((q) => q.contact_id).filter((c): c is string => Boolean(c))
@@ -174,7 +180,7 @@ export default function ProjectPage() {
           <div role="tablist" className="flex gap-1 overflow-x-auto scrollbar-none">
             {TABS.map((t) => {
               const active = tab === t.value
-              const count = t.value === 'board' ? items.length : t.value === 'photos' ? images.length : t.value === 'tasks' ? tasks.length : t.value === 'money' ? quotes.length + expenses.length : 0
+              const count = t.value === 'prices' ? pricedPins.length : t.value === 'board' ? items.length : t.value === 'photos' ? images.length : t.value === 'tasks' ? tasks.length : t.value === 'money' ? quotes.length + expenses.length : 0
               return (
                 <button key={t.value} role="tab" aria-selected={active} onClick={() => setTab(t.value)} className={cn('relative flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors', active ? 'text-ink' : 'text-ink-2 hover:text-ink')}>
                   {active && <motion.span layoutId="project-tab" className="absolute inset-0 rounded-full bg-surface shadow-sm ring-1 ring-line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
@@ -262,8 +268,9 @@ export default function ProjectPage() {
               </button>
             </div>
           )}
-          {tab === 'money' && <MoneyPanel project={project} quotes={quotes} expenses={expenses} contacts={data.contacts} />}
+          {tab === 'money' && <MoneyPanel project={project} quotes={quotes} expenses={expenses} contacts={data.contacts} priced={{ count: pricedPins.length, total: pricedTotal(pricedPins), onOpen: () => setTab('prices') }} />}
           {tab === 'photos' && <PhotosPanel project={project} images={images} />}
+          {tab === 'prices' && <PricesPanel project={project} items={allPins} />}
           {tab === 'tasks' && <TasksPanel project={project} tasks={tasks} />}
         </motion.div>
       </div>

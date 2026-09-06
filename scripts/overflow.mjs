@@ -29,6 +29,7 @@ const PAGES = (pid) => [
   ['projects', '/projects'],
   ['project-overview', `/projects/${pid}`],
   ['project-money', `/projects/${pid}?tab=money`],
+  ['project-prices', `/projects/${pid}?tab=prices`],
   ['project-tasks', `/projects/${pid}?tab=tasks`],
   ['project-photos', `/projects/${pid}?tab=photos`],
   ['contacts', '/contacts'],
