@@ -21,6 +21,31 @@ function fail(error: { message: string } | null): never {
   throw new Error(error?.message ?? 'Something went wrong')
 }
 
+/**
+ * Why an edge function call failed, in words that point at the actual problem.
+ *
+ * "Is it deployed?" was the old answer to everything, which is worse than useless once it IS
+ * deployed — it sends you to the dashboard when the real trouble was a dead signal or an expired
+ * session. supabase-js hands back the raw Response on an HTTP failure, so the status can speak.
+ */
+export async function fnError(what: string, error: unknown): Promise<Error> {
+  const e = error as { name?: string; message?: string; context?: Response }
+  const status = e?.context?.status
+  if (status === 404) return new Error(`The ${what} isn't set up on this Hub yet.`)
+  if (status === 401 || status === 403) return new Error('Your sign-in has expired — sign out and back in.')
+  if (status === 546 || status === 503) return new Error(`The ${what} ran out of steam on that one. Try again.`)
+  if (status) {
+    // Deno throwing inside the function returns the reason as text; show it rather than a number.
+    const said = await e.context!.clone().text().catch(() => '')
+    const detail = said.slice(0, 120).trim()
+    return new Error(detail ? `The ${what} said: ${detail}` : `The ${what} answered ${status}.`)
+  }
+  if (e?.name === 'FunctionsFetchError' || /fetch|network/i.test(e?.message ?? '')) {
+    return new Error(`Could not reach the ${what} — check your connection.`)
+  }
+  return new Error(e?.message || `The ${what} did not answer.`)
+}
+
 export function createSupabaseDb(url: string, anonKey: string): Db {
   const sb: SupabaseClient = createClient(url, anonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -290,7 +315,7 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
 
     async unfurl(url) {
       const { data, error } = await sb.functions.invoke<Unfurled & { error?: string }>('unfurl', { body: { url } })
-      if (error) throw new Error('Could not reach the link reader. Is the "unfurl" function deployed?')
+      if (error) throw await fnError('link reader', error)
       if (!data) throw new Error('The link reader sent nothing back.')
       if (data.error) throw new Error(data.error)
       return data
@@ -300,7 +325,7 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
         'search',
         { body: { q, country: searchCountry() } },
       )
-      if (error) throw new Error('Could not reach product search. Is the "search" function deployed?')
+      if (error) throw await fnError('product search', error)
       if (!data) throw new Error('Search sent nothing back.')
       if (data.error) throw new Error(data.error)
       return data.results ?? []
