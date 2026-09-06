@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, KeyRound, LogOut, MessageCircle, Minus, Monitor, Moon, MoreHorizontal, Pencil, RotateCcw, Smartphone, Sparkles, Sun } from 'lucide-react'
+import { Check, KeyRound, LogOut, Minus, Monitor, Moon, RotateCcw, Smartphone, Sparkles, Sun } from 'lucide-react'
 import { Page } from '../components/layout/AppShell'
 import { useAuth, useDb } from '../data/session'
 import { useUi, type Theme } from '../store/ui'
@@ -9,8 +9,8 @@ import { normalisePhone, prettyPhone } from '../lib/share'
 import { Avatar } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
 import { Field, Input, Segmented } from '../components/ui/Field'
+import { LeaveHome, People } from '../components/settings/People'
 import type { Motion as MotionPref } from '../store/ui'
-import { Menu, MenuItem } from '../components/ui/Menu'
 import { useConfirm, usePrompt } from '../components/ui/Sheet'
 import { useQueryClient } from '@tanstack/react-query'
 import { resetDemo } from '../data/demoDb'
@@ -19,7 +19,7 @@ import { ACCENTS } from '../components/project/ProjectForm'
 const COLORS = ['#B84D24', '#7F5A9E', '#4F7291', '#5C7C5A', '#D19A2C', '#2F7F97', '#C9748F', '#8B6D4B']
 
 export default function SettingsPage() {
-  const { me, profiles, household, signOut } = useAuth()
+  const { me, signOut } = useAuth()
   const { db, isDemo, canUseSupabase, leaveDemo } = useDb()
   const theme = useUi((s) => s.theme)
   const motion = useUi((s) => s.motion)
@@ -100,28 +100,7 @@ export default function SettingsPage() {
           <div className="mt-5 flex justify-end"><Button onClick={save} loading={busy} disabled={!name.trim() || !dirty}>Save</Button></div>
         </section>
 
-        <section className="card p-5">
-          <h2 className="text-xl">Household</h2>
-          <p className="mt-1 text-[13px] text-ink-2">{household?.name} · {profiles.length} member{profiles.length === 1 ? '' : 's'}</p>
-          <ul className="mt-3 flex flex-col gap-2">
-            {profiles.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2">
-                <Avatar name={p.display_name} color={p.color} size="sm" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] text-ink">{p.display_name}{p.id === me?.id ? <span className="text-ink-3"> (you)</span> : ''}</span>
-                  <span className="block truncate text-xs text-ink-3">{p.phone ? <><MessageCircle className="mr-1 inline size-3 align-[-2px]" />{prettyPhone(p.phone)}</> : 'No WhatsApp number yet'}</span>
-                </span>
-                {p.id !== me?.id && (
-                  <Menu trigger={<button className="grid size-9 place-items-center rounded-full text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label={`Edit ${p.display_name}`}><MoreHorizontal className="size-5" /></button>}>
-                    <MenuItem icon={<Pencil />} onSelect={() => editMember(p.id, 'display_name', p.display_name)}>Fix their name</MenuItem>
-                    <MenuItem icon={<MessageCircle />} onSelect={() => editMember(p.id, 'phone', p.phone ?? '')}>{p.phone ? 'Change' : 'Add'} their WhatsApp number</MenuItem>
-                  </Menu>
-                )}
-              </li>
-            ))}
-          </ul>
-          {profiles.length < 2 && !isDemo && <p className="mt-3 text-[13px] text-ink-3">Only one of you is here. Add the other account under Authentication → Users in Supabase and they'll appear automatically.</p>}
-        </section>
+        <People onEditMember={editMember} />
 
         <section className="card p-5">
           <h2 className="text-xl">Appearance</h2>
@@ -186,6 +165,7 @@ export default function SettingsPage() {
               </>
             )}
           </div>
+          {!isDemo && <div className="mt-4 border-t border-line pt-4"><LeaveHome /></div>}
           <p className="mt-4 text-[12px] text-ink-3">{isDemo ? 'Demo mode — data lives only in this browser.' : 'Synced live with Supabase.'} · Home Hub v1.2</p>
         </section>
       </div>

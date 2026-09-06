@@ -335,6 +335,76 @@ await step('complete project → celebration', async () => {
   await page.getByRole('button', { name: 'Onwards!' }).click()
 })
 
+await step('invite: make a link, see it pending, then cancel it', async () => {
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(600)
+  await page.getByRole('button', { name: 'Invite someone' }).click()
+  await page.waitForTimeout(400)
+  const sheet = page.locator('[role=dialog]')
+  await sheet.getByLabel('Who is it for').fill('Gran')
+  await sheet.getByRole('button', { name: 'Make the link' }).click()
+  await page.waitForTimeout(800)
+  const link = (await sheet.locator('text=/\\/join\\//').first().innerText()).trim()
+  if (!/\/join\/[A-Z0-9]{6,}$/.test(link)) throw new Error(`the link looks wrong: ${link}`)
+  await shot('07a-invite')
+  await sheet.getByRole('button', { name: 'Done' }).click()
+  await page.waitForTimeout(500)
+  if (!(await page.locator('text=Waiting to be accepted').count())) throw new Error('the invite is not listed as pending')
+
+  // The rest is what the invited person sees, so it needs a browser that is NOT signed in —
+  // carrying over the demo data, but none of the session.
+  const demoState = await page.evaluate(() => localStorage.getItem('hub-demo-state-v2'))
+  const guest = await browser.newContext({ viewport: { width: 1280, height: 860 } })
+  await guest.addInitScript((st) => { localStorage.setItem('hub-demo-state-v2', st); localStorage.setItem('hub-theme', 'light') }, demoState)
+  const visitor = await guest.newPage()
+  try {
+    const code = link.split('/join/')[1]
+    await visitor.goto(base + '/join/' + code, { waitUntil: 'networkidle' })
+    await visitor.waitForTimeout(1000)
+    await visitor.screenshot({ path: 'qa-shots/flows/07b-join.png' })
+    const body = await visitor.locator('body').innerText()
+    if (!/invited you to join/i.test(body)) throw new Error('the join page does not name the invitation')
+    if (!/The Bakers/.test(body)) throw new Error('the join page does not name the home')
+    // The same form the login screen uses to start a home, so this covers both.
+    for (const label of ['Your name', 'Email', 'Password']) {
+      if (!(await visitor.getByLabel(label).count())) throw new Error(`the register form has no ${label} field`)
+    }
+    if (!(await visitor.getByRole('button', { name: /Join The Bakers/ }).count())) throw new Error('no way to accept the invite')
+
+    // A code that was never issued is turned away rather than offering a way in.
+    await visitor.goto(base + '/join/NOTAREALCODE', { waitUntil: 'networkidle' })
+    await visitor.waitForTimeout(900)
+    const dead = await visitor.locator('body').innerText()
+    if (!/won.t work/i.test(dead)) throw new Error('a bogus code was not refused')
+    if (await visitor.getByRole('button', { name: /^Join /}).count()) throw new Error('a bogus code still offered a way in')
+  } finally { await guest.close() }
+
+  // Cancel it, and it stops being pending.
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(700)
+  await page.getByRole('button', { name: /Manage the invite for Gran/ }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('menuitem', { name: /Cancel the invite/ }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('button', { name: 'Cancel it' }).click()
+  await page.waitForTimeout(700)
+  if (await page.locator('text=Waiting to be accepted').count()) throw new Error('the invite is still pending after cancelling')
+})
+
+await step('login: signed out, the demo build offers its two people', async () => {
+  // The real "Start your home" branch only exists when a backend is configured, and these flows
+  // deliberately run against a demo-only build; registering itself is covered on the join page above.
+  const guest = await browser.newContext({ viewport: { width: 1280, height: 860 } })
+  await guest.addInitScript(() => localStorage.setItem('hub-theme', 'light'))
+  const visitor = await guest.newPage()
+  try {
+    await visitor.goto(base + '/login', { waitUntil: 'networkidle' })
+    await visitor.waitForTimeout(900)
+    if (!/Who's home/i.test(await visitor.locator('body').innerText())) throw new Error('the signed-out login screen did not render')
+    await visitor.screenshot({ path: 'qa-shots/flows/07c-login.png' })
+  } finally { await guest.close() }
+})
+
 await step('settings: theme toggle + rename', async () => {
   await page.goto(base + '/settings', { waitUntil: 'networkidle' })
   await page.getByRole('tab', { name: /Dark/ }).click()

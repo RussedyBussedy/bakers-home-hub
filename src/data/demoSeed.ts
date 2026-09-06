@@ -1,6 +1,6 @@
 import { addDays, format, subDays } from 'date-fns'
 import type {
-  Achievement, BoardItem, Contact, Expense, Household, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Household, Invite, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent,
 } from './types'
 import { SCENES, materialSwatch, roomScene } from '../lib/demoImages'
 
@@ -23,6 +23,7 @@ export interface DemoState {
   achievements: Achievement[]
   nudges?: Nudge[]
   visits?: SiteVisit[]
+  invites?: Invite[]
 }
 
 const d = (daysAgo: number, hour = 10) => {

@@ -1,5 +1,5 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Invite, InvitePreview, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
@@ -81,6 +81,14 @@ export function createDemoDb(): Db {
       authListeners.forEach((l) => l(id))
       return {}
     },
+    async signUp({ displayName }) {
+      // Demo mode has one household and no real accounts; registering just walks you in.
+      void displayName
+      const id = DEMO_USERS.russel
+      localStorage.setItem(SESSION_KEY, id)
+      authListeners.forEach((l) => l(id))
+      return { needsConfirmation: false }
+    },
     async signOut() {
       localStorage.removeItem(SESSION_KEY)
       authListeners.forEach((l) => l(null))
@@ -107,6 +115,57 @@ export function createDemoDb(): Db {
         const p = state.profiles.find((x) => x.id === id)!
         Object.assign(p, patch)
         return { ...p } as Profile
+      })
+    },
+
+    async renameHousehold(_id, name) {
+      return mutate('profiles', 'UPDATE', () => { state.household.name = name })
+    },
+    async removeMember(userId) {
+      return mutate('profiles', 'DELETE', () => { state.profiles = state.profiles.filter((p) => p.id !== userId) })
+    },
+    async leaveHousehold() {
+      // Nothing to leave in demo mode — signing out is the honest equivalent.
+      localStorage.removeItem(SESSION_KEY)
+      authListeners.forEach((l) => l(null))
+    },
+
+    async listInvites() {
+      return delay([...(state.invites ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+    },
+    async createInvite(invitedName) {
+      return mutate('invites', 'INSERT', () => {
+        const inv: Invite = {
+          id: uid(),
+          household_id: state.household.id,
+          code: uid().replace(/-/g, '').slice(0, 10).toUpperCase(),
+          created_by: currentUser() ?? DEMO_USERS.russel,
+          invited_name: invitedName.trim(),
+          expires_at: new Date(Date.now() + 7 * 864e5).toISOString(),
+          accepted_by: null, accepted_at: null, revoked_at: null,
+          created_at: new Date().toISOString(),
+        }
+        state.invites = [...(state.invites ?? []), inv]
+        return inv
+      })
+    },
+    async revokeInvite(id) {
+      return mutate('invites', 'UPDATE', () => {
+        const inv = (state.invites ?? []).find((i) => i.id === id)
+        if (inv) inv.revoked_at = new Date().toISOString()
+      })
+    },
+    async previewInvite(code) {
+      const inv = (state.invites ?? []).find((i) => i.code === code)
+      if (!inv) return delay<InvitePreview | null>(null)
+      const s: InvitePreview['state'] = inv.accepted_at ? 'used'
+        : inv.revoked_at ? 'cancelled'
+          : new Date(inv.expires_at) < new Date() ? 'expired' : 'live'
+      return delay<InvitePreview | null>({
+        household_name: state.household.name,
+        invited_by: (state.profiles.find((p) => p.id === inv.created_by)?.display_name ?? 'Someone').split(' ')[0]!,
+        invited_name: inv.invited_name,
+        state: s,
       })
     },
 

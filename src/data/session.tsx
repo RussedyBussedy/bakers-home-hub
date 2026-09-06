@@ -80,6 +80,7 @@ interface AuthContextValue {
   partner: Profile | null
   profileById: (id: string | null | undefined) => Profile | undefined
   signIn: (email: string, password: string) => Promise<{ error?: string }>
+  signUp: (input: { email: string; password: string; displayName: string; inviteCode?: string | null }) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
   bundleError: string | null
 }
@@ -135,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       partner,
       profileById,
       signIn: (email, password) => db.signIn(email, password),
+      signUp: (input) => db.signUp(input),
       signOut: () => db.signOut(),
       bundleError: bundle.error ? (bundle.error as Error).message : null,
     }),

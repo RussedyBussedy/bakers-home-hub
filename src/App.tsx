@@ -11,6 +11,7 @@ import { TooltipProvider } from './components/ui/Menu'
 import { Splash } from './components/layout/Splash'
 import { ScrollManager } from './components/layout/ScrollManager'
 import LoginPage from './pages/Login'
+import JoinPage from './pages/Join'
 import HubPage from './pages/Hub'
 import ProjectsPage from './pages/Projects'
 import ProjectPage from './pages/Project'
@@ -56,6 +57,7 @@ export default function App() {
               <Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}>
                 <Routes>
                   <Route path="/login" element={<RedirectIfAuthed />} />
+                  <Route path="/join/:code" element={<JoinPage />} />
                   <Route element={<RequireAuth />}>
                     {/* The board lives outside the shell; while its code arrives, show the plain background. */}
                     <Route path="/projects/:id/board" element={<Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}><BoardPage /></Suspense>} />

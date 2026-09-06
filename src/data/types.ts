@@ -49,6 +49,27 @@ export interface Profile {
   created_at: string
 }
 
+export interface Invite {
+  id: string
+  household_id: string
+  code: string
+  created_by: string
+  invited_name: string
+  expires_at: string
+  accepted_by: string | null
+  accepted_at: string | null
+  revoked_at: string | null
+  created_at: string
+}
+
+/** All an invited person may see before they have an account. */
+export interface InvitePreview {
+  household_name: string
+  invited_by: string
+  invited_name: string
+  state: 'live' | 'used' | 'cancelled' | 'expired'
+}
+
 export type NudgeKind = 'todo' | 'done' | 'fyi'
 
 export interface Nudge {

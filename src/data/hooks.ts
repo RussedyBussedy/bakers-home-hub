@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useAuth, useDb } from './session'
 import type {
   Achievement, BlockerKind, BoardItem, Contact, Expense, NewBoardItem, NewContact, NewExpense, NewImage, NewProject, NewQuote,
-  NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent, XpKind,
+  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent, XpKind,
 } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
 import { useUi } from '../store/ui'
@@ -24,6 +24,7 @@ export const keys = {
   achievements: ['achievements'] as QueryKey,
   nudges: ['nudges'] as QueryKey,
   visits: ['visits'] as QueryKey,
+  invites: ['invites'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -51,6 +52,16 @@ export function useInbox() {
   const unread = useMemo(() => (q.data ?? []).filter((n) => n.from_user !== userId && (n.to_user === null || n.to_user === userId) && !n.read_at), [q.data, userId])
   return { ...q, unread }
 }
+export function useInvites() {
+  const { db } = useDb()
+  const q = useHouseholdQuery(keys.invites, () => db.listInvites())
+  const live = useMemo(
+    () => (q.data ?? []).filter((i) => !i.accepted_at && !i.revoked_at && new Date(i.expires_at) > new Date()),
+    [q.data],
+  )
+  return { ...q, live }
+}
+
 export function useBoardItems(projectId: string) {
   const { db } = useDb()
   return useHouseholdQuery(keys.board(projectId), () => db.listBoardItems(projectId))
@@ -464,6 +475,43 @@ export function useActions() {
     } catch (e) { return fail(e, 'send the nudge') }
   }, [me, household, db, setList, fail])
 
+  const inviteSomeone = useCallback(async (invitedName: string) => {
+    try {
+      const inv = await db.createInvite(invitedName)
+      setList<Invite>(keys.invites, (old) => [inv, ...old])
+      return inv
+    } catch (e) { return fail(e, 'make the invite') }
+  }, [db, setList, fail])
+
+  const cancelInvite = useCallback(async (id: string) => {
+    setList<Invite>(keys.invites, (old) => old.map((i) => (i.id === id ? { ...i, revoked_at: new Date().toISOString() } : i)))
+    try { await db.revokeInvite(id) } catch (e) { invalidate(keys.invites); return fail(e, 'cancel the invite') }
+  }, [db, setList, invalidate, fail])
+
+  const removeMember = useCallback(async (userId: string) => {
+    try {
+      await db.removeMember(userId)
+      // Their profile moved to another household, so the whole bundle is stale.
+      await qc.invalidateQueries({ queryKey: ['bundle'] })
+    } catch (e) { return fail(e, 'remove them from the home') }
+  }, [db, qc, fail])
+
+  const leaveHome = useCallback(async () => {
+    try {
+      await db.leaveHousehold()
+      await qc.invalidateQueries({ queryKey: ['bundle'] })
+      await qc.invalidateQueries()
+    } catch (e) { return fail(e, 'leave the home') }
+  }, [db, qc, fail])
+
+  const renameHousehold = useCallback(async (name: string) => {
+    if (!household) throw new Error('Not signed in')
+    try {
+      await db.renameHousehold(household.id, name.trim())
+      await qc.invalidateQueries({ queryKey: ['bundle'] })
+    } catch (e) { return fail(e, 'rename the home') }
+  }, [db, household, qc, fail])
+
   const markNudgesRead = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return
     const now = new Date().toISOString()
@@ -529,6 +577,7 @@ export function useActions() {
     logVisit, updateVisit, deleteVisit, setBlocker,
     addBoardItem, updateBoardItem, updateBoardItems, deleteBoardItem,
     sendNudge, markNudgesRead, deleteNudge,
+    inviteSomeone, cancelInvite, removeMember, renameHousehold, leaveHome,
   }
 }
 
@@ -554,6 +603,7 @@ export function useRealtimeSync() {
         case 'expenses': inv(keys.expenses); break
         case 'tasks': inv(keys.tasks); break
         case 'site_visits': inv(keys.visits); break
+        case 'invites': inv(keys.invites); break
         case 'board_items': {
           const pid = (p.row?.project_id ?? p.old?.project_id) as string | undefined
           if (pid) inv(keys.board(pid)); else qc.invalidateQueries({ queryKey: keys.boardAll })

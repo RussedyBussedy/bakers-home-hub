@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react'
+import { RegisterForm } from '../components/auth/RegisterForm'
 import { useAuth, useDb } from '../data/session'
 import { Button } from '../components/ui/Button'
 import { Field, Input } from '../components/ui/Field'
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<'in' | 'up'>('in')
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -79,6 +81,19 @@ export default function LoginPage() {
               )}
             </>
           ) : (
+            mode === 'up' ? (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-3">New here</p>
+                  <h2 className="mt-2 text-[30px]">Start your home</h2>
+                  <p className="mt-2 text-sm text-ink-2">You'll get a home of your own, and can invite whoever you live with once you're in.</p>
+                </div>
+                <RegisterForm />
+                <button type="button" onClick={() => { setMode('in'); setError(null) }} className="mx-auto mt-1 text-sm text-ink-3 hover:text-ink">
+                  Already have an account? <span className="font-medium text-primary-text">Sign in</span>
+                </button>
+              </div>
+            ) : (
             <form onSubmit={submit} className="flex flex-col gap-4">
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-3">Welcome back</p>
@@ -99,10 +114,14 @@ export default function LoginPage() {
               </Field>
               {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
               <Button type="submit" size="lg" loading={busy} trailing={<ArrowRight className="size-4" />}>Sign in</Button>
-              <button type="button" onClick={enterDemo} className="mx-auto mt-2 inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink">
+              <button type="button" onClick={() => { setMode('up'); setError(null) }} className="mx-auto text-sm text-ink-3 hover:text-ink">
+                No account yet? <span className="font-medium text-primary-text">Start your home</span>
+              </button>
+              <button type="button" onClick={enterDemo} className="mx-auto inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink">
                 <Sparkles className="size-3.5" /> Explore the demo instead
               </button>
             </form>
+            )
           )}
         </motion.div>
       </div>

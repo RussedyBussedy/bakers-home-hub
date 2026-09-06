@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Household, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Household, Invite, InvitePreview, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -54,6 +54,17 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
     async signIn(email, password) {
       const { error } = await sb.auth.signInWithPassword({ email, password })
       return error ? { error: friendlyAuthError(error.message) } : {}
+    },
+    async signUp({ email, password, displayName, inviteCode }) {
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        // The trigger on the auth table reads these: the name to show, and the invite to redeem.
+        options: { data: { display_name: displayName, ...(inviteCode ? { invite_code: inviteCode } : {}) } },
+      })
+      if (error) return { error: friendlyAuthError(error.message) }
+      // No session back means Supabase wants the address confirmed before they can sign in.
+      return { needsConfirmation: !data.session }
     },
     async signOut() {
       await sb.auth.signOut()
@@ -226,6 +237,43 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       return (data as Achievement | null) ?? null
     },
 
+    async renameHousehold(id, name) {
+      await one(sb.from('households').update({ name }).eq('id', id))
+    },
+    async removeMember(userId) {
+      const { error } = await sb.rpc('remove_member', { who: userId })
+      if (error) fail(error)
+    },
+    async leaveHousehold() {
+      const { error } = await sb.rpc('leave_household')
+      if (error) fail(error)
+    },
+
+    async listInvites() {
+      return many<Invite>(sb.from('invites').select('*').order('created_at', { ascending: false }).limit(50))
+    },
+    async createInvite(invitedName) {
+      const { data: session } = await sb.auth.getSession()
+      const me = session.session?.user.id
+      if (!me) throw new Error('Not signed in')
+      const { data: profile } = await sb.from('profiles').select('household_id').eq('id', me).single()
+      if (!profile) throw new Error('No household')
+      return one<Invite>(
+        sb.from('invites')
+          .insert({ household_id: profile.household_id, code: inviteCode(), created_by: me, invited_name: invitedName.trim() })
+          .select().single(),
+      )
+    },
+    async revokeInvite(id) {
+      await one(sb.from('invites').update({ revoked_at: new Date().toISOString() }).eq('id', id))
+    },
+    async previewInvite(code) {
+      const { data, error } = await sb.rpc('invite_preview', { invite_code: code })
+      if (error) fail(error)
+      const row = (data as InvitePreview[] | null)?.[0]
+      return row ?? null
+    },
+
     async unfurl(url) {
       const { data, error } = await sb.functions.invoke<Unfurled & { error?: string }>('unfurl', { body: { url } })
       if (error) throw new Error('Could not reach the link reader. Is the "unfurl" function deployed?')
@@ -322,7 +370,18 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
 
 function friendlyAuthError(msg: string): string {
   if (/invalid login credentials/i.test(msg)) return "That email and password don't match. Try again or reset your password."
-  if (/email not confirmed/i.test(msg)) return 'This account still needs to be confirmed in Supabase (Authentication → Users).'
-  if (/rate limit/i.test(msg)) return 'Too many attempts — give it a minute and try again.'
+  if (/email not confirmed/i.test(msg)) return 'Check your email for the confirmation link — the account is not live until you follow it.'
+  if (/already registered|already been registered|user already exists/i.test(msg)) return 'There is already an account with that email. Sign in instead.'
+  if (/password.*(6|at least|short)/i.test(msg)) return 'Pick a password of at least six characters.'
+  if (/rate limit|too many/i.test(msg)) return 'Too many attempts — give it a minute and try again. (Confirmation emails are limited to a handful an hour.)'
+  if (/signups? not allowed|disabled/i.test(msg)) return 'New accounts are switched off on this hub at the moment.'
   return msg
+}
+
+/** Short, unambiguous invite code — no 0/O or 1/I to misread off a phone screen. */
+function inviteCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const bytes = new Uint8Array(10)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('')
 }

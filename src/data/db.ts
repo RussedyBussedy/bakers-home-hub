@@ -1,11 +1,11 @@
 import type {
   Achievement, BoardItem, Contact, Expense, HouseholdBundle, NewBoardItem, NewContact, NewExpense,
-  NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent,
+  Invite, InvitePreview, NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent,
 } from './types'
 
 export type ChangeTable =
   | 'projects' | 'project_images' | 'contacts' | 'quotes' | 'expenses' | 'tasks'
-  | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges' | 'site_visits'
+  | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges' | 'site_visits' | 'invites'
 
 export interface ChangePayload {
   table: ChangeTable
@@ -25,6 +25,8 @@ export interface Db {
 
   // ---- auth --------------------------------------------------------
   signIn(email: string, password: string): Promise<AuthResult>
+  /** Registers an account. With a live invite code the person joins that home; without one they get their own. */
+  signUp(input: { email: string; password: string; displayName: string; inviteCode?: string | null }): Promise<AuthResult & { needsConfirmation?: boolean }>
   signOut(): Promise<void>
   getUserId(): Promise<string | null>
   onAuthChange(cb: (userId: string | null) => void): () => void
@@ -34,6 +36,17 @@ export interface Db {
   // ---- household ---------------------------------------------------
   getBundle(userId: string): Promise<HouseholdBundle>
   updateProfile(id: string, patch: Partial<Pick<Profile, 'display_name' | 'color' | 'phone'>>): Promise<Profile>
+  renameHousehold(id: string, name: string): Promise<void>
+  /** Moves somebody out of this home and into an empty one of their own. */
+  removeMember(userId: string): Promise<void>
+  leaveHousehold(): Promise<void>
+
+  // ---- invites -----------------------------------------------------
+  listInvites(): Promise<Invite[]>
+  createInvite(invitedName: string): Promise<Invite>
+  revokeInvite(id: string): Promise<void>
+  /** Readable while signed out: what home a code points at, and whether it is still good. */
+  previewInvite(code: string): Promise<InvitePreview | null>
 
   // ---- nudges ------------------------------------------------------
   listNudges(): Promise<Nudge[]>
