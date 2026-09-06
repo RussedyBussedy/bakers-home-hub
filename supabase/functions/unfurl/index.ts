@@ -152,6 +152,20 @@ export function parsePrice(raw: string | null | undefined): number | null {
 }
 
 /** Last resort: the first money-looking string on the page. */
+/**
+ * Does this page claim to be a single product?
+ *
+ * It matters because the loose scan below will happily read the "R 17" off a homepage banner and
+ * call it the price of a door handle. A blank price someone types in themselves beats a confident
+ * wrong one sitting in their budget, so the scan is only trusted where the page says what it is.
+ */
+export function looksLikeProduct(html: string): boolean {
+  return /<meta[^>]+og:type[^>]+content=["']\s*product/i.test(html)
+    || /<meta[^>]+content=["']\s*product[^"']*["'][^>]+og:type/i.test(html)
+    || /"@type"\s*:\s*(?:"(?:Product|Offer|AggregateOffer|IndividualProduct|ProductModel)"|\[[^\]]*"(?:Product|Offer)")/i.test(html)
+    || /itemtype=["'][^"']*schema\.org\/(?:Product|Offer)/i.test(html)
+}
+
 export function priceFromBody(html: string): number | null {
   const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
   const m = /(?:R|ZAR|\$|£|€)\s?(\d[\d\s.,]{1,12})/.exec(text)
@@ -199,7 +213,7 @@ const handler = async (req: Request): Promise<Response> => {
     const price =
       ld.price ??
       parsePrice(meta(html, ['product:price:amount', 'og:price:amount', 'twitter:data1', 'price'])) ??
-      priceFromBody(html)
+      (looksLikeProduct(html) ? priceFromBody(html) : null)
     const currency = ld.currency ?? meta(html, ['product:price:currency', 'og:price:currency']) ?? null
     const supplier = meta(html, ['og:site_name']) ?? finalUrl.hostname.replace(/^www\./, '')
     const imageSrc = meta(html, ['og:image:secure_url', 'og:image', 'twitter:image', 'image']) ?? ld.image ?? null

@@ -1,7 +1,7 @@
 // Checks the parsing the unfurl edge function does: prices in SA and European formats, meta tags,
 // JSON-LD product blocks, and the addresses it must refuse to fetch. Run with: npm run unfurl-test
 
-import { assertPublicHttpUrl, decodeEntities, meta, fromJsonLd, parsePrice, priceFromBody } from '../supabase/functions/unfurl/index.ts'
+import { assertPublicHttpUrl, decodeEntities, meta, fromJsonLd, looksLikeProduct, parsePrice, priceFromBody } from '../supabase/functions/unfurl/index.ts'
 
 let fails = 0
 const eq = (got: unknown, want: unknown, label: string) => {
@@ -68,6 +68,20 @@ eq(priceFromBody('<script>var price = "R 99"</script><body>Nothing here</body>')
 
 console.log('\nentities')
 eq(decodeEntities('Paint &amp; brushes &#8212; 5&nbsp;L'), 'Paint & brushes — 5 L', 'named + numeric')
+
+// --- is this actually a product page? --------------------------------------
+// The loose body scan only runs when the page says it is one, so a homepage banner reading
+// "R 17" never becomes the price of a door handle.
+eq(looksLikeProduct('<meta property="og:type" content="product">'), true, 'og:type product')
+eq(looksLikeProduct("<meta content='product' property='og:type'>"), true, 'og:type, attributes the other way round')
+eq(looksLikeProduct('<meta property="og:type" content="product.item">'), true, 'og:type product.item')
+eq(looksLikeProduct('<script type="application/ld+json">{"@type":"Product","name":"X"}</script>'), true, 'JSON-LD Product')
+eq(looksLikeProduct('<script type="application/ld+json">{"@type":"Offer"}</script>'), true, 'JSON-LD Offer')
+eq(looksLikeProduct('{"@type":["Thing","Product"]}'), true, 'a JSON-LD type array')
+eq(looksLikeProduct('<div itemtype="https://schema.org/Product">'), true, 'microdata')
+eq(looksLikeProduct('<meta property="og:type" content="website">'), false, 'a plain website is not a product')
+eq(looksLikeProduct('<html><body>R 17 off everything!</body></html>'), false, 'nor a page with a price on it and nothing else')
+eq(looksLikeProduct('<script>{"@type":"BreadcrumbList"}</script>'), false, 'nor a breadcrumb list')
 
 console.log(fails ? `\n${fails} failing` : '\nAll unfurl parsing checks passed.')
 if (fails) process.exit(1)
