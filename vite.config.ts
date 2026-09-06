@@ -15,8 +15,8 @@ export default defineConfig({
         name: "The Bakers' Home Hub",
         short_name: 'Home Hub',
         description: 'Our home improvement quests, quotes and inspiration boards.',
-        theme_color: '#F6F1E9',
-        background_color: '#F6F1E9',
+        theme_color: '#2A1A0F',
+        background_color: '#2A1A0F',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -27,7 +27,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,avif,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/~oauth/],
         runtimeCaching: [

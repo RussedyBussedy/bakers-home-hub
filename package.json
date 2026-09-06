@@ -18,6 +18,9 @@
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource/caveat": "^5.3.0",
+    "@fontsource/courier-prime": "^5.3.0",
+    "@fontsource/permanent-marker": "^5.3.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@radix-ui/react-popover": "^1.1.23",

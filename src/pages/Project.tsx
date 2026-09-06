@@ -24,6 +24,7 @@ import { Avatar, BudgetBar, Money, ProgressRing, Reveal, Skeleton } from '../com
 import { Button, IconButton } from '../components/ui/Button'
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/ui/Menu'
 import { Sheet, useConfirm } from '../components/ui/Sheet'
+import { getScrollTop, offsetTop, scrollTo } from '../lib/scroll'
 
 type Tab = 'overview' | 'board' | 'money' | 'photos' | 'tasks'
 const TABS: { value: Tab; label: string; icon: typeof Wallet }[] = [
@@ -62,8 +63,8 @@ export default function ProjectPage() {
     if (firstTab.current) { firstTab.current = false; return }
     const el = tabsTop.current
     if (!el) return
-    const y = Math.max(0, el.getBoundingClientRect().top + window.scrollY)
-    if (window.scrollY > y) window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior })
+    const y = Math.max(0, offsetTop(el))
+    if (getScrollTop() > y) scrollTo(y)
   }, [tab])
 
   const quotes = useMemo(() => data.quotes.filter((q) => q.project_id === id), [data.quotes, id])

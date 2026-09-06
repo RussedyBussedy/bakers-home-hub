@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="34" height="104" viewBox="0 0 34 104">
+  <defs>
+    <linearGradient id="bar" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#231c19"/>
+      <stop offset=".16" stop-color="#7d706a"/>
+      <stop offset=".42" stop-color="#e9e3dd"/>
+      <stop offset=".58" stop-color="#b0a59e"/>
+      <stop offset=".82" stop-color="#4b423d"/>
+      <stop offset="1" stop-color="#1e1815"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#fbf9f7"/>
+      <stop offset=".28" stop-color="#d6cfc9"/>
+      <stop offset=".55" stop-color="#8f847d"/>
+      <stop offset=".82" stop-color="#3f3733"/>
+      <stop offset="1" stop-color="#6a605a"/>
+    </linearGradient>
+    <linearGradient id="ringBack" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#5a504a"/>
+      <stop offset=".6" stop-color="#2e2724"/>
+      <stop offset="1" stop-color="#4a413c"/>
+    </linearGradient>
+    <radialGradient id="hole" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#1a120d"/>
+      <stop offset=".7" stop-color="#2b1e15"/>
+      <stop offset="1" stop-color="#4a3626" stop-opacity=".6"/>
+    </radialGradient>
+  </defs>
+  <!-- punched hole in the page (which hangs below the spiral) -->
+  <ellipse cx="18.5" cy="94" rx="4.6" ry="6.5" fill="url(#hole)"/>
+  <!-- back half of the ring, behind the spine -->
+  <rect x="15.5" y="3" width="8.5" height="98" rx="4.25" fill="url(#ringBack)"/>
+  <!-- spine bar -->
+  <rect x="0" y="40" width="34" height="24" fill="url(#bar)"/>
+  <rect x="0" y="40" width="1.4" height="24" fill="#000" opacity=".28"/>
+  <rect x="32.6" y="40" width="1.4" height="24" fill="#fff" opacity=".12"/>
+  <!-- front half of the ring -->
+  <rect x="11" y="1.5" width="10.5" height="101" rx="5.25" fill="url(#ring)"/>
+  <rect x="12.2" y="4" width="2.2" height="96" rx="1.1" fill="#fff" opacity=".55"/>
+  <rect x="20" y="1.5" width="1.5" height="101" rx=".75" fill="#000" opacity=".22"/>
+  <ellipse cx="16.2" cy="6.5" rx="5.2" ry="5" fill="url(#ring)"/>
+  <ellipse cx="16.2" cy="97.5" rx="5.2" ry="5" fill="url(#ring)"/>
+</svg>
