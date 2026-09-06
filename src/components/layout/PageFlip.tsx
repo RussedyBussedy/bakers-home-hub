@@ -131,10 +131,9 @@ function runFlip(opts: { axis: 'x' | 'y'; rect: DOMRect; forward: boolean; sheet
 
   // `window.__flipSlow = 8` stretches the turn for a screenshot check (dev only).
   const slow = Number((window as unknown as { __flipSlow?: number }).__flipSlow) || 1
-  const D = (axis === 'x' ? 640 : 820) * slow
+  const D = (axis === 'x' ? 720 : 900) * slow
   const stagger = 130 * slow
   const total = D + (sheets.length - 1) * stagger
-  const easing = 'cubic-bezier(0.42, 0.04, 0.3, 1)'
   // Forward: the sheet on top flips first, so the last to flip is lowest in the stack (drawn first).
   // Back: each arriving sheet lands on the previous one, so time order is draw order.
   const drawOrder = forward ? [...sheets.keys()].reverse() : [...sheets.keys()]
@@ -144,7 +143,7 @@ function runFlip(opts: { axis: 'x' | 'y'; rect: DOMRect; forward: boolean; sheet
     const delay = k * stagger
     const el = div('flip-sheet', at)
     el.style.perspective = `${Math.max(2400, (axis === 'y' ? W : H) * 3.2)}px`
-    el.style.perspectiveOrigin = axis === 'y' ? '35% 50%' : '50% 35%'
+    el.style.perspectiveOrigin = axis === 'y' ? '4% 50%' : '50% 4%'
     const stripW = axis === 'y' ? Math.ceil(W / N) : W
     const stripH = axis === 'y' ? H : Math.ceil(H / N)
     let parent: HTMLElement = el
@@ -179,14 +178,29 @@ function runFlip(opts: { axis: 'x' | 'y'; rect: DOMRect; forward: boolean; sheet
     // The whole sheet swings on the root hinge; the others only bend, and settle flat again.
     const rot = axis === 'y' ? 'rotateY' : 'rotateX'
     const sign = axis === 'y' ? -1 : 1 // which way "toward the viewer and over" is, per axis
-    const a0 = forward ? 0 : sign * 180
-    const a1 = forward ? sign * 180 : 0
-    const bendSign = Math.sign(a1 - a0)
+    // Past 100° or so the sheet is out of view (it lands on the other side of the rings), so the
+    // turn spends its time where it can be seen: a slow lift, a quick swing through vertical, a soft
+    // landing. Forward the page leaves; back it arrives.
+    const deg = (a: number) => `${rot}(${sign * a}deg)`
+    const rootFrames = forward
+      ? [
+          { transform: deg(0), offset: 0, easing: 'cubic-bezier(0.55, 0, 0.8, 0.5)' },
+          { transform: deg(38), offset: 0.34, easing: 'cubic-bezier(0.3, 0.2, 0.5, 1)' },
+          { transform: deg(100), offset: 0.66, easing: 'cubic-bezier(0.4, 0, 0.7, 1)' },
+          { transform: deg(172), offset: 1 },
+        ]
+      : [
+          { transform: deg(172), offset: 0, easing: 'cubic-bezier(0.3, 0, 0.6, 1)' },
+          { transform: deg(100), offset: 0.34, easing: 'cubic-bezier(0.5, 0, 0.7, 0.8)' },
+          { transform: deg(38), offset: 0.66, easing: 'cubic-bezier(0.2, 0.5, 0.45, 1)' },
+          { transform: deg(0), offset: 1 },
+        ]
+    const bendSign = forward ? sign : -sign
     const BEND = 70
-    anims.push(root!.animate([{ transform: `${rot}(${a0}deg)` }, { transform: `${rot}(${a1}deg)` }], { duration: D, delay, easing, fill: 'both' }))
+    anims.push(root!.animate(rootFrames, { duration: D, delay, fill: 'both' }))
     for (let i = 1; i < N; i++) {
       // the free edge leads, so the bend travels from the tip back to the spine
-      const peak = 0.3 + 0.12 * (i / (N - 1))
+      const peak = (forward ? 0.36 : 0.5) + 0.14 * (i / (N - 1))
       const b = (bendSign * BEND) / (N - 1)
       anims.push(hinges[i].animate(
         [{ transform: `${rot}(0deg)`, offset: 0 }, { transform: `${rot}(${b}deg)`, offset: peak, easing: 'ease-out' }, { transform: `${rot}(0deg)`, offset: 1 }],
@@ -195,8 +209,8 @@ function runFlip(opts: { axis: 'x' | 'y'; rect: DOMRect; forward: boolean; sheet
     }
     // Lambert-ish: the face darkens as it turns edge-on to the light.
     const shadeFrames = forward
-      ? [{ opacity: 0, offset: 0 }, { opacity: 0.08, offset: 0.3 }, { opacity: 0.3, offset: 0.5 }, { opacity: 0.4, offset: 0.6 }, { opacity: 0.4, offset: 1 }]
-      : [{ opacity: 0.4, offset: 0 }, { opacity: 0.4, offset: 0.4 }, { opacity: 0.3, offset: 0.5 }, { opacity: 0.08, offset: 0.7 }, { opacity: 0, offset: 1 }]
+      ? [{ opacity: 0, offset: 0 }, { opacity: 0.06, offset: 0.34 }, { opacity: 0.3, offset: 0.6 }, { opacity: 0.42, offset: 0.66 }, { opacity: 0.42, offset: 1 }]
+      : [{ opacity: 0.42, offset: 0 }, { opacity: 0.42, offset: 0.34 }, { opacity: 0.3, offset: 0.4 }, { opacity: 0.06, offset: 0.66 }, { opacity: 0, offset: 1 }]
     for (const s of shades) anims.push(s.animate(shadeFrames, { duration: D, delay, fill: 'both' }))
     // A little lift off the page as it starts to move (and a settle when it lands).
     anims.push(el.animate(
@@ -208,8 +222,8 @@ function runFlip(opts: { axis: 'x' | 'y'; rect: DOMRect; forward: boolean; sheet
   }
 
   const castFrames = forward
-    ? [{ opacity: 0, offset: 0 }, { opacity: 0.85, offset: 0.42 }, { opacity: 0.4, offset: 0.62 }, { opacity: 0, offset: 0.85 }, { opacity: 0, offset: 1 }]
-    : [{ opacity: 0, offset: 0 }, { opacity: 0.4, offset: 0.3 }, { opacity: 0.85, offset: 0.58 }, { opacity: 0, offset: 1 }]
+    ? [{ opacity: 0, offset: 0 }, { opacity: 0.35, offset: 0.3 }, { opacity: 0.85, offset: 0.58 }, { opacity: 0.3, offset: 0.72 }, { opacity: 0, offset: 0.9 }, { opacity: 0, offset: 1 }]
+    : [{ opacity: 0, offset: 0 }, { opacity: 0.3, offset: 0.28 }, { opacity: 0.85, offset: 0.42 }, { opacity: 0.35, offset: 0.7 }, { opacity: 0, offset: 1 }]
   anims.push(cast.animate(castFrames, { duration: total, fill: 'both' }))
 
   document.body.appendChild(layer)
