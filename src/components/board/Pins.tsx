@@ -36,7 +36,7 @@ export function Pin({ item, preview }: { item: BoardItem; preview?: boolean }) {
 }
 
 function Tape({ className }: { className?: string }) {
-  return <span className={cn('pointer-events-none absolute left-1/2 top-0 h-6 w-20 -translate-x-1/2 -translate-y-1/2 rotate-[-2deg] rounded-[2px] bg-[#f3e6c2]/80 shadow-[0_1px_2px_rgba(0,0,0,0.12)] backdrop-blur-[1px]', className)} aria-hidden style={{ backgroundImage: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 2px, transparent 2px 6px)' }} />
+  return <span className={cn('pointer-events-none absolute left-1/2 top-0 h-6 w-20 -translate-x-1/2 -translate-y-1/2 rotate-[-2deg] rounded-[2px] bg-[#f3e6c2]/80 shadow-[0_1px_2px_rgba(0,0,0,0.12)]', className)} aria-hidden style={{ backgroundImage: 'repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 2px, transparent 2px 6px)' }} />
 }
 
 export function PhotoPin({ data, preview }: { data: PhotoData; preview?: boolean }) {

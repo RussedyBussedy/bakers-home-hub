@@ -269,29 +269,26 @@
 @utility tabular {
   font-variant-numeric: tabular-nums;
 }
+/* Paper-ish noise. Deliberately a plain translucent overlay rather than a blend mode: blending
+   against a live backdrop is the other thing that makes WebKit repaint the whole window. */
 @utility grain {
   position: relative;
-  isolation: isolate;
   &::after {
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 1;
-    opacity: 0.35;
-    mix-blend-mode: multiply;
+    opacity: 0.5;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 }
 /* Frosted surfaces. Kept to the few places where something scrolls underneath (the phone's bottom bar,
-   the buttons over a project photo). Backdrop filters make WebKit re-composite the whole page whenever
-   anything else animates — on a Mac that showed up as a one-frame white flash between sections — so the
-   desktop sidebar and sticky bars are solid instead, and the ones that remain get their own layer. */
+   the buttons over a project photo). These used to be frosted (backdrop-filter). A single backdrop
+   filter anywhere on the page makes WebKit re-composite the whole thing whenever anything animates,
+   which showed on a Mac as a one-frame white flash on every navigation, so they are simply opaque. */
 @utility glass {
-  background: color-mix(in oklab, var(--surface) 82%, transparent);
-  backdrop-filter: saturate(160%) blur(14px);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
-  transform: translateZ(0);
+  background: color-mix(in oklab, var(--surface) 94%, transparent);
 }
 @utility card {
   background: var(--surface);

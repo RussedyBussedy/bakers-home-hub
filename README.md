@@ -55,6 +55,9 @@ Set `VITE_DEMO_ONLY=true` to force the built-in demo mode (sample data in localS
 - `supabase/functions/unfurl/` – reads a pasted product page and returns its title, price and picture (a browser can't fetch another site itself). Deploy it from the Supabase dashboard: **Edge Functions → Deploy a new function**, name it `unfurl`, paste `index.ts`, Deploy. Without it the Prices tab still works, you just type the details in. `npm run unfurl-test` checks its parsing.
 - `supabase/schema.sql` – the whole backend.
 
+## Notes on motion
+Everything animated goes through `<MotionConfig>` in `App.tsx`. Settings → Appearance → **Movement → Calm** turns the fades and slides off entirely (`useCalm()` in `src/store/ui.ts`, also true when the device asks for reduced motion). Framer's own `reducedMotion` only suppresses transforms, so entrance animations pass `initial={calm ? false : …}` to skip the opacity fade as well — a fade from transparent is what reads as a flicker on some browsers. For the same reason the app uses no `backdrop-filter` or `mix-blend-mode` anywhere: one of either makes WebKit re-composite the whole window whenever anything moves.
+
 ## Notes
 - Photos are compressed on the phone before upload (max 1800px, ~0.9MB) and stored in a private bucket; the app fetches signed URLs and caches them.
 - A Supabase free-tier project pauses after 7 idle days; unpause it from the dashboard if the app suddenly can't sign in.

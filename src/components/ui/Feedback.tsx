@@ -109,7 +109,7 @@ export function Celebrations() {
       {current && (
         <motion.div
           key={current.id}
-          className="fixed inset-0 z-[160] grid place-items-center bg-ink/40 p-6 backdrop-blur-sm"
+          className="fixed inset-0 z-[160] grid place-items-center bg-ink/55 p-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

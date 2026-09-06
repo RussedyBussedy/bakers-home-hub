@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { CalendarDays, CheckCircle2, ImageOff } from 'lucide-react'
 import type { Expense, Project, Quote, Task } from '../../data/types'
 import { useMediaUrl } from '../../data/hooks'
+import { useCalm } from '../../store/ui'
 import { projectCosts } from '../../lib/xp'
 import { cn, daysUntil, money } from '../../lib/utils'
 import { BudgetBar, StatusPill } from '../ui/Bits'
@@ -10,6 +11,7 @@ import { BlockerChip } from './Blocker'
 
 export function CoverImage({ path, alt, className, accent }: { path: string | null; alt: string; className?: string; accent?: string }) {
   const url = useMediaUrl(path)
+  const calm = useCalm()
   if (!path) {
     return (
       <div className={cn('grid place-items-center bg-surface-2 text-ink-3', className)} style={accent ? { background: `linear-gradient(135deg, ${accent}22, ${accent}55)` } : undefined}>
@@ -22,7 +24,7 @@ export function CoverImage({ path, alt, className, accent }: { path: string | nu
     // when the content below it changes (switching a project tab), Chrome would "keep it in place" by jumping the page.
     <div className={cn('relative overflow-hidden bg-surface-2 [overflow-anchor:none]', className)}>
       {url ? (
-        <motion.img src={url} alt={alt} className="h-full w-full object-cover [overflow-anchor:none]" initial={{ opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }} loading="lazy" />
+        <motion.img src={url} alt={alt} className="h-full w-full object-cover [overflow-anchor:none]" initial={calm ? false : { opacity: 0, scale: 1.04 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }} loading="lazy" />
       ) : (
         <div className="skeleton h-full w-full rounded-none" />
       )}
@@ -31,6 +33,7 @@ export function CoverImage({ path, alt, className, accent }: { path: string | nu
 }
 
 export function ProjectCard({ project, quotes, expenses, tasks, index = 0, compact }: { project: Project; quotes: Quote[]; expenses: Expense[]; tasks: Task[]; index?: number; compact?: boolean }) {
+  const calm = useCalm()
   const costs = projectCosts(project, quotes, expenses)
   const myTasks = tasks.filter((t) => t.project_id === project.id)
   const done = myTasks.filter((t) => t.done).length
@@ -39,7 +42,7 @@ export function ProjectCard({ project, quotes, expenses, tasks, index = 0, compa
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={calm ? false : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 10) * 0.05 }}
       whileHover={{ y: -3 }}

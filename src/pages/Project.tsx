@@ -6,7 +6,7 @@ import { BlockerChip, BlockerSheet, blockedFor } from '../components/project/Blo
 import { SiteVisitsCard, lastVisitLine } from '../components/project/SiteVisits'
 import { useNudge } from '../components/nudges/NudgeSheet'
 import { absoluteUrl, copyText } from '../lib/share'
-import { useUi } from '../store/ui'
+import { useCalm, useUi } from '../store/ui'
 import { Page } from '../components/layout/AppShell'
 import { useActions, useBoardItems, useEverything, useProject } from '../data/hooks'
 import { useAuth } from '../data/session'
@@ -47,6 +47,7 @@ export default function ProjectPage() {
   const board = useBoardItems(id)
   const { updateProject, deleteProject, setBlocker } = useActions()
   const { profileById, partner } = useAuth()
+  const calm = useCalm()
   const confirm = useConfirm()
   const nudge = useNudge()
   const toast = useUi((s) => s.toast)
@@ -110,7 +111,7 @@ export default function ProjectPage() {
   return (
     <div className="mx-auto w-full max-w-[1400px]">
       {/* Hero */}
-      <motion.div className="relative" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
+      <motion.div className="relative" initial={calm ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
         {/* The hero sizes to its text: the buttons row sits at the top and the title block at the bottom, in normal flow,
             so a long title or a blocker note can never climb up over the Nudge / Edit buttons (it did on phones). */}
         <div className="relative flex min-h-[max(200px,min(46vw,58dvh))] flex-col overflow-hidden bg-surface-2 [overflow-anchor:none] lg:mx-10 lg:mt-6 lg:min-h-[min(380px,58dvh)] lg:rounded-[32px]">
@@ -139,7 +140,7 @@ export default function ProjectPage() {
           {/* In a phone-landscape hero only the chips and title fit — the rest is repeated below anyway. */}
           <div className="relative mt-auto p-4 pb-9 pt-5 text-[#F6F1E9] sm:p-6 sm:pb-12 sm:pt-8 short:pb-9">
             <div className="flex flex-wrap items-center gap-2">
-              <Menu trigger={<button className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#F6F1E9]/20 px-3 text-xs font-medium hover:bg-[#F6F1E9]/30"><StatusDot status={project.status} />{PROJECT_STATUSES.find((s) => s.value === project.status)?.label} <ChevronDown className="size-3.5" /></button>} align="start">
+              <Menu trigger={<button className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#F6F1E9]/25 px-3 text-xs font-medium hover:bg-[#F6F1E9]/40"><StatusDot status={project.status} />{PROJECT_STATUSES.find((s) => s.value === project.status)?.label} <ChevronDown className="size-3.5" /></button>} align="start">
                 <MenuLabel>Move to</MenuLabel>
                 {PROJECT_STATUSES.map((s) => <MenuItem key={s.value} onSelect={() => setStatus(s.value)} disabled={project.status === s.value}>{s.label}</MenuItem>)}
               </Menu>
@@ -193,7 +194,7 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        <motion.div key={tab} className="mt-4 pb-8 [overflow-anchor:none]" initial={{ opacity: 0.3, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}>
+        <motion.div key={tab} className="mt-4 pb-8 [overflow-anchor:none]" initial={calm ? false : { opacity: 0.3, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}>
           {tab === 'overview' && (
             <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
               <div className="flex min-w-0 flex-col gap-6">

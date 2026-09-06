@@ -6,6 +6,7 @@ import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { readImageSize } from '../../lib/images'
 import { cn, fmtDate } from '../../lib/utils'
+import { useCalm } from '../../store/ui'
 import { Avatar, EmptyState, Pill } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
 import { Menu, MenuItem, MenuSeparator } from '../ui/Menu'
@@ -102,15 +103,16 @@ export function PhotosPanel({ project, images }: { project: Project; images: Pro
 }
 
 function PhotoTile({ img, index, isCover, onOpen, onCover, onKind, onCaption, onDelete, by }: { img: ProjectImage; index: number; isCover: boolean; onOpen: () => void; onCover: () => void; onKind: (k: ImageKind) => void; onCaption: () => void; onDelete: () => void; by?: string }) {
+  const calm = useCalm()
   const url = useMediaUrl(img.path)
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(index, 8) * 0.04 }} className="group relative overflow-hidden rounded-2xl bg-surface-2 shadow-sm">
+    <motion.div initial={calm ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: calm ? 0 : Math.min(index, 8) * 0.04 }} className="group relative overflow-hidden rounded-2xl bg-surface-2 shadow-sm">
       <button type="button" onClick={onOpen} className="block w-full" aria-label={img.caption || 'Open photo'}>
         {url ? <img src={url} alt={img.caption} className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" loading="lazy" /> : <div className="skeleton aspect-square rounded-none" />}
       </button>
-      {isCover && <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-ink/70 px-2 py-0.5 text-[11px] font-medium text-bg backdrop-blur"><Star className="size-3 fill-gold text-gold" /> Cover</span>}
+      {isCover && <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-ink/80 px-2 py-0.5 text-[11px] font-medium text-bg"><Star className="size-3 fill-gold text-gold" /> Cover</span>}
       <div className="absolute right-1.5 top-1.5">
-        <Menu trigger={<IconButton label="Photo actions" size="icon-sm" className="bg-ink/50 text-bg backdrop-blur hover:bg-ink/70 hover:text-bg"><MoreHorizontal className="size-4" /></IconButton>}>
+        <Menu trigger={<IconButton label="Photo actions" size="icon-sm" className="bg-ink/60 text-bg hover:bg-ink/75 hover:text-bg"><MoreHorizontal className="size-4" /></IconButton>}>
           <MenuItem icon={<Star />} onSelect={onCover}>Use as cover</MenuItem>
           <MenuItem onSelect={onCaption}>Edit caption</MenuItem>
           <MenuSeparator />
@@ -130,6 +132,7 @@ function PhotoTile({ img, index, isCover, onOpen, onCover, onKind, onCaption, on
 }
 
 export function Lightbox({ images, index, onClose, onIndex }: { images: ProjectImage[]; index: number; onClose: () => void; onIndex: (i: number) => void }) {
+  const calm = useCalm()
   const img = images[index]!
   const url = useMediaUrl(img.path)
   const { profileById } = useAuth()
@@ -145,7 +148,7 @@ export function Lightbox({ images, index, onClose, onIndex }: { images: ProjectI
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-2" onClick={(e) => e.stopPropagation()}>
         <AnimatePresence mode="wait">
-          {url && <motion.img key={img.id} src={url} alt={img.caption} className="max-h-full max-w-full rounded-xl object-contain shadow-lg" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.25 }} drag="x" dragConstraints={{ left: 0, right: 0 }} onDragEnd={(_, i) => { if (i.offset.x < -60) next(); else if (i.offset.x > 60) prev() }} />}
+          {url && <motion.img key={img.id} src={url} alt={img.caption} className="max-h-full max-w-full rounded-xl object-contain shadow-lg" initial={calm ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: calm ? 0 : 0.25 }} drag="x" dragConstraints={{ left: 0, right: 0 }} onDragEnd={(_, i) => { if (i.offset.x < -60) next(); else if (i.offset.x > 60) prev() }} />}
         </AnimatePresence>
         {images.length > 1 && (
           <>

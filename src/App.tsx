@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
+import { MotionConfig } from 'framer-motion'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider, DbProvider, useAuth } from './data/session'
+import { useUi } from './store/ui'
 import { AppShell } from './components/layout/AppShell'
 import { Celebrations, Toasts, XpPops } from './components/ui/Feedback'
 import { ConfirmHost, PromptHost } from './components/ui/Sheet'
@@ -36,39 +38,49 @@ function RedirectIfAuthed() {
 }
 
 export default function App() {
+  // 'calm' turns every animation off, whatever the machine is set to — an escape hatch for a browser
+  // that makes the movement look like flickering.
+  const calm = useUi((s) => s.motion) === 'calm'
   return (
     <DbProvider>
       <AuthProvider>
         <TooltipProvider>
-          <BrowserRouter>
-            <ScrollManager />
-            <Suspense fallback={<Splash />}>
-              <Routes>
-                <Route path="/login" element={<RedirectIfAuthed />} />
-                <Route element={<RequireAuth />}>
-                  {/* The board lives outside the shell; while its code arrives, show the plain background rather than the splash. */}
-                  <Route path="/projects/:id/board" element={<Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}><BoardPage /></Suspense>} />
-                  <Route element={<AppShell />}>
-                    <Route index element={<HubPage />} />
-                    <Route path="/projects" element={<ProjectsPage />} />
-                    <Route path="/projects/new" element={<NewProjectPage />} />
-                    <Route path="/projects/:id" element={<ProjectPage />} />
-                    <Route path="/contacts" element={<ContactsPage />} />
-                    <Route path="/insights" element={<InsightsPage />} />
-                    <Route path="/rewards" element={<RewardsPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Honour the system's "reduce motion" setting across every animation in the app, sheets and
+              toasts included — the right thing to do, and a single switch that separates an animation
+              problem from a painting one when something looks like it flickers. */}
+          <MotionConfig reducedMotion={calm ? 'always' : 'user'}>
+            <BrowserRouter>
+              <ScrollManager />
+              {/* Nothing mid-session should be able to flash the full-screen splash; the plain background
+                  is enough while a lazy page arrives. */}
+              <Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}>
+                <Routes>
+                  <Route path="/login" element={<RedirectIfAuthed />} />
+                  <Route element={<RequireAuth />}>
+                    {/* The board lives outside the shell; while its code arrives, show the plain background. */}
+                    <Route path="/projects/:id/board" element={<Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}><BoardPage /></Suspense>} />
+                    <Route element={<AppShell />}>
+                      <Route index element={<HubPage />} />
+                      <Route path="/projects" element={<ProjectsPage />} />
+                      <Route path="/projects/new" element={<NewProjectPage />} />
+                      <Route path="/projects/:id" element={<ProjectPage />} />
+                      <Route path="/contacts" element={<ContactsPage />} />
+                      <Route path="/insights" element={<InsightsPage />} />
+                      <Route path="/rewards" element={<RewardsPage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Route>
                   </Route>
-                </Route>
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-          <Toasts />
-          <XpPops />
-          <Celebrations />
-          <ConfirmHost />
-          <PromptHost />
-          <NudgeHost />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+            <Toasts />
+            <XpPops />
+            <Celebrations />
+            <ConfirmHost />
+            <PromptHost />
+            <NudgeHost />
+          </MotionConfig>
         </TooltipProvider>
       </AuthProvider>
     </DbProvider>

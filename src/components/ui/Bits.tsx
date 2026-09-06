@@ -3,7 +3,7 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { PROJECT_STATUSES, type ProjectStatus, type Tone } from '../../data/types'
 import { cn, initials, money } from '../../lib/utils'
 import { textOn } from '../../lib/colors'
-import { useUi } from '../../store/ui'
+import { useCalm, useUi } from '../../store/ui'
 
 // ---------------------------------------------------------------------------
 // Avatar
@@ -170,10 +170,11 @@ export function Stat({ label, children, hint, className }: { label: string; chil
 /** Fade + rise in, staggered by index. */
 export function Reveal({ children, index = 0, className, as = 'div' }: { children: ReactNode; index?: number; className?: string; as?: 'div' | 'li' | 'section' }) {
   const Comp = motion[as]
+  const calm = useCalm()
   return (
     <Comp
       className={className}
-      initial={{ opacity: 0.3, y: 8 }}
+      initial={calm ? false : { opacity: 0.3, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 12) * 0.025 }}
     >

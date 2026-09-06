@@ -28,9 +28,13 @@ export interface Celebration {
   level?: number
 }
 
+export type Motion = 'full' | 'calm'
+
 interface UiState {
   theme: Theme
   setTheme: (t: Theme) => void
+  motion: Motion
+  setMotion: (m: Motion) => void
   toasts: Toast[]
   toast: (t: Omit<Toast, 'id'>) => string
   dismissToast: (id: string) => void
@@ -50,6 +54,10 @@ function applyTheme(t: Theme) {
   if (meta) meta.content = dark ? '#15110E' : '#F6F1E9'
 }
 
+function initialMotion(): Motion {
+  try { return localStorage.getItem('hub-motion') === 'calm' ? 'calm' : 'full' } catch { return 'full' }
+}
+
 function initialTheme(): Theme {
   try {
     const t = localStorage.getItem('hub-theme') as Theme | null
@@ -59,12 +67,22 @@ function initialTheme(): Theme {
   }
 }
 
+/** True when nothing should animate in: the device asked for reduced motion, or Calm is chosen. */
+export function useCalm(): boolean {
+  return useUi((s) => s.motion === 'calm' || s.reduceMotion)
+}
+
 export const useUi = create<UiState>((set, get) => ({
   theme: initialTheme(),
   setTheme: (t) => {
     try { localStorage.setItem('hub-theme', t) } catch { /* ignore */ }
     applyTheme(t)
     set({ theme: t })
+  },
+  motion: initialMotion(),
+  setMotion: (m) => {
+    try { localStorage.setItem('hub-motion', m) } catch { /* ignore */ }
+    set({ motion: m })
   },
   toasts: [],
   toast: (t) => {

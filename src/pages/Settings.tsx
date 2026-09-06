@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, KeyRound, LogOut, MessageCircle, Monitor, Moon, MoreHorizontal, Pencil, RotateCcw, Smartphone, Sun } from 'lucide-react'
+import { Check, KeyRound, LogOut, MessageCircle, Minus, Monitor, Moon, MoreHorizontal, Pencil, RotateCcw, Smartphone, Sparkles, Sun } from 'lucide-react'
 import { Page } from '../components/layout/AppShell'
 import { useAuth, useDb } from '../data/session'
 import { useUi, type Theme } from '../store/ui'
@@ -9,6 +9,7 @@ import { normalisePhone, prettyPhone } from '../lib/share'
 import { Avatar } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
 import { Field, Input, Segmented } from '../components/ui/Field'
+import type { Motion as MotionPref } from '../store/ui'
 import { Menu, MenuItem } from '../components/ui/Menu'
 import { useConfirm, usePrompt } from '../components/ui/Sheet'
 import { useQueryClient } from '@tanstack/react-query'
@@ -21,6 +22,8 @@ export default function SettingsPage() {
   const { me, profiles, household, signOut } = useAuth()
   const { db, isDemo, canUseSupabase, leaveDemo } = useDb()
   const theme = useUi((s) => s.theme)
+  const motion = useUi((s) => s.motion)
+  const setMotion = useUi((s) => s.setMotion)
   const setTheme = useUi((s) => s.setTheme)
   const toast = useUi((s) => s.toast)
   const confirm = useConfirm()
@@ -128,6 +131,16 @@ export default function SettingsPage() {
               { value: 'dark', label: <span className="inline-flex items-center gap-1.5"><Moon className="size-4" /> Dark</span> },
               { value: 'system', label: <span className="inline-flex items-center gap-1.5"><Monitor className="size-4" /> Auto</span> },
             ]} />
+          </div>
+          <div className="mt-5">
+            <p className="text-[13px] font-medium text-ink-2">Movement</p>
+            <div className="mt-2">
+              <Segmented<MotionPref> value={motion} onChange={setMotion} options={[
+                { value: 'full', label: <span className="inline-flex items-center gap-1.5"><Sparkles className="size-4" /> Full</span> },
+                { value: 'calm', label: <span className="inline-flex items-center gap-1.5"><Minus className="size-4" /> Calm</span> },
+              ]} />
+            </div>
+            <p className="mt-2 text-[12px] text-ink-3">Calm switches off the fades and slides. Worth trying if pages look like they flicker on your Mac — and it's what the app uses anyway when your device asks for reduced motion.</p>
           </div>
         </section>
 

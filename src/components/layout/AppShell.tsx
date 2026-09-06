@@ -4,6 +4,7 @@ import { BarChart3, Compass, Home, Plus, Settings, Trophy, Users, Zap, Flame } f
 import { Suspense, useEffect, type ReactNode } from 'react'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../data/session'
+import { useCalm } from '../../store/ui'
 import { useInbox, useLevel, useRealtimeSync, useXp } from '../../data/hooks'
 import { weeklyStreak } from '../../lib/xp'
 import { Avatar } from '../ui/Bits'
@@ -172,11 +173,12 @@ export function AppShell() {
 /** Page wrapper: consistent gutters, max width and an entrance animation. */
 export function Page({ children, className, wide, title, back, actions }: { children: ReactNode; className?: string; wide?: boolean; title?: ReactNode; back?: boolean; actions?: ReactNode }) {
   const navigate = useNavigate()
+  const calm = useCalm()
   return (
     <motion.div
       className={cn('mx-auto w-full px-4 pt-4 sm:px-6 lg:px-10 lg:pt-8', wide ? 'max-w-[1400px]' : 'max-w-6xl', className)}
       // Start visible and settle, rather than flashing blank and fading in — a blink reads as flicker on a fast desktop.
-      initial={{ opacity: 0.4, y: 4 }}
+      initial={calm ? false : { opacity: 0.4, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >

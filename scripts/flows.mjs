@@ -343,6 +343,26 @@ await step('settings: theme toggle + rename', async () => {
   await page.getByRole('tab', { name: /Light/ }).click()
 })
 
+await step('settings: calm movement sticks and stops the entrance animation', async () => {
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: /Calm/ }).click()
+  await page.waitForTimeout(300)
+  if (await page.evaluate(() => localStorage.getItem('hub-motion')) !== 'calm') throw new Error('the choice was not remembered')
+  // With movement off, a page must be fully opaque on the very first frame after a route change.
+  await page.goto(base + '/projects', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('link', { name: 'Contacts' }).first().click()
+  await page.waitForTimeout(60)
+  const o = await page.evaluate(() => {
+    const el = document.querySelector('main > div')
+    return el ? Number(getComputedStyle(el).opacity) : null
+  })
+  if (o !== null && o < 0.99) throw new Error(`page still faded in at ${o}`)
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: /Full/ }).click()
+  await page.waitForTimeout(200)
+  if (await page.evaluate(() => localStorage.getItem('hub-motion')) !== 'full') throw new Error('could not switch back')
+})
+
 console.log(errors.length ? `\n${errors.length} errors:\n${errors.join('\n')}` : '\nNo console/page errors.')
 await browser.close()
 if (failed || errors.length) process.exit(1)
