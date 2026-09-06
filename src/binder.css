@@ -285,11 +285,12 @@ html.avif .flip-back { --tx-leather: url('/textures/leather.avif'); --tx-paper: 
   background: repeating-linear-gradient(180deg, transparent 0 80px, rgba(0, 0, 0, 0.18) 80px 88px);
 }
 /* paper grain (a user setting; off under reduced motion / low-end): creases from a crumpled sheet
-   (ambientCG Paper003, CC0) under a fine noise */
+   (ambientCG Paper003, CC0) under a fine noise. Both sit UNDER the scroller, on the bare paper, so
+   scrolling never has to re-blend them — the objects on the page cover them, as they would. */
 .binder-grain {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 0;
   pointer-events: none;
   opacity: 0.45;
   mix-blend-mode: multiply;
@@ -298,7 +299,7 @@ html.avif .flip-back { --tx-leather: url('/textures/leather.avif'); --tx-paper: 
 .binder-crumple {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 0;
   pointer-events: none;
   opacity: 0.14;
   mix-blend-mode: multiply;
