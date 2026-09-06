@@ -7,6 +7,7 @@ import { cn } from '../lib/utils'
 import { textOn } from '../lib/colors'
 import { normalisePhone, prettyPhone } from '../lib/share'
 import { Avatar } from '../components/ui/Bits'
+import { Checkbox } from '../components/ui/Checkbox'
 import { Button } from '../components/ui/Button'
 import { Field, Input, Segmented } from '../components/ui/Field'
 import { Menu, MenuItem } from '../components/ui/Menu'
@@ -22,6 +23,10 @@ export default function SettingsPage() {
   const { db, isDemo, canUseSupabase, leaveDemo } = useDb()
   const theme = useUi((s) => s.theme)
   const setTheme = useUi((s) => s.setTheme)
+  const pageFlip = useUi((s) => s.pageFlip)
+  const setPageFlip = useUi((s) => s.setPageFlip)
+  const paperGrain = useUi((s) => s.paperGrain)
+  const setPaperGrain = useUi((s) => s.setPaperGrain)
   const toast = useUi((s) => s.toast)
   const confirm = useConfirm()
   const prompt = usePrompt()
@@ -128,6 +133,22 @@ export default function SettingsPage() {
               { value: 'dark', label: <span className="inline-flex items-center gap-1.5"><Moon className="size-4" /> Dark</span> },
               { value: 'system', label: <span className="inline-flex items-center gap-1.5"><Monitor className="size-4" /> Auto</span> },
             ]} />
+          </div>
+          <div className="mt-4 grid gap-2">
+            <div className="flex items-center justify-between gap-4 rounded-xl px-1 py-1.5">
+              <span>
+                <span className="block text-[15px] text-ink">Page turns</span>
+                <span className="block text-[13px] text-ink-3">Turn the page when you move between sections.</span>
+              </span>
+              <Checkbox checked={pageFlip} onChange={setPageFlip} label="Page turns" />
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-xl px-1 py-1.5">
+              <span>
+                <span className="block text-[15px] text-ink">Paper grain</span>
+                <span className="block text-[13px] text-ink-3">A little tooth on the paper. Turn it off if scrolling feels heavy.</span>
+              </span>
+              <Checkbox checked={paperGrain} onChange={setPaperGrain} label="Paper grain" />
+            </div>
           </div>
         </section>
 

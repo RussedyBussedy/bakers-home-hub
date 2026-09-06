@@ -41,6 +41,24 @@ interface UiState {
   celebrate: (c: Omit<Celebration, 'id'>) => void
   dismissCelebration: (id: string) => void
   reduceMotion: boolean
+  /** Page turns when moving between sections (off under reduced motion). */
+  pageFlip: boolean
+  setPageFlip: (on: boolean) => void
+  /** The paper's grain overlay — one more layer to composite, so it can be switched off. */
+  paperGrain: boolean
+  setPaperGrain: (on: boolean) => void
+}
+
+function readFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key)
+    return v === null ? fallback : v === '1'
+  } catch {
+    return fallback
+  }
+}
+function writeFlag(key: string, on: boolean) {
+  try { localStorage.setItem(key, on ? '1' : '0') } catch { /* ignore */ }
 }
 
 function applyTheme(t: Theme) {
@@ -86,6 +104,10 @@ export const useUi = create<UiState>((set, get) => ({
   celebrate: (c) => set((s) => ({ celebrations: [...s.celebrations, { id: uid(), ...c }] })),
   dismissCelebration: (id) => set((s) => ({ celebrations: s.celebrations.filter((c) => c.id !== id) })),
   reduceMotion: typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  pageFlip: readFlag('hub-page-flip', true),
+  setPageFlip: (on) => { writeFlag('hub-page-flip', on); set({ pageFlip: on }) },
+  paperGrain: readFlag('hub-paper-grain', !(typeof window !== 'undefined' && (window.matchMedia('(prefers-reduced-motion: reduce)').matches || (navigator.hardwareConcurrency ?? 8) <= 4))),
+  setPaperGrain: (on) => { writeFlag('hub-paper-grain', on); set({ paperGrain: on }) },
 }))
 
 // Apply on load and follow system changes.

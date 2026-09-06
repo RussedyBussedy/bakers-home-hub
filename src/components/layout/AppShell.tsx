@@ -9,6 +9,8 @@ import { weeklyStreak } from '../../lib/xp'
 import { Avatar } from '../ui/Bits'
 import { Tooltip } from '../ui/Menu'
 import { HouseMark } from './HouseMark'
+import { PageFlip, PAGE_ROOT_ID } from './PageFlip'
+import { useUi } from '../../store/ui'
 
 const NAV = [
   { to: '/', label: 'Hub', icon: Home, end: true },
@@ -44,6 +46,7 @@ export function AppShell() {
   }, [unreadCount])
 
   const badge = (n: typeof NAV[number]) => (n.to === '/' && unreadCount > 0 ? unreadCount : 0)
+  const grain = useUi((s) => s.paperGrain)
 
   // Reserve the desktop scrollbar's space while the shell is up (see `html.in-shell` in index.css).
   useEffect(() => {
@@ -60,7 +63,9 @@ export function AppShell() {
   }, [])
 
   return (
-    <div className="min-h-dvh bg-bg">
+    <div className="min-h-dvh">
+      {/* The paper everything sits on (fixed, behind the content) */}
+      <div className={cn('paper-ground', grain && 'has-grain')} aria-hidden />
       {/* Sidebar — desktop */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-line bg-surface lg:flex">
         <div className="flex items-center gap-3 px-6 pt-7 pb-5">
@@ -120,10 +125,15 @@ export function AppShell() {
 
       {/* Content */}
       <main className="min-w-0 overflow-x-clip pb-[calc(84px+env(safe-area-inset-bottom))] short:pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-10 lg:pl-[264px]">
-        {/* Lazy pages resolve here, inside the shell — never by swapping the whole app for the splash screen. */}
-        <Suspense fallback={<div className="min-h-[60dvh]" aria-busy="true" />}>
-          <Outlet />
-        </Suspense>
+        {/* The page that turns when moving between sections (see PageFlip). */}
+        <div id={PAGE_ROOT_ID} className="min-w-0">
+          <PageFlip>
+            {/* Lazy pages resolve here, inside the shell — never by swapping the whole app for the splash screen. */}
+            <Suspense fallback={<div className="min-h-[60dvh]" aria-busy="true" />}>
+              <Outlet />
+            </Suspense>
+          </PageFlip>
+        </div>
       </main>
 
       {/* Floating add — everywhere except the board and the new-project form */}
@@ -172,11 +182,13 @@ export function AppShell() {
 /** Page wrapper: consistent gutters, max width and an entrance animation. */
 export function Page({ children, className, wide, title, back, actions }: { children: ReactNode; className?: string; wide?: boolean; title?: ReactNode; back?: boolean; actions?: ReactNode }) {
   const navigate = useNavigate()
+  // With page turns on, the page arrives on a sheet of paper and needs no entrance of its own.
+  const flips = useUi((s) => s.pageFlip && !s.reduceMotion)
   return (
     <motion.div
       className={cn('mx-auto w-full px-4 pt-4 sm:px-6 lg:px-10 lg:pt-8', wide ? 'max-w-[1400px]' : 'max-w-6xl', className)}
       // Start visible and settle, rather than flashing blank and fading in — a blink reads as flicker on a fast desktop.
-      initial={{ opacity: 0.4, y: 4 }}
+      initial={flips ? false : { opacity: 0.4, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >

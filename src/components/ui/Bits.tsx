@@ -33,7 +33,7 @@ const toneClass: Record<Tone, string> = {
   plum: 'bg-plum-soft text-plum-text',
   gold: 'bg-gold-soft text-ochre-text',
   danger: 'bg-danger-soft text-danger',
-  neutral: 'bg-surface-3 text-ink-2',
+  neutral: 'kraft',
 }
 
 export function Pill({ tone = 'neutral', children, className, dot, size = 'md' }: { tone?: Tone; children: ReactNode; className?: string; dot?: boolean; size?: 'sm' | 'md' }) {
@@ -170,10 +170,12 @@ export function Stat({ label, children, hint, className }: { label: string; chil
 /** Fade + rise in, staggered by index. */
 export function Reveal({ children, index = 0, className, as = 'div' }: { children: ReactNode; index?: number; className?: string; as?: 'div' | 'li' | 'section' }) {
   const Comp = motion[as]
+  // With page turns on, the page arrives on a sheet of paper — its parts don't need to drop in as well.
+  const flips = useUi((s) => s.pageFlip && !s.reduceMotion)
   return (
     <Comp
       className={className}
-      initial={{ opacity: 0.3, y: 8 }}
+      initial={flips ? false : { opacity: 0.3, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 12) * 0.025 }}
     >

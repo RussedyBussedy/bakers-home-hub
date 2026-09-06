@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/fraunces/full.css';
 @import '@fontsource-variable/dm-sans/opsz.css';
+@import './paper.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 /* A phone held sideways: little height to spare, so chrome gets compact. */
@@ -294,10 +295,14 @@
   transform: translateZ(0);
 }
 @utility card {
-  background: var(--surface);
+  /* white card stock: the surface colour multiplied with a fine paper texture, a bright cut edge */
+  background-color: var(--surface);
+  background-image: var(--tx-card);
+  background-size: 512px 512px;
+  background-blend-mode: multiply;
   border: 1px solid var(--line);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px rgb(255 255 255 / 0.35);
 }
 @utility card-hover {
   transition: transform 220ms var(--ease-out-expo), box-shadow 220ms var(--ease-out-expo), border-color 220ms;

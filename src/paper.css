@@ -1,0 +1,126 @@
+/* ------------------------------------------------------------------ */
+/*  Paper: real materials under the existing design.                   */
+/*  The page sits on cream paper stock, cards are cut from white card, */
+/*  small labels are kraft, and moving between sections turns a page.  */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --tx-paper: url('/textures/paper.webp');
+  --tx-card: url('/textures/card.webp');
+  --tx-kraft: url('/textures/kraft.webp');
+  --kraft-ink: #4a3318;
+  --kraft-line: rgba(90, 63, 34, 0.28);
+}
+/* `html.avif` is set by a one-off decode test in main.tsx */
+html.avif {
+  --tx-paper: url('/textures/paper.avif');
+  --tx-card: url('/textures/card.avif');
+  --tx-kraft: url('/textures/kraft.avif');
+}
+
+/* ---------- the sheet everything sits on ---------- */
+.paper-ground {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--bg);
+  background-image: var(--tx-paper);
+  background-size: 1024px 1024px;
+  background-blend-mode: multiply;
+}
+/* a little tooth on top (a setting — it's one more layer to composite) */
+.paper-ground.has-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.3;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-theme='dark'] .paper-ground { background-blend-mode: soft-light; }
+[data-theme='dark'] .paper-ground.has-grain::after { opacity: 0.18; }
+
+/* ---------- kraft labels ---------- */
+.kraft {
+  background-color: #cfae7d;
+  background-image: var(--tx-kraft);
+  background-size: 320px 320px;
+  color: var(--kraft-ink);
+  border-color: var(--kraft-line);
+}
+.kraft-tag {
+  background-color: #cfae7d;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0) 40%, rgba(60, 40, 20, 0.08)), var(--tx-kraft);
+  background-size: auto, 360px 360px;
+  color: var(--kraft-ink);
+  border-color: var(--kraft-line);
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.25), 0 12px 24px -10px rgba(60, 40, 20, 0.5);
+}
+.kraft-tag .text-ink-2, .kraft-tag .text-ink-3 { color: #6b4e2c; }
+
+/* ---------- the page turn (built imperatively in PageFlip.tsx) ---------- */
+.flip-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+.flip-cast {
+  position: absolute;
+  opacity: 0;
+  background: linear-gradient(90deg, rgba(20, 10, 5, 0.55), rgba(20, 10, 5, 0.25) 30%, rgba(20, 10, 5, 0) 66%);
+}
+.flip-sheet {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.flip-hinge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.flip-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+}
+.flip-paper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background-color: var(--bg);
+  background-image: var(--tx-paper);
+  background-size: 1024px 1024px;
+  background-blend-mode: multiply;
+}
+.flip-paper > * { min-height: 0; }
+.flip-shade {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: rgb(30, 18, 8);
+}
+.flip-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background-color: var(--surface-2);
+  background-image: linear-gradient(90deg, rgba(60, 40, 20, 0.16), rgba(60, 40, 20, 0) 40%, rgba(60, 40, 20, 0.06)), var(--tx-paper);
+  background-size: auto, 1024px 1024px;
+  background-blend-mode: normal, multiply;
+}
