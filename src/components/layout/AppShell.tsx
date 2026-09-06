@@ -126,7 +126,7 @@ export function AppShell() {
       {/* Content */}
       <main className="min-w-0 overflow-x-clip pb-[calc(84px+env(safe-area-inset-bottom))] short:pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-10 lg:pl-[264px]">
         {/* The page that turns when moving between sections (see PageFlip). */}
-        <div id={PAGE_ROOT_ID} className="min-w-0">
+        <div id={PAGE_ROOT_ID} className="ruled min-h-[100dvh] min-w-0">
           <PageFlip>
             {/* Lazy pages resolve here, inside the shell — never by swapping the whole app for the splash screen. */}
             <Suspense fallback={<div className="min-h-[60dvh]" aria-busy="true" />}>

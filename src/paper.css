@@ -41,6 +41,25 @@ html.avif {
 [data-theme='dark'] .paper-ground { background-blend-mode: soft-light; }
 [data-theme='dark'] .paper-ground.has-grain::after { opacity: 0.18; }
 
+/* ---------- journal rules on the page ---------- */
+/* On the content area itself (not the fixed ground) so the lines scroll with what's written on them;
+   the page turn clones the same element, so a turning page keeps its rules. */
+.ruled {
+  --rule: rgba(120, 150, 190, 0.2);
+  --margin-line: rgba(200, 60, 60, 0.22);
+  --margin-x: 11px; /* inside the phone's 16px gutter */
+  --rule-offset: 14px;
+  background-image:
+    linear-gradient(90deg, transparent calc(var(--margin-x) - 1px), var(--margin-line) calc(var(--margin-x) - 1px), var(--margin-line) var(--margin-x), transparent var(--margin-x)),
+    repeating-linear-gradient(180deg, transparent 0 31px, var(--rule) 31px 32px);
+  background-repeat: no-repeat, repeat;
+  background-position: 0 0, 0 var(--rule-offset);
+}
+@media (min-width: 1024px) {
+  .ruled { --margin-x: 30px; --rule-offset: 18px; }
+}
+[data-theme='dark'] .ruled { --rule: rgba(150, 170, 200, 0.14); --margin-line: rgba(220, 90, 90, 0.2); }
+
 /* ---------- kraft labels ---------- */
 .kraft {
   background-color: #cfae7d;
