@@ -65,6 +65,7 @@ export function Binder({ children, badges }: { children: ReactNode; badges?: Par
           </div>
         </div>
         <span className="binder-holes" />
+        {grain && <div className="binder-crumple" />}
         {grain && <div className="binder-grain" />}
       </div>
 

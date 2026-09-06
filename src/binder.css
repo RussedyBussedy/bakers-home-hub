@@ -61,12 +61,12 @@
 .binder-page,
 .binder-tab,
 .flip-paper,
-.flip-back { --tx-leather: url('/textures/leather.webp'); --tx-paper: url('/textures/paper.webp'); }
+.flip-back { --tx-leather: url('/textures/leather.webp'); --tx-paper: url('/textures/paper.webp'); --tx-crumple: url('/textures/crumple.webp'); }
 html.avif .binder-cover,
 html.avif .binder-page,
 html.avif .binder-tab,
 html.avif .flip-paper,
-html.avif .flip-back { --tx-leather: url('/textures/leather.avif'); --tx-paper: url('/textures/paper.avif'); }
+html.avif .flip-back { --tx-leather: url('/textures/leather.avif'); --tx-paper: url('/textures/paper.avif'); --tx-crumple: url('/textures/crumple.avif'); }
 
 /* ---------- the cover ---------- */
 .binder {
@@ -284,7 +284,8 @@ html.avif .flip-back { --tx-leather: url('/textures/leather.avif'); --tx-paper: 
   pointer-events: none;
   background: repeating-linear-gradient(180deg, transparent 0 80px, rgba(0, 0, 0, 0.18) 80px 88px);
 }
-/* paper grain (a user setting; off under reduced motion / low-end) */
+/* paper grain (a user setting; off under reduced motion / low-end): creases from a crumpled sheet
+   (ambientCG Paper003, CC0) under a fine noise */
 .binder-grain {
   position: absolute;
   inset: 0;
@@ -293,6 +294,16 @@ html.avif .flip-back { --tx-leather: url('/textures/leather.avif'); --tx-paper: 
   opacity: 0.45;
   mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.binder-crumple {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.14;
+  mix-blend-mode: multiply;
+  background-image: var(--tx-crumple);
+  background-size: 640px 640px;
 }
 /* what scrolls: the ruled sheet with the app's content written on it */
 .page-scroll {
