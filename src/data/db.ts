@@ -1,6 +1,6 @@
 import type {
   Achievement, BoardItem, Contact, Expense, HouseholdBundle, NewBoardItem, NewContact, NewExpense,
-  Invite, InvitePreview, NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent,
+  Invite, InvitePreview, NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent,
 } from './types'
 
 export type ChangeTable =
@@ -111,6 +111,7 @@ export interface Db {
   // ---- the web -----------------------------------------------------
   /** Reads a pasted product page and returns its title, price and picture. */
   unfurl(url: string): Promise<Unfurled>
+  searchProducts(q: string): Promise<ProductHit[]>
 
   // ---- media -------------------------------------------------------
   /** Uploads a blob and returns the storage path to persist. */

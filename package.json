@@ -16,7 +16,8 @@
     "scrollcheck": "node scripts/scrollcheck.mjs",
     "unfurl-test": "npx --yes vite-node scripts/unfurl-test.mts",
     "hometitle-test": "npx --yes vite-node scripts/hometitle-test.mts",
-    "currency-test": "npx --yes vite-node scripts/currency-test.mts"
+    "currency-test": "npx --yes vite-node scripts/currency-test.mts",
+    "search-test": "npx --yes vite-node scripts/search-test.mts"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

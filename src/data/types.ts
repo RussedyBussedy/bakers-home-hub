@@ -237,6 +237,16 @@ export interface ProductData {
 }
 
 /** What the `unfurl` edge function makes of a pasted product page. */
+/** One thing found by a product search — enough to show a card, before the page itself is read. */
+export interface ProductHit {
+  title: string
+  url: string
+  domain: string
+  snippet: string
+  /** A shop the Hub knows sells this sort of thing, so it sits above the rest. */
+  favoured: boolean
+}
+
 export interface Unfurled {
   url: string
   domain: string

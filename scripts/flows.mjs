@@ -213,6 +213,9 @@ await step('prices: add one from a link, keep it out of the money figures', asyn
   await page.getByRole('button', { name: 'Add a price' }).first().click()
   await page.waitForTimeout(400)
   const sheet = page.locator('[role=dialog]')
+  // A new price now opens on the search box, so pasting a link is a deliberate switch.
+  await sheet.getByRole('tab', { name: /Paste a link/ }).click()
+  await page.waitForTimeout(300)
   await sheet.getByLabel('Link', { exact: true }).fill('https://leroymerlin.co.za/tap/matte-black-mixer')
   await sheet.getByRole('button', { name: 'Fetch' }).click()
   await page.waitForTimeout(1400)
@@ -251,6 +254,45 @@ await step('prices: pinning one puts it on the board', async () => {
   const n2 = Number((await boardTab.innerText()).replace(/\D+/g, '')) || 0
   if (n2 !== n + 1) throw new Error(`board count ${n} -> ${n2}, expected ${n + 1}`)
   if (!(await page.locator('text=On the board').count())) throw new Error('no "On the board" badge on the card')
+})
+
+await step('prices: search the shops, pick one, and it fills the form', async () => {
+  await page.goto(base + '/projects/p-kitchen?tab=prices', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(700)
+  await page.getByRole('button', { name: 'Add a price' }).first().click()
+  await page.waitForTimeout(400)
+  const sheet = page.locator('[role=dialog]')
+
+  await sheet.getByLabel('Search for a product').fill('brass cabinet handle')
+  await sheet.getByRole('button', { name: 'Search', exact: true }).click()
+  const cards = sheet.locator('ul.grid > li > button')
+  await cards.first().waitFor({ timeout: 15000 })
+  const n = await cards.count()
+  if (n < 4) throw new Error(`only ${n} results came back`)
+
+  // The shops we know sit above the rest, and the rest are marked as such.
+  const first = await cards.first().innerText()
+  if (!/builders\.co\.za/.test(first)) throw new Error(`a known shop should lead, got: ${first.replace(/\n/g, ' | ')}`)
+  if (!(await sheet.locator('text=Elsewhere').count())) throw new Error('no divider before the shops we do not know')
+
+  // Give the background page-reading a moment, then the cards should carry pictures and prices.
+  await page.waitForTimeout(2500)
+  const withPrice = await sheet.locator('ul.grid > li > button', { hasText: /R\s?\d/ }).count()
+  if (withPrice < 3) throw new Error(`only ${withPrice} cards showed a price`)
+  if (!(await sheet.locator('ul.grid img').first().isVisible())) throw new Error('no picture on the first card')
+  await shot('06c-product-search')
+
+  await cards.first().click()
+  await page.waitForTimeout(900)
+  if (!(await sheet.locator('text=Found at').count())) throw new Error('no "found at" line after picking')
+  const title = await sheet.getByLabel('What is it').inputValue()
+  if (!/handle/i.test(title)) throw new Error(`the name did not come across: "${title}"`)
+  const price = await sheet.getByLabel('Price', { exact: true }).inputValue()
+  if (!Number(price)) throw new Error(`the price did not come across: "${price}"`)
+
+  await sheet.getByRole('button', { name: 'Add it' }).click()
+  await page.waitForTimeout(1200)
+  if (!(await page.locator(`text=${title}`).count())) throw new Error('the searched item is not in the list')
 })
 
 await step('contacts: add via paste details', async () => {

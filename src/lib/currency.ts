@@ -32,6 +32,8 @@ export interface Currency {
   lakh?: boolean
   /** ISO-3166 country codes that spend it. */
   regions?: string[]
+  /** The principal one, when it isn't the first listed — used to aim a product search. */
+  home?: string
   /** IANA time zones in those countries — the strongest hint about where a device is. */
   zones?: string[]
 }
@@ -43,7 +45,7 @@ const THIN = ' '
 export const CURRENCIES: Currency[] = [
   { code: 'ZAR', symbol: 'R', name: 'South African rand', space: true, group: THIN, regions: ['ZA'], zones: ['Africa/Johannesburg'] },
   { code: 'USD', symbol: '$', name: 'US dollar', regions: ['US', 'EC', 'SV', 'PA', 'PR', 'TL', 'ZW', 'VG', 'TC', 'MH', 'FM', 'PW', 'GU'], zones: ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'America/Detroit', 'America/Indiana/Indianapolis', 'Pacific/Honolulu', 'Africa/Harare', 'America/Panama', 'America/Guayaquil'] },
-  { code: 'EUR', symbol: '€', name: 'Euro', group: THIN, regions: ['AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK', 'MC', 'AD', 'SM', 'VA', 'ME', 'XK'], zones: ['Europe/Berlin', 'Europe/Paris', 'Europe/Madrid', 'Europe/Rome', 'Europe/Amsterdam', 'Europe/Dublin', 'Europe/Lisbon', 'Europe/Brussels', 'Europe/Vienna', 'Europe/Athens', 'Europe/Helsinki', 'Atlantic/Canary'] },
+  { code: 'EUR', symbol: '€', name: 'Euro', group: THIN, home: 'DE', regions: ['AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK', 'MC', 'AD', 'SM', 'VA', 'ME', 'XK'], zones: ['Europe/Berlin', 'Europe/Paris', 'Europe/Madrid', 'Europe/Rome', 'Europe/Amsterdam', 'Europe/Dublin', 'Europe/Lisbon', 'Europe/Brussels', 'Europe/Vienna', 'Europe/Athens', 'Europe/Helsinki', 'Atlantic/Canary'] },
   { code: 'GBP', symbol: '£', name: 'Pound sterling', regions: ['GB', 'IM', 'JE', 'GG'], zones: ['Europe/London', 'Europe/Belfast'] },
   { code: 'AUD', symbol: 'A$', name: 'Australian dollar', regions: ['AU', 'NR', 'TV', 'KI', 'CX', 'CC'], zones: ['Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane', 'Australia/Perth', 'Australia/Adelaide', 'Australia/Darwin', 'Australia/Hobart'] },
   { code: 'NZD', symbol: 'NZ$', name: 'New Zealand dollar', regions: ['NZ', 'CK', 'NU', 'PN'], zones: ['Pacific/Auckland', 'Pacific/Chatham'] },
@@ -247,6 +249,15 @@ export function setActiveCurrency(code: string | null | undefined): void {
 function subscribe(fn: () => void): () => void {
   listeners.add(fn)
   return () => { listeners.delete(fn) }
+}
+
+/**
+ * The country to aim a product search at. It follows the home's currency rather than the device,
+ * for the same reason the prices do: someone searching from a hotel in Dubai is still shopping for
+ * a house in Johannesburg.
+ */
+export function searchCountry(cur: Currency = active): string | null {
+  return (cur.home ?? cur.regions?.[0])?.toLowerCase() ?? null
 }
 
 /** Re-renders when the home's currency changes — for the symbol inside an input, and the picker. */

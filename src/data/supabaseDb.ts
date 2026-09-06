@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
-import { guessCurrencyCode } from '../lib/currency'
-import type { Achievement, BoardItem, Contact, Expense, Household, Invite, InvitePreview, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
+import { guessCurrencyCode, searchCountry } from '../lib/currency'
+import type { Achievement, BoardItem, Contact, Expense, Household, Invite, InvitePreview, Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -294,6 +294,16 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       if (!data) throw new Error('The link reader sent nothing back.')
       if (data.error) throw new Error(data.error)
       return data
+    },
+    async searchProducts(q) {
+      const { data, error } = await sb.functions.invoke<{ results?: ProductHit[]; error?: string }>(
+        'search',
+        { body: { q, country: searchCountry() } },
+      )
+      if (error) throw new Error('Could not reach product search. Is the "search" function deployed?')
+      if (!data) throw new Error('Search sent nothing back.')
+      if (data.error) throw new Error(data.error)
+      return data.results ?? []
     },
     async upload(blob, path) {
       const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false })

@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ExternalLink, ImageOff, Loader2, MoreHorizontal, Palette, Plus, Search, ShoppingBag, Tag, Trash2 } from 'lucide-react'
+import { ExternalLink, ImageOff, Link2, Loader2, MoreHorizontal, Palette, Plus, Search, ShoppingBag, Tag, Trash2 } from 'lucide-react'
 import type { BoardItem, Project, ProductData } from '../../data/types'
 import { DEFAULT_SIZES } from '../board/Pins'
 import { useActions, useMediaUrl } from '../../data/hooks'
@@ -12,9 +12,10 @@ import { useCurrency } from '../../lib/currency'
 import { cn, domainOf, money, normaliseUrl, pluralise } from '../../lib/utils'
 import { EmptyState, Money, Pill } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
-import { Field, Input } from '../ui/Field'
+import { Field, Input, Segmented } from '../ui/Field'
 import { Menu, MenuItem, MenuSeparator } from '../ui/Menu'
 import { Sheet, useConfirm } from '../ui/Sheet'
+import { ChosenLine, ProductSearch, type Found } from '../shop/ProductSearch'
 
 /**
  * Prices: what things cost, gathered from links — deliberately not quotes. Nothing here touches the
@@ -146,6 +147,9 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // Searching is the way in for something new; editing an existing card starts on its link.
+  const [how, setHow] = useState<'search' | 'link'>(item ? 'link' : 'search')
+  const [chosen, setChosen] = useState<Found | null>(null)
   const storedPreview = useMediaUrl(d.image_path ?? null)
   const preview = d.image ?? storedPreview ?? d.image_url ?? null
 
@@ -173,6 +177,27 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Could not read that page. You can still fill it in by hand.')
     } finally { setLooking(false) }
+  }
+
+  /**
+   * A search result was chosen. Whatever its card already knows goes straight into the form; if its
+   * page hadn't been read yet (the slow shops, or one further down the grid) it gets read now, so
+   * nobody is left staring at an empty price.
+   */
+  const pick = (f: Found) => {
+    setChosen(f)
+    setErr(null); setNote(null)
+    setD((s) => ({
+      ...s,
+      url: f.url,
+      title: f.title,
+      price: f.price != null ? String(f.price) : '',
+      supplier: f.supplier,
+      image: f.image ?? null,
+      image_url: f.image ? undefined : (f.imageUrl ?? undefined),
+      image_path: undefined,
+    }))
+    if (f.price == null || !f.image) void look(f.url)
   }
 
   const save = async (e: FormEvent) => {
@@ -211,24 +236,39 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
       open={open}
       onOpenChange={onOpenChange}
       title={item ? 'Edit this price' : 'Add a price'}
-      description="Paste a link and the name, picture and price come with it."
+      description="Search the shops, or paste a link — the name, picture and price come with it."
       footer={<><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={save} loading={busy}>{item ? 'Save' : 'Add it'}</Button></>}
     >
       <form onSubmit={save} className="flex flex-col gap-4 pt-1">
-        <Field label="Link" hint="A shop page, a marketplace listing — anything with a price on it.">
-          {(id) => (
-            <div className="flex gap-2">
-              <Input
-                id={id} type="url" inputMode="url" value={d.url} autoFocus={!item}
-                onChange={(e) => setD((s) => ({ ...s, url: e.target.value }))}
-                onBlur={(e) => { if (!item && e.target.value.trim() && !d.title.trim()) void look(e.target.value) }}
-                placeholder="https://"
-                className="flex-1"
-              />
-              <Button variant="secondary" onClick={() => look()} loading={looking} disabled={!d.url.trim()} leading={looking ? undefined : <Search className="size-4" />}>Fetch</Button>
-            </div>
-          )}
-        </Field>
+        <Segmented<'search' | 'link'>
+          value={how}
+          onChange={(v) => { setHow(v); setNote(null) }}
+          options={[
+            { value: 'search', label: <span className="inline-flex items-center gap-1.5"><Search className="size-4" /> Search shops</span> },
+            { value: 'link', label: <span className="inline-flex items-center gap-1.5"><Link2 className="size-4" /> Paste a link</span> },
+          ]}
+        />
+
+        {how === 'search' && (chosen
+          ? <ChosenLine found={chosen} onClear={() => setChosen(null)} />
+          : <ProductSearch onPick={pick} autoFocus={!item} />)}
+
+        {how === 'link' && (
+          <Field label="Link" hint="A shop page, a marketplace listing — anything with a price on it.">
+            {(id) => (
+              <div className="flex gap-2">
+                <Input
+                  id={id} type="url" inputMode="url" value={d.url} autoFocus={!item}
+                  onChange={(e) => setD((s) => ({ ...s, url: e.target.value }))}
+                  onBlur={(e) => { if (!item && e.target.value.trim() && !d.title.trim()) void look(e.target.value) }}
+                  placeholder="https://"
+                  className="flex-1"
+                />
+                <Button variant="secondary" onClick={() => look()} loading={looking} disabled={!d.url.trim()} leading={looking ? undefined : <Search className="size-4" />}>Fetch</Button>
+              </div>
+            )}
+          </Field>
+        )}
 
         {(preview || looking) && (
           <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface-2 p-3">

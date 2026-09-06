@@ -48,3 +48,12 @@ export function pickFiles(accept = 'image/*', multiple = false, capture?: 'envir
     input.click()
   })
 }
+
+/** A data: URL turned back into a File, so anything fetched can go down the normal upload path. */
+export async function fileFromDataUrl(dataUrl: string, name = 'product.jpg'): Promise<File | null> {
+  try {
+    const blob = await (await fetch(dataUrl)).blob()
+    const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')
+    return new File([blob], name.replace(/\.\w+$/, '') + '.' + ext, { type: blob.type || 'image/jpeg' })
+  } catch { return null }
+}

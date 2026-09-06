@@ -442,6 +442,30 @@ export function createDemoDb(): Db {
       } catch { /* no canvas — the card falls back to the site's icon */ }
       return { url: clean, domain: host, title, price, currency: 'ZAR', supplier, image, imageUrl: null } satisfies Unfurled
     },
+    async searchProducts(q) {
+      // No search key in demo mode: hand back a believable South African shelf so the whole
+      // find-it-and-add-it flow can be walked through (and tested) offline.
+      await new Promise((r) => setTimeout(r, 500))
+      const term = q.trim().replace(/\s+/g, ' ')
+      if (term.length < 2) return []
+      const slug = term.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const Title = term.replace(/\b\w/g, (c) => c.toUpperCase())
+      const shops: { domain: string; name: string; dressing: string; favoured: boolean }[] = [
+        { domain: 'builders.co.za', name: 'Builders', dressing: '', favoured: true },
+        { domain: 'leroymerlin.co.za', name: 'Leroy Merlin', dressing: ' — Brushed Finish', favoured: true },
+        { domain: 'takealot.com', name: 'Takealot', dressing: ' (Pack of 2)', favoured: true },
+        { domain: 'gelmar.co.za', name: 'Gelmar', dressing: ' 160mm', favoured: true },
+        { domain: 'chamberlains.co.za', name: 'Chamberlains', dressing: ' Heavy Duty', favoured: true },
+        { domain: 'thelittlehardwareshop.co.za', name: 'The Little Hardware Shop', dressing: ' — Imported', favoured: false },
+      ]
+      return shops.map((shop) => ({
+        title: `${Title}${shop.dressing} | ${shop.name}`,
+        url: `https://www.${shop.domain}/p/${slug}`,
+        domain: shop.domain,
+        snippet: `Shop ${term} at ${shop.name}. Delivery countrywide, collect in store.`,
+        favoured: shop.favoured,
+      }))
+    },
     async upload(blob) {
       // Store as a data URL so it survives a refresh (within localStorage limits).
       return new Promise<string>((resolve, reject) => {

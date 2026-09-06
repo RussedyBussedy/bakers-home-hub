@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Check, ImagePlus } from 'lucide-react'
+import { Check, ImagePlus, Link2, Search } from 'lucide-react'
 import type { BoardItem, BoardItemData, BoardItemType, ColorData, LabelData, LinkData, NoteData, PhotoData, ProductData } from '../../data/types'
 import { CURATED_PALETTES, isHex, normaliseHex, textOn } from '../../lib/colors'
 import { bestName, closeness, loadColorNames, nearestNames, nearestRal, onColorNamesLoaded, ralLabel } from '../../lib/colorNames'
 import { useCurrency } from '../../lib/currency'
+import { fileFromDataUrl } from '../../lib/images'
 import { cn, domainOf, normaliseUrl } from '../../lib/utils'
 import { Button } from '../ui/Button'
-import { Field, Input, Select, Textarea } from '../ui/Field'
+import { Field, Input, Segmented, Select, Textarea } from '../ui/Field'
 import { Sheet } from '../ui/Sheet'
+import { ChosenLine, ProductSearch, type Found } from '../shop/ProductSearch'
 import { NOTE_TINTS } from './Pins'
 
 export interface PinDraft { type: BoardItemType; data: BoardItemData; imageFile?: File | null }
@@ -105,9 +107,32 @@ function LinkFields({ data, onChange, error }: { data: LinkData; onChange: (d: L
 
 function ProductFields({ data, onChange, error, file, setFile }: { data: ProductData; onChange: (d: ProductData) => void; error: string | null; file: File | null; setFile: (f: File | null) => void }) {
   const cur = useCurrency()
+  // Something already filled in came from somewhere — don't shove a search box in front of it.
+  const [how, setHow] = useState<'search' | 'own'>(data.title ? 'own' : 'search')
+  const [chosen, setChosen] = useState<Found | null>(null)
+
+  const pick = async (f: Found) => {
+    setChosen(f)
+    onChange({ ...data, title: f.title, price: f.price, supplier: f.supplier, url: f.url, image_url: f.image ? undefined : (f.imageUrl ?? undefined) })
+    // Keep our own copy of the picture, the same as a photo added by hand: the shop's can vanish.
+    if (f.image) setFile(await fileFromDataUrl(f.image, f.title || 'product'))
+  }
+
   return (
     <>
-      <Field label="Product" required error={error ?? undefined}>{(id) => <Input id={id} value={data.title} onChange={(e) => onChange({ ...data, title: e.target.value })} placeholder="Brass bar handle 160mm" autoFocus />}</Field>
+      <Segmented<'search' | 'own'>
+        value={how}
+        onChange={setHow}
+        options={[
+          { value: 'search', label: <span className="inline-flex items-center gap-1.5"><Search className="size-4" /> Search shops</span> },
+          { value: 'own', label: <span className="inline-flex items-center gap-1.5"><Link2 className="size-4" /> Fill it in myself</span> },
+        ]}
+      />
+      {how === 'search' && (chosen
+        ? <ChosenLine found={chosen} onClear={() => setChosen(null)} />
+        : <ProductSearch onPick={(f) => void pick(f)} autoFocus />)}
+
+      <Field label="Product" required error={error ?? undefined}>{(id) => <Input id={id} value={data.title} onChange={(e) => onChange({ ...data, title: e.target.value })} placeholder="Brass bar handle 160mm" autoFocus={how === 'own'} />}</Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Price">{(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" value={data.price ?? ''} onChange={(e) => onChange({ ...data, price: e.target.value === '' ? null : Number(e.target.value.replace(/[^\d.]/g, '')) || 0 })} placeholder="0" />}</Field>
         <Field label="Supplier">{(id) => <Input id={id} value={data.supplier ?? ''} onChange={(e) => onChange({ ...data, supplier: e.target.value })} placeholder="Builders" />}</Field>
