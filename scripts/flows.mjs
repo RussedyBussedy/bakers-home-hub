@@ -455,6 +455,44 @@ await step('settings: calm movement sticks and stops the entrance animation', as
   if (await page.evaluate(() => localStorage.getItem('hub-motion')) !== 'full') throw new Error('could not switch back')
 })
 
+await step('settings: the currency switches the whole app, and converts nothing', async () => {
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  const picker = page.getByLabel('Currency')
+  if (await picker.inputValue() !== 'ZAR') throw new Error('the demo home should start in rand')
+
+  // A figure to watch: whatever the kitchen's budget reads in rand.
+  await page.goto(base + '/projects/p-kitchen?tab=money', { waitUntil: 'networkidle' })
+  const spent = page.locator('text=Real cost so far').locator('xpath=following-sibling::*[1]').first()
+  const inRand = await settledText(spent)
+  if (!inRand.startsWith('R')) throw new Error(`expected rand, got ${inRand}`)
+
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  await page.getByLabel('Currency').selectOption('USD')
+  await page.waitForTimeout(900)
+  if (!/\$1,234,567/.test(await page.locator('section', { hasText: 'How it reads' }).innerText())) throw new Error('the sample did not switch to dollars')
+
+  await page.goto(base + '/projects/p-kitchen?tab=money', { waitUntil: 'networkidle' })
+  const inDollars = await settledText(spent)
+  if (!inDollars.startsWith('$')) throw new Error(`still not dollars: ${inDollars}`)
+  // Same number, different symbol — nothing may be converted behind anyone's back.
+  const digits = (t) => t.replace(/\D+/g, '')
+  if (digits(inDollars) !== digits(inRand)) throw new Error(`the figure itself changed: ${inRand} -> ${inDollars}`)
+  await shot('09-currency-usd')
+
+  // And the input prefixes follow it.
+  await page.getByRole('button', { name: 'Log', exact: true }).first().click()
+  await page.waitForTimeout(500)
+  const prefix = page.locator('[role=dialog] span', { hasText: /^\$$/ })
+  if (!(await prefix.count())) throw new Error('the amount box still shows the old symbol')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+
+  await page.goto(base + '/settings', { waitUntil: 'networkidle' })
+  await page.getByLabel('Currency').selectOption('ZAR')
+  await page.waitForTimeout(700)
+  if (await page.getByLabel('Currency').inputValue() !== 'ZAR') throw new Error('could not switch back')
+})
+
 console.log(errors.length ? `\n${errors.length} errors:\n${errors.join('\n')}` : '\nNo console/page errors.')
 await browser.close()
 if (failed || errors.length) process.exit(1)

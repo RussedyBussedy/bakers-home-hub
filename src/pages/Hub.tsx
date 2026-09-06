@@ -11,7 +11,7 @@ import { Page } from '../components/layout/AppShell'
 import { useAuth } from '../data/session'
 import { useActions, useEverything, useLevel } from '../data/hooks'
 import { ACHIEVEMENTS, XP_RULES, projectCosts, weeklyStreak } from '../lib/xp'
-import { cn, fmtRelative, greeting, homeTitle, money, pluralise, todayISO } from '../lib/utils'
+import { cn, fmtRelative, greeting, homeTitle, money, num, pluralise, todayISO } from '../lib/utils'
 import { ProjectCard } from '../components/project/ProjectCard'
 import { Avatar, CountUp, EmptyState, Reveal, SectionTitle, Skeleton } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
@@ -100,7 +100,7 @@ export default function HubPage() {
                 <span className="font-display-tight text-[64px] leading-none sm:text-[80px]"><CountUp value={level.level} /></span>
                 <div className="pb-2">
                   <p className="font-display text-2xl leading-tight sm:text-3xl">{level.title}</p>
-                  <p className="mt-1 text-sm text-[#f6f1e9]/70"><CountUp value={level.current} /> XP{level.next ? ` · ${level.toNext.toLocaleString('en-ZA')} to next level` : ''}</p>
+                  <p className="mt-1 text-sm text-[#f6f1e9]/70"><CountUp value={level.current} /> XP{level.next ? ` · ${num(level.toNext)} to next level` : ''}</p>
                 </div>
               </div>
               <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-[#f6f1e9]/15">
@@ -117,7 +117,7 @@ export default function HubPage() {
                 <div key={p.id}>
                   <div className="flex items-center justify-between text-sm">
                     <span className="flex items-center gap-2"><Avatar name={p.display_name} color={p.color} size="xs" /> {p.display_name}</span>
-                    <span className="tabular font-semibold">{(monthXp[p.id] ?? 0).toLocaleString('en-ZA')} XP</span>
+                    <span className="tabular font-semibold">{num(monthXp[p.id] ?? 0)} XP</span>
                   </div>
                   <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#f6f1e9]/15">
                     <motion.div className="h-full rounded-full" style={{ background: p.color }} initial={{ width: 0 }} animate={{ width: `${((monthXp[p.id] ?? 0) / monthMax) * 100}%` }} transition={{ duration: 1, delay: 0.3 + i * 0.1, ease: [0.16, 1, 0.3, 1] }} />

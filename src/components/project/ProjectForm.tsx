@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, ImagePlus, X } from 'lucide-react'
 import type { NewProject, Project } from '../../data/types'
 import { CATEGORIES, PROJECT_STATUSES, ROOMS } from '../../data/types'
+import { useCurrency } from '../../lib/currency'
 import { cn, todayISO } from '../../lib/utils'
 import { textOn } from '../../lib/colors'
 import { Button } from '../ui/Button'
@@ -30,6 +31,7 @@ export function fromProject(p: Project): ProjectFormValue {
 }
 
 export function ProjectFormFields({ value, onChange, errors }: { value: ProjectFormValue; onChange: (v: ProjectFormValue) => void; errors: Partial<Record<keyof ProjectFormValue, string>> }) {
+  const cur = useCurrency()
   const set = <K extends keyof ProjectFormValue>(k: K, v: ProjectFormValue[K]) => onChange({ ...value, [k]: v })
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -119,7 +121,7 @@ export function ProjectFormFields({ value, onChange, errors }: { value: ProjectF
       </div>
 
       <Field label="Budget estimate" hint="Your honest guess. Real quotes and expenses get tracked against it." error={errors.budget_estimate}>
-        {(id) => <Input id={id} prefix="R" inputMode="decimal" value={value.budget_estimate || ''} onChange={(e) => set('budget_estimate', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" />}
+        {(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" value={value.budget_estimate || ''} onChange={(e) => set('budget_estimate', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" />}
       </Field>
 
       <div className="grid grid-cols-2 gap-3">

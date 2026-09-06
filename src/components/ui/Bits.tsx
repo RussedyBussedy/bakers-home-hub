@@ -1,7 +1,7 @@
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { PROJECT_STATUSES, type ProjectStatus, type Tone } from '../../data/types'
-import { cn, initials, money } from '../../lib/utils'
+import { cn, initials, money, num } from '../../lib/utils'
 import { textOn } from '../../lib/colors'
 import { useCalm, useUi } from '../../store/ui'
 
@@ -108,7 +108,7 @@ export function BudgetBar({ budget, real, className, height = 10 }: { budget: nu
 // ---------------------------------------------------------------------------
 const SESSION_START = typeof performance !== 'undefined' ? performance.now() : 0
 /** Numbers count up on the first screen of a session; after that they appear settled and only animate when they change. */
-export function CountUp({ value, format = (n) => Math.round(n).toLocaleString('en-ZA'), className, duration = 0.9 }: { value: number; format?: (n: number) => string; className?: string; duration?: number }) {
+export function CountUp({ value, format = (n) => num(n), className, duration = 0.9 }: { value: number; format?: (n: number) => string; className?: string; duration?: number }) {
   const ref = useRef<HTMLSpanElement>(null)
   const reduce = useUi((s) => s.reduceMotion)
   const settled = useRef(reduce || performance.now() - SESSION_START > 6000)

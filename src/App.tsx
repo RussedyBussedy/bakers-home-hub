@@ -3,6 +3,7 @@ import { MotionConfig } from 'framer-motion'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider, DbProvider, useAuth } from './data/session'
 import { useUi } from './store/ui'
+import { useCurrency } from './lib/currency'
 import { AppShell } from './components/layout/AppShell'
 import { Celebrations, Toasts, XpPops } from './components/ui/Feedback'
 import { ConfirmHost, PromptHost } from './components/ui/Sheet'
@@ -42,6 +43,9 @@ export default function App() {
   // 'calm' turns every animation off, whatever the machine is set to — an escape hatch for a browser
   // that makes the movement look like flickering.
   const calm = useUi((s) => s.motion) === 'calm'
+  // money() is a plain function, so nothing re-renders on its own when the home's currency changes.
+  // Subscribing at the top repaints every screen at once — it happens about once per home.
+  useCurrency()
   return (
     <DbProvider>
       <AuthProvider>

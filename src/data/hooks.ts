@@ -512,6 +512,14 @@ export function useActions() {
     } catch (e) { return fail(e, 'rename the home') }
   }, [db, household, qc, fail])
 
+  const setHouseholdCurrency = useCallback(async (code: string) => {
+    if (!household) throw new Error('Not signed in')
+    try {
+      await db.setHouseholdCurrency(household.id, code)
+      await qc.invalidateQueries({ queryKey: ['bundle'] })
+    } catch (e) { return fail(e, 'change the currency') }
+  }, [db, household, qc, fail])
+
   const markNudgesRead = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return
     const now = new Date().toISOString()
@@ -577,7 +585,7 @@ export function useActions() {
     logVisit, updateVisit, deleteVisit, setBlocker,
     addBoardItem, updateBoardItem, updateBoardItems, deleteBoardItem,
     sendNudge, markNudgesRead, deleteNudge,
-    inviteSomeone, cancelInvite, removeMember, renameHousehold, leaveHome,
+    inviteSomeone, cancelInvite, removeMember, renameHousehold, setHouseholdCurrency, leaveHome,
   }
 }
 

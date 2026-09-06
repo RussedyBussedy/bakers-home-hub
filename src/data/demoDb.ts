@@ -16,7 +16,11 @@ function load(): DemoState {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as DemoState
-      if (parsed && parsed.projects && parsed.household) return parsed
+      if (parsed && parsed.projects && parsed.household) {
+        // A demo saved before the app knew about currencies: it was rand.
+        parsed.household.currency ||= 'ZAR'
+        return parsed
+      }
     }
   } catch {
     /* ignore */
@@ -120,6 +124,9 @@ export function createDemoDb(): Db {
 
     async renameHousehold(_id, name) {
       return mutate('profiles', 'UPDATE', () => { state.household.name = name })
+    },
+    async setHouseholdCurrency(_id, code) {
+      return mutate('profiles', 'UPDATE', () => { state.household.currency = code })
     },
     async removeMember(userId) {
       return mutate('profiles', 'DELETE', () => { state.profiles = state.profiles.filter((p) => p.id !== userId) })

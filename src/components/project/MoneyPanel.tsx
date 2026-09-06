@@ -8,6 +8,7 @@ import { EXPENSE_CATEGORIES, QUOTE_PAYMENT_CATEGORY } from '../../data/types'
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { projectCosts, quoteExpiry, quoteProgress } from '../../lib/xp'
+import { useCurrency } from '../../lib/currency'
 import { cn, fmtDate, money, pluralise, todayISO } from '../../lib/utils'
 import { Avatar, BudgetBar, EmptyState, Money, Pill } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
@@ -253,6 +254,7 @@ function AttachField({ id, file, existing, onFile, label }: { id: string; file: 
 // Quote form
 // ---------------------------------------------------------------------------
 function QuoteSheet({ open, onOpenChange, quote, project, contacts }: { open: boolean; onOpenChange: (o: boolean) => void; quote: Quote | null; project: Project; contacts: Contact[] }) {
+  const cur = useCurrency()
   const { createQuote, updateQuote } = useActions()
   const [v, setV] = useState<NewQuote>(() => blankQuote(project.id))
   const [file, setFile] = useState<File | null>(null)
@@ -288,7 +290,7 @@ function QuoteSheet({ open, onOpenChange, quote, project, contacts }: { open: bo
             {(id) => <ContactPicker id={id} value={v.contact_id} onChange={(cid) => set('contact_id', cid)} contacts={contacts} placeholder="Search suppliers & contractors" />}
           </Field>
           <div className="grid grid-cols-[1fr_auto] gap-3">
-            <Field label="Amount" required error={err ?? undefined}>{(id) => <Input id={id} prefix="R" inputMode="decimal" value={v.amount || ''} onChange={(e) => set('amount', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" invalid={Boolean(err)} />}</Field>
+            <Field label="Amount" required error={err ?? undefined}>{(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" value={v.amount || ''} onChange={(e) => set('amount', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" invalid={Boolean(err)} />}</Field>
             <Field label="VAT">
               {(id) => (
                 <Select id={id} value={v.vat_included ? 'incl' : 'excl'} onChange={(e) => set('vat_included', e.target.value === 'incl')} className="w-32">
@@ -331,6 +333,7 @@ function blankQuote(project_id: string): NewQuote {
 // Expense form
 // ---------------------------------------------------------------------------
 function ExpenseSheet({ open, onOpenChange, expense, project, contacts, quotes }: { open: boolean; onOpenChange: (o: boolean) => void; expense: Expense | null; project: Project; contacts: Contact[]; quotes: Quote[] }) {
+  const cur = useCurrency()
   const { createExpense, updateExpense } = useActions()
   const [v, setV] = useState<NewExpense>(() => blankExpense(project.id))
   const [file, setFile] = useState<File | null>(null)
@@ -373,7 +376,7 @@ function ExpenseSheet({ open, onOpenChange, expense, project, contacts, quotes }
       <div className="flex flex-col gap-4 pt-2">
         <Field label="What" required error={err ?? undefined}>{(id) => <Input id={id} value={v.title} onChange={(e) => set('title', e.target.value)} placeholder="Soft-close hinges ×24" autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Amount" required>{(id) => <Input id={id} prefix="R" inputMode="decimal" value={v.amount || ''} onChange={(e) => set('amount', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" />}</Field>
+          <Field label="Amount" required>{(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" value={v.amount || ''} onChange={(e) => set('amount', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" />}</Field>
           <Field label="Date">{(id) => <DateInput id={id} value={v.date} onChange={(e) => set('date', e.target.value || todayISO())} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -414,6 +417,7 @@ function blankExpense(project_id: string): NewExpense {
 const PAYMENT_LABELS = ['Deposit', 'Progress payment', 'Final payment', 'Materials advance']
 
 function PaymentSheet({ open, onOpenChange, quote, project, contacts, expenses }: { open: boolean; onOpenChange: (o: boolean) => void; quote: Quote | null; project: Project; contacts: Contact[]; expenses: Expense[] }) {
+  const cur = useCurrency()
   const { createExpense } = useActions()
   const [amount, setAmount] = useState(0)
   const [date, setDate] = useState(todayISO())
@@ -472,7 +476,7 @@ function PaymentSheet({ open, onOpenChange, quote, project, contacts, expenses }
           {prog.paid > 0 ? <>{money(prog.paid)} paid so far · <b className="text-ink">{money(prog.owed)}</b> still to go</> : <>Nothing paid yet · <b className="text-ink">{money(total)}</b> to go</>}
         </div>
         <Field label="Amount paid" required error={err ?? undefined} hint={pctLabel || undefined}>
-          {(id) => <Input id={id} prefix="R" inputMode="decimal" autoFocus value={amount || ''} onChange={(e) => setAmount(Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" invalid={Boolean(err)} />}
+          {(id) => <Input id={id} prefix={cur.symbol} inputMode="decimal" autoFocus value={amount || ''} onChange={(e) => setAmount(Number(e.target.value.replace(/[^\d.]/g, '')) || 0)} placeholder="0" invalid={Boolean(err)} />}
         </Field>
         <div className="-mt-2 flex flex-wrap gap-1.5">
           {quick.map((x) => (

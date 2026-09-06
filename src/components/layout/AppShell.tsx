@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BarChart3, Compass, Home, Plus, Settings, Trophy, Users, Zap, Flame } from 'lucide-react'
 import { Suspense, useEffect, type ReactNode } from 'react'
-import { cn, homeTitle } from '../../lib/utils'
+import { cn, homeTitle, num } from '../../lib/utils'
 import { useAuth } from '../../data/session'
 import { useCalm } from '../../store/ui'
 import { useInbox, useLevel, useRealtimeSync, useXp } from '../../data/hooks'
@@ -102,13 +102,13 @@ export function AppShell() {
         </div>
         <div className="mx-5 mt-4 rounded-2xl border border-line bg-surface p-4">
           <div className="flex items-center justify-between text-xs text-ink-2">
-            <span className="flex items-center gap-1.5 font-medium text-ink"><Zap className="size-3.5 text-ochre-text" /> {level.current.toLocaleString('en-ZA')} XP</span>
+            <span className="flex items-center gap-1.5 font-medium text-ink"><Zap className="size-3.5 text-ochre-text" /> {num(level.current)} XP</span>
             <span className="flex items-center gap-1 tabular"><Flame className={cn('size-3.5', streak.weeks > 0 ? 'text-primary-text' : 'text-ink-3')} /> {streak.weeks}w</span>
           </div>
           <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-surface-3">
             <motion.div className="h-full rounded-full bg-gradient-to-r from-ochre to-primary" initial={{ width: 0 }} animate={{ width: `${level.progress * 100}%` }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} />
           </div>
-          <p className="mt-2 text-[11px] text-ink-3">{level.next ? `${level.toNext.toLocaleString('en-ZA')} XP to level ${level.level + 1}` : 'Max level — legends'}</p>
+          <p className="mt-2 text-[11px] text-ink-3">{level.next ? `${num(level.toNext)} XP to level ${level.level + 1}` : 'Max level — legends'}</p>
         </div>
         <div className="mt-auto px-3 pb-5">
           <NavLink to="/settings" className={({ isActive }) => cn('flex h-12 items-center gap-3 rounded-2xl px-3 text-sm font-medium transition-colors', isActive ? 'bg-surface-2 text-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink')}>

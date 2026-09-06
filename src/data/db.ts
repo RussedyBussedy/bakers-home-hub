@@ -37,6 +37,7 @@ export interface Db {
   getBundle(userId: string): Promise<HouseholdBundle>
   updateProfile(id: string, patch: Partial<Pick<Profile, 'display_name' | 'color' | 'phone'>>): Promise<Profile>
   renameHousehold(id: string, name: string): Promise<void>
+  setHouseholdCurrency(id: string, code: string): Promise<void>
   /** Moves somebody out of this home and into an empty one of their own. */
   removeMember(userId: string): Promise<void>
   leaveHousehold(): Promise<void>

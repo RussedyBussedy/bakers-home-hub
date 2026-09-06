@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
+import { guessCurrencyCode } from '../lib/currency'
 import type { Achievement, BoardItem, Contact, Expense, Household, Invite, InvitePreview, Nudge, Presence, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
 
 const BUCKET = 'media'
@@ -64,6 +65,9 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
         options: {
           data: {
             display_name: displayName,
+            // What this device reckons money looks like where it is. Ignored for someone joining
+            // an existing home — that home already has a currency.
+            currency: guessCurrencyCode(),
             ...(householdName ? { household_name: householdName } : {}),
             ...(inviteCode ? { invite_code: inviteCode } : {}),
           },
@@ -246,6 +250,9 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
 
     async renameHousehold(id, name) {
       await one(sb.from('households').update({ name }).eq('id', id))
+    },
+    async setHouseholdCurrency(id, code) {
+      await one(sb.from('households').update({ currency: code }).eq('id', id))
     },
     async removeMember(userId) {
       const { error } = await sb.rpc('remove_member', { who: userId })

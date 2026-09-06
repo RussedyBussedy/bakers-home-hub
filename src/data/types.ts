@@ -37,6 +37,8 @@ export const QUOTE_PAYMENT_CATEGORY = 'Quote payment'
 export interface Household {
   id: string
   name: string
+  /** ISO 4217 code — what everyone in this home sees prices in. Guessed at signup, changeable. */
+  currency: string
   created_at: string
 }
 

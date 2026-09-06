@@ -4,6 +4,7 @@ import { useAuth } from '../../data/session'
 import { Button } from '../ui/Button'
 import { Field, Input } from '../ui/Field'
 import { homeTitle } from '../../lib/utils'
+import { formatMoney, guessCurrencyCode, resolveCurrency } from '../../lib/currency'
 
 /**
  * Registering, used both for "start your own home" on the login screen and for accepting an
@@ -20,6 +21,9 @@ export function RegisterForm({ inviteCode, joining, onDone }: { inviteCode?: str
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [check, setCheck] = useState(false)
+  // Guessed from this device's time zone. Said out loud rather than sprung on them later, and the
+  // home's own currency wins for anyone joining an existing one.
+  const guessed = resolveCurrency(guessCurrencyCode())
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -51,9 +55,14 @@ export function RegisterForm({ inviteCode, joining, onDone }: { inviteCode?: str
         {(id) => <Input id={id} autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Russel" />}
       </Field>
       {!joining && (
-        <Field label="What's your home called" hint={`It shows across the app as "${homeTitle(home.trim() || 'The Bakers')}". You can change it later.`}>
-          {(id) => <Input id={id} value={home} onChange={(e) => setHome(e.target.value)} placeholder="The Bakers" maxLength={60} />}
-        </Field>
+        <>
+          <Field label="What's your home called" hint={`It shows across the app as "${homeTitle(home.trim() || 'The Bakers')}". You can change it later.`}>
+            {(id) => <Input id={id} value={home} onChange={(e) => setHome(e.target.value)} placeholder="The Bakers" maxLength={60} />}
+          </Field>
+          <p className="-mt-1 text-[12px] text-ink-3">
+            Going by where this device is, prices will show as {formatMoney(1250, guessed)} ({guessed.code}). Changeable in Settings.
+          </p>
+        </>
       )}
       <Field label="Email">
         {(id) => <Input id={id} type="email" autoComplete="email" inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />}

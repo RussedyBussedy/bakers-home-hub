@@ -14,8 +14,9 @@
     "test": "bash scripts/test.sh",
     "overflow": "node scripts/overflow.mjs",
     "scrollcheck": "node scripts/scrollcheck.mjs",
-    "unfurl-test": "vite-node scripts/unfurl-test.mts",
-    "hometitle-test": "vite-node scripts/hometitle-test.mts"
+    "unfurl-test": "npx --yes vite-node scripts/unfurl-test.mts",
+    "hometitle-test": "npx --yes vite-node scripts/hometitle-test.mts",
+    "currency-test": "npx --yes vite-node scripts/currency-test.mts"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

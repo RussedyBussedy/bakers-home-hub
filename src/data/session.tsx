@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import { HAS_SUPABASE, SUPABASE_ANON_KEY, SUPABASE_URL, type Db } from './db'
 import { createDemoDb } from './demoDb'
 import { createSupabaseDb } from './supabaseDb'
+import { setActiveCurrency } from '../lib/currency'
 import type { Household, Profile } from './types'
 
 const MODE_KEY = 'hub-mode'
@@ -120,6 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     enabled: Boolean(userId),
     staleTime: 5 * 60_000,
   })
+
+  // Everyone in a home reads the same figures, so the household's currency drives the whole app.
+  const currency = bundle.data?.household.currency
+  useEffect(() => { setActiveCurrency(currency) }, [currency])
 
   const profiles = useMemo(() => bundle.data?.profiles ?? [], [bundle.data])
   const me = useMemo(() => profiles.find((p) => p.id === userId) ?? null, [profiles, userId])

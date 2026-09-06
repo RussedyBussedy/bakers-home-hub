@@ -6,7 +6,7 @@ import { Page } from '../components/layout/AppShell'
 import { useAuth } from '../data/session'
 import { useEverything, useLevel } from '../data/hooks'
 import { ACHIEVEMENTS, XP_RULES, weeklyStreak } from '../lib/xp'
-import { cn, fmtDate, fmtRelative } from '../lib/utils'
+import { cn, fmtDate, fmtRelative, num } from '../lib/utils'
 import { AchievementIcon } from '../components/game/AchievementIcon'
 import { Avatar, CountUp, Reveal, SectionTitle } from '../components/ui/Bits'
 import { Tooltip } from '../components/ui/Menu'
@@ -86,7 +86,7 @@ export default function RewardsPage() {
                     <div className="flex items-center gap-3">
                       <Avatar name={p.display_name} color={p.color} />
                       <div className="min-w-0 flex-1"><p className="font-medium text-ink">{p.display_name} {leader && <span className="ml-1 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] text-ochre-text">Leading</span>}</p><p className="text-[12px] text-ink-3">{data.xp.filter((e) => e.user_id === p.id).length} actions</p></div>
-                      <p className="font-display-tight text-2xl tabular text-ink">{v.toLocaleString('en-ZA')}</p>
+                      <p className="font-display-tight text-2xl tabular text-ink">{num(v)}</p>
                     </div>
                     <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-surface-3"><motion.div className="h-full rounded-full" style={{ background: p.color }} initial={{ width: 0 }} animate={{ width: `${(v / max) * 100}%` }} transition={{ duration: 1, delay: 0.2 + i * 0.1, ease: [0.16, 1, 0.3, 1] }} /></div>
                   </div>
@@ -97,7 +97,7 @@ export default function RewardsPage() {
               {months.map((m) => (
                 <div key={m.label}>
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{m.label}</p>
-                  {profiles.map((p) => <p key={p.id} className="mt-1 flex items-center gap-1.5 text-[13px] tabular"><span className="size-2 rounded-full" style={{ background: p.color }} />{(m.by[p.id] ?? 0).toLocaleString('en-ZA')}</p>)}
+                  {profiles.map((p) => <p key={p.id} className="mt-1 flex items-center gap-1.5 text-[13px] tabular"><span className="size-2 rounded-full" style={{ background: p.color }} />{num(m.by[p.id] ?? 0)}</p>)}
                 </div>
               ))}
             </div>

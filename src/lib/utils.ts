@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, isValid, parseISO } from 'date-fns'
+import { activeCurrency, formatMoney } from './currency'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -14,23 +15,17 @@ export function uid(): string {
   })
 }
 
-function group(n: number): string {
-  return Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009')
+/**
+ * Money in the home's currency — "R 12 345" in South Africa, "$12,345" in the States.
+ * The currency comes from `activeCurrency()`, which the session points at the household's.
+ */
+export function money(n: number | null | undefined, opts: { cents?: boolean; compact?: boolean } = {}): string {
+  return formatMoney(n, activeCurrency(), opts)
 }
 
-/** R 12 345 — whole rand, thin-spaced the way South Africans write it. */
-export function money(n: number | null | undefined, opts: { cents?: boolean; compact?: boolean } = {}): string {
-  const v = Number(n ?? 0)
-  const sign = v < 0 ? '−' : ''
-  if (opts.compact && Math.abs(v) >= 1_000_000) return `${sign}R${(Math.abs(v) / 1_000_000).toFixed(Math.abs(v) % 1_000_000 === 0 ? 0 : 1)}m`
-  if (opts.compact && Math.abs(v) >= 10_000) return `${sign}R${Math.round(Math.abs(v) / 1000)}k`
-  if (opts.cents) {
-    const abs = Math.abs(v)
-    const whole = Math.floor(abs)
-    const cents = Math.round((abs - whole) * 100).toString().padStart(2, '0')
-    return `${sign}R ${group(whole)}.${cents}`
-  }
-  return `${sign}R ${group(v)}`
+/** A plain count — XP, points — grouped the way this device writes numbers. */
+export function num(n: number | null | undefined): string {
+  return Math.round(Number(n ?? 0)).toLocaleString()
 }
 
 export function pct(n: number, digits = 0): string {

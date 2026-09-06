@@ -8,6 +8,7 @@ import { useUi } from '../../store/ui'
 import { nextSlot, priced, pricedTotal } from '../../lib/board'
 import { compressImage } from '../../lib/images'
 import { openExternal } from '../../lib/share'
+import { useCurrency } from '../../lib/currency'
 import { cn, domainOf, money, normaliseUrl, pluralise } from '../../lib/utils'
 import { EmptyState, Money, Pill } from '../ui/Bits'
 import { Button, IconButton } from '../ui/Button'
@@ -127,6 +128,7 @@ type Draft = { url: string; title: string; price: string; supplier: string; imag
 
 function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolean; onOpenChange: (o: boolean) => void; item: BoardItem | null; project: Project; items: BoardItem[] }) {
   const existing = item ? (item.data as ProductData) : null
+  const cur = useCurrency()
   const { db } = useDb()
   const { addBoardItem, updateBoardItem, uploadFile } = useActions()
   const toast = useUi((s) => s.toast)
@@ -163,6 +165,11 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
         image_url: got.image ? undefined : (got.imageUrl ?? s.image_url),
       }))
       if (got.price == null) setNote("Couldn't find a price on that page — pop it in yourself.")
+      else if (got.currency && got.currency.toUpperCase() !== cur.code) {
+        // Nothing converts anywhere in the app, so say it plainly rather than quietly adding a
+        // foreign number to the totals.
+        setNote(`That page prices in ${got.currency.toUpperCase()}, not ${cur.code}. The number came across as it was — convert it yourself if it matters.`)
+      }
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Could not read that page. You can still fill it in by hand.')
     } finally { setLooking(false) }
@@ -243,7 +250,7 @@ function PriceSheet({ open, onOpenChange, item, project, items }: { open: boolea
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Price">
-            {(id) => <Input id={id} inputMode="decimal" prefix="R" value={d.price} onChange={(e) => setD((s) => ({ ...s, price: e.target.value }))} placeholder="0" />}
+            {(id) => <Input id={id} inputMode="decimal" prefix={cur.symbol} value={d.price} onChange={(e) => setD((s) => ({ ...s, price: e.target.value }))} placeholder="0" />}
           </Field>
           <Field label="Where from">
             {(id) => <Input id={id} value={d.supplier} onChange={(e) => setD((s) => ({ ...s, supplier: e.target.value }))} placeholder="Builders Warehouse" />}

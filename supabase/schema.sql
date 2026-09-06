@@ -12,6 +12,9 @@ create extension if not exists "pgcrypto";
 create table public.households (
   id uuid primary key default gen_random_uuid(),
   name text not null default 'Our Home',
+  -- What everyone in this home reads prices in. Guessed from the device at signup (see the
+  -- handle_new_user trigger); it picks the symbol, it never converts a figure.
+  currency text not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
   created_at timestamptz not null default now()
 );
 

@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Check, KeyRound, LogOut, Minus, Monitor, Moon, RotateCcw, Smartphone, Sparkles, Sun } from 'lucide-react'
 import { Page } from '../components/layout/AppShell'
+import { useActions } from '../data/hooks'
 import { useAuth, useDb } from '../data/session'
 import { useUi, type Theme } from '../store/ui'
-import { cn } from '../lib/utils'
+import { cn, homeTitle } from '../lib/utils'
+import { CURRENCIES, formatMoney, guessCurrencyCode, resolveCurrency, useCurrency } from '../lib/currency'
 import { textOn } from '../lib/colors'
 import { normalisePhone, prettyPhone } from '../lib/share'
 import { Avatar } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
-import { Field, Input, Segmented } from '../components/ui/Field'
+import { Field, Input, Segmented, Select } from '../components/ui/Field'
 import { LeaveHome, People } from '../components/settings/People'
 import type { Motion as MotionPref } from '../store/ui'
 import { useConfirm, usePrompt } from '../components/ui/Sheet'
@@ -102,6 +104,8 @@ export default function SettingsPage() {
 
         <People onEditMember={editMember} />
 
+        <MoneySection />
+
         <section className="card p-5">
           <h2 className="text-xl">Appearance</h2>
           <div className="mt-3">
@@ -170,5 +174,53 @@ export default function SettingsPage() {
         </section>
       </div>
     </Page>
+  )
+}
+
+/**
+ * The home's currency. Guessed from the device at registration; this is where a wrong guess, or a
+ * home whose money doesn't match its time zone, gets put right. It changes the symbol only —
+ * converting old figures would need live rates and would quietly rewrite what people typed.
+ */
+function MoneySection() {
+  const { household } = useAuth()
+  const { setHouseholdCurrency } = useActions()
+  const cur = useCurrency()
+  const toast = useUi((s) => s.toast)
+  const [busy, setBusy] = useState(false)
+  const guessed = resolveCurrency(guessCurrencyCode())
+
+  const change = async (code: string) => {
+    if (!code || code === household?.currency) return
+    setBusy(true)
+    try {
+      await setHouseholdCurrency(code)
+      toast({ title: `Prices now show in ${resolveCurrency(code).code}`, tone: 'success' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-xl">Money</h2>
+      <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+        Every budget, quote and payment in {homeTitle(household?.name)} shows in this currency, for everyone in the home.
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <Field label="Currency" hint={cur.code === guessed.code ? 'Matched to where this device is.' : `This device looks like ${guessed.code} — pick that if the home has moved.`}>
+          {(id) => (
+            <Select id={id} value={cur.code} disabled={busy} onChange={(e) => void change(e.target.value)}>
+              {CURRENCIES.some((c) => c.code === cur.code) ? null : <option value={cur.code}>{cur.code}</option>}
+              {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.name} · {c.code}</option>)}
+            </Select>
+          )}
+        </Field>
+        <div>
+          <p className="text-[13px] font-medium text-ink-2">How it reads</p>
+          <p className="mt-2 font-display-tight text-2xl text-ink tabular">{formatMoney(1234567, cur)}</p>
+          <p className="text-[12px] text-ink-3 tabular">{formatMoney(89.5, cur, { cents: true })} · {formatMoney(2400000, cur, { compact: true })} on a chart</p>
+        </div>
+      </div>
+      <p className="mt-3 text-[12px] text-ink-3">Nothing gets converted — a quote saved as 12&thinsp;000 still reads 12&thinsp;000, with the new symbol on it.</p>
+    </section>
   )
 }

@@ -41,7 +41,7 @@ export function buildDemoState(): DemoState {
   const R = DEMO_USERS.russel
   const K = DEMO_USERS.kay
 
-  const household: Household = { id: H, name: 'The Bakers', created_at: d(120) }
+  const household: Household = { id: H, name: 'The Bakers', currency: 'ZAR', created_at: d(120) }
   const profiles: Profile[] = [
     { id: R, household_id: H, display_name: 'Russel', color: '#B84D24', phone: '', created_at: d(120) },
     { id: K, household_id: H, display_name: 'Kay', color: '#7F5A9E', phone: '', created_at: d(120) },
