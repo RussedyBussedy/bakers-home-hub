@@ -20,7 +20,7 @@ import { ContactSheet } from '../contacts/ContactForm'
 const quoteTone: Record<QuoteStatus, 'sky' | 'sage' | 'neutral' | 'gold'> = { received: 'sky', accepted: 'sage', paid: 'gold', rejected: 'neutral' }
 const quoteLabel: Record<QuoteStatus, string> = { received: 'Received', accepted: 'Accepted', paid: 'Paid', rejected: 'Declined' }
 
-export function MoneyPanel({ project, quotes, expenses, contacts, priced }: { project: Project; quotes: Quote[]; expenses: Expense[]; contacts: Contact[]; priced?: { count: number; total: number; onOpen: () => void } }) {
+export function MoneyPanel({ project, quotes, expenses, contacts, priced }: { project: Project; quotes: Quote[]; expenses: Expense[]; contacts: Contact[]; priced?: { count: number; low: number; high: number; onOpen: () => void } }) {
   const costs = projectCosts(project, quotes, expenses)
   const [quoteOpen, setQuoteOpen] = useState<{ open: boolean; quote?: Quote | null }>({ open: false })
   const [expenseOpen, setExpenseOpen] = useState<{ open: boolean; expense?: Expense | null }>({ open: false })
@@ -65,7 +65,8 @@ export function MoneyPanel({ project, quotes, expenses, contacts, priced }: { pr
             // Prices are window shopping, not money owed — they sit outside every figure above.
             <button onClick={priced.onOpen} className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-line-strong px-3 py-2 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
               <Tag className="size-4 shrink-0 text-ink-3" />
-              <span className="min-w-0 flex-1">{pluralise(priced.count, 'item')} priced up · {money(priced.total)}<span className="text-ink-3"> — not counted here</span></span>
+              {/* A range, because options being compared are one decision, not several purchases. */}
+              <span className="min-w-0 flex-1">{pluralise(priced.count, 'thing')} still to buy · {priced.low === priced.high ? money(priced.low) : `${money(priced.low)} – ${money(priced.high)}`}<span className="text-ink-3"> — not counted here</span></span>
               <span className="shrink-0 font-medium text-primary-text">See prices →</span>
             </button>
           )}

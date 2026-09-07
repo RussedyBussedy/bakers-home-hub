@@ -209,7 +209,7 @@ await step('prices: add one from a link, keep it out of the money figures', asyn
 
   await page.getByRole('tab', { name: /^Prices/ }).click()
   await page.waitForTimeout(500)
-  const before = await page.locator('.card', { hasText: 'If you bought the lot' }).innerText()
+  const before = await page.locator('.card', { hasText: /Still to spend|What you have settled on/ }).innerText()
   await page.getByRole('button', { name: 'Add a price' }).first().click()
   await page.waitForTimeout(400)
   const sheet = page.locator('[role=dialog]')
@@ -229,13 +229,13 @@ await step('prices: add one from a link, keep it out of the money figures', asyn
   await page.waitForTimeout(1200)
   await shot('06a-prices')
   if (!(await page.locator(`text=${title}`).count())) throw new Error('the new item is not in the list')
-  const after = await page.locator('.card', { hasText: 'If you bought the lot' }).innerText()
+  const after = await page.locator('.card', { hasText: /Still to spend|What you have settled on/ }).innerText()
   if (after === before) throw new Error('the shopping total did not move')
   // Three of them: the card shows the line total and the unit price, and the summary counts things.
   const card = page.locator('.card', { hasText: title }).first()
   if (!/×\s*3/.test(await card.innerText())) throw new Error(`no quantity on the card: ${(await card.innerText()).replace(/\n/g, ' | ')}`)
   if (!/4\u2009350/.test(await card.innerText())) throw new Error('the card is not showing 3 × 1 450')
-  if (!/in all/.test(after)) throw new Error(`the summary does not count the extras: ${after.replace(/\n/g, ' | ')}`)
+  if (!/to buy/.test(after)) throw new Error(`no count of things to buy: ${after.replace(/\n/g, ' | ')}`)
 
   // It was added off the board, so the board must not have grown...
   const pinsAfter = await page.locator('[role=tab]', { hasText: /^Board/ }).innerText()
@@ -245,7 +245,7 @@ await step('prices: add one from a link, keep it out of the money figures', asyn
   await page.waitForTimeout(600)
   const realCostAfter = await settledText(page.locator('text=Real cost so far').locator('xpath=following-sibling::*[1]').first())
   if (realCostAfter !== realCost) throw new Error(`real cost moved: ${realCost} -> ${realCostAfter}`)
-  if (!(await page.getByRole('button', { name: /priced up/ }).count())) throw new Error('no price summary on the Money tab')
+  if (!(await page.getByRole('button', { name: /still to buy/ }).count())) throw new Error('no price summary on the Money tab')
 })
 
 await step('prices: pinning one puts it on the board', async () => {
@@ -299,6 +299,67 @@ await step('prices: search the shops, pick one, and it fills the form', async ()
   await sheet.getByRole('button', { name: 'Add it' }).click()
   await page.waitForTimeout(1200)
   if (!(await page.locator(`text=${title}`).count())) throw new Error('the searched item is not in the list')
+})
+
+await step('prices: compare two options, pick one, buy it — and it lands in Money once', async () => {
+  await page.goto(base + '/projects/p-kitchen?tab=prices', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(700)
+
+  // Two options for the same thing. They must be compared, never added together.
+  const addOption = async (name, price) => {
+    await page.getByRole('button', { name: /Add a price|Another option/ }).first().click()
+    await page.waitForTimeout(400)
+    const sheet = page.locator('[role=dialog]')
+    await sheet.getByRole('tab', { name: /Paste a link/ }).click()
+    await page.waitForTimeout(250)
+    await sheet.getByLabel('What is it').fill(name)
+    await sheet.getByLabel('Price', { exact: true }).fill(String(price))
+    await sheet.getByLabel("What's it for").fill('Dining table')
+    await sheet.getByRole('button', { name: 'Add it' }).click()
+    await page.waitForTimeout(1100)
+  }
+  await addOption('Oak table from Decofurn', 8999)
+  await addOption('Oak table from Weylandts', 24500)
+
+  const groupHead = page.locator('section', { hasText: 'Dining table' }).first()
+  const headText = await groupHead.innerText()
+  if (!/2 options/.test(headText)) throw new Error(`the two did not group: ${headText.replace(/\n/g, ' | ')}`)
+  if (!/8\u2009999/.test(headText) || !/24\u2009500/.test(headText)) throw new Error(`no range on the group: ${headText.replace(/\n/g, ' | ')}`)
+  if (!(await page.locator('text=Cheapest').count())) throw new Error('the cheaper option is not flagged')
+  await shot('06d-comparison')
+
+  // Picking narrows it to one figure rather than taking the cheapest.
+  const dear = page.locator('.card', { hasText: 'Weylandts' }).first()
+  await dear.getByRole('button', { name: 'Item actions' }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('menuitem', { name: /Pick this one/ }).click()
+  await page.waitForTimeout(900)
+  const picked = await page.locator('section', { hasText: 'Dining table' }).first().innerText()
+  if (!/Picked/.test(picked)) throw new Error('no picked badge')
+  if (/8\u2009999\s*–/.test(picked)) throw new Error(`still showing a range after picking: ${picked.replace(/\n/g, ' | ')}`)
+
+  // Buying it writes a real expense and takes the decision out of the plan.
+  await dear.getByRole('button', { name: 'Item actions' }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('menuitem', { name: /I bought this/ }).click()
+  await page.waitForTimeout(500)
+  const buy = page.locator('[role=dialog]')
+  const prefilled = await buy.getByLabel('What you actually paid').inputValue()
+  if (Number(prefilled) !== 24500) throw new Error(`the amount was not carried over (${prefilled})`)
+  await buy.getByLabel('What you actually paid').fill('23900')
+  await buy.getByRole('button', { name: 'Add to Money' }).click()
+  await page.waitForTimeout(1400)
+  if (!(await page.locator('text=Bought').first().count())) throw new Error('no bought badge on the card')
+  await shot('06e-bought')
+
+  // In Money exactly once, at what was actually paid, and gone from the plan.
+  await page.getByRole('tab', { name: /^Money/ }).click()
+  await page.waitForTimeout(900)
+  const rows = await page.locator('text=Oak table from Weylandts').count()
+  if (rows !== 1) throw new Error(`the expense appears ${rows} times in Money`)
+  if (!(await page.locator('text=23\u2009900').first().count())) throw new Error('the expense is not showing what was actually paid')
+  const stillToBuy = await page.locator('text=still to buy').first().innerText()
+  if (/23\u2009900|24\u2009500/.test(stillToBuy)) throw new Error(`a bought thing is still in the plan: ${stillToBuy}`)
 })
 
 await step('contacts: add via paste details', async () => {

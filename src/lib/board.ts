@@ -39,6 +39,121 @@ export function pricedUnits(items: BoardItem[]): number {
   return items.reduce((sum, i) => (i.type === 'product' ? sum + qtyOf(i.data as ProductData) : sum), 0)
 }
 
+// ---------------------------------------------------------------------------
+// Comparisons
+//
+// The price list is not a shopping list. Five dining tables from five shops are one decision, not
+// five purchases, so they are never added together — they are compared, one is picked, and only
+// the picks count. Items sharing a `group` are options for the same thing; an item with no group
+// is a decision of one, which is why every price that existed before groups did still behaves
+// exactly as it did.
+// ---------------------------------------------------------------------------
+
+export interface Comparison {
+  /** What is being shopped for — "Dining table". Empty for the items that stand alone. */
+  name: string
+  /** The competing options, dearest line first (the order `priced` already puts them in). */
+  options: BoardItem[]
+  /** The one settled on, if any. */
+  pick: BoardItem | null
+  /** The cheapest option that has a price at all — what the group costs if you go by money alone. */
+  cheapest: BoardItem | null
+  /** The dearest priced option, for the top of the range. */
+  dearest: BoardItem | null
+  /** Already bought, so this decision is closed and its cost is real, not planned. */
+  bought: BoardItem | null
+}
+
+export function groupOf(d: ProductData): string {
+  return (d.group ?? '').trim()
+}
+
+/** Bought means an expense was created from it — the id is the link back to that expense. */
+export function isBought(d: ProductData): boolean {
+  return Boolean(d.expense_id)
+}
+
+const priceOf = (i: BoardItem) => (i.data as ProductData).price
+
+/**
+ * Split priced items into the decisions they represent.
+ *
+ * Grouped items gather under their name; ungrouped ones each become a decision of one, keyed so
+ * they can never collide with a real group name. Order follows the incoming list, so the dearest
+ * decision leads.
+ */
+export function comparisons(items: BoardItem[]): Comparison[] {
+  const order: string[] = []
+  const bins = new Map<string, BoardItem[]>()
+  for (const item of items) {
+    if (item.type !== 'product') continue
+    const name = groupOf(item.data as ProductData)
+    // A blank group is not a group: those items must not all pile into one bin together.
+    const key = name || `\u0000alone:${item.id}`
+    if (!bins.has(key)) { bins.set(key, []); order.push(key) }
+    bins.get(key)!.push(item)
+  }
+  return order.map((key) => {
+    const options = bins.get(key)!
+    const withPrice = options.filter((i) => priceOf(i) != null)
+    const byLine = [...withPrice].sort((a, b) => lineTotal(a.data as ProductData) - lineTotal(b.data as ProductData))
+    return {
+      name: key.startsWith('\u0000alone:') ? '' : key,
+      options,
+      pick: options.find((i) => (i.data as ProductData).chosen) ?? null,
+      cheapest: byLine[0] ?? null,
+      dearest: byLine[byLine.length - 1] ?? null,
+      bought: options.find((i) => isBought(i.data as ProductData)) ?? null,
+    }
+  })
+}
+
+/**
+ * What a decision costs. Once something is bought that is the answer; a pick is the answer next;
+ * otherwise the group is still open and costs somewhere between its cheapest and its dearest.
+ */
+export function comparisonRange(c: Comparison): { low: number; high: number; settled: boolean } {
+  const settled = c.bought ?? c.pick
+  if (settled) {
+    const n = lineTotal(settled.data as ProductData)
+    return { low: n, high: n, settled: true }
+  }
+  return {
+    low: c.cheapest ? lineTotal(c.cheapest.data as ProductData) : 0,
+    high: c.dearest ? lineTotal(c.dearest.data as ProductData) : 0,
+    settled: false,
+  }
+}
+
+/**
+ * What the whole project's shopping comes to: a range while options are still open, narrowing to a
+ * single figure as each decision is settled. Items already bought are left out — their cost is real
+ * now and the Money tab is counting it; adding it here as well would say it twice.
+ */
+export function pricedRange(items: BoardItem[]): { low: number; high: number; open: number; settled: number; bought: number } {
+  let low = 0, high = 0, open = 0, settled = 0, bought = 0
+  for (const c of comparisons(items)) {
+    if (c.bought) { bought++; continue }
+    const r = comparisonRange(c)
+    low += r.low
+    high += r.high
+    if (r.settled) settled++
+    else open++
+  }
+  return { low, high, open, settled, bought }
+}
+
+/** Every group name in use, for suggesting one as a new price is added. */
+export function groupNames(items: BoardItem[]): string[] {
+  const seen = new Set<string>()
+  for (const i of items) {
+    if (i.type !== 'product') continue
+    const g = groupOf(i.data as ProductData)
+    if (g) seen.add(g)
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b))
+}
+
 /**
  * Somewhere sensible to drop a pin that was created away from the board: below everything already
  * there, laid out left to right, so it never lands on top of existing work.

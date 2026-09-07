@@ -234,6 +234,15 @@ export interface ProductData {
   supplier?: string
   /** How many of them. Absent means one — most things are, so most cards say nothing about it. */
   qty?: number
+  /**
+   * What this is an option FOR — "Dining table", "Chairs". Several priced items sharing a group are
+   * competing options to be compared, not things to be added up. Absent means it stands alone.
+   */
+  group?: string
+  /** The option settled on within its group. At most one per group. */
+  chosen?: boolean
+  /** The expense created when it was actually bought — the card then shows what was paid. */
+  expense_id?: string
   /** In the project's price list but kept off the inspiration board. */
   off_board?: boolean
 }

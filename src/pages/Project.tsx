@@ -12,7 +12,7 @@ import { useActions, useBoardItems, useEverything, useProject } from '../data/ho
 import { useAuth } from '../data/session'
 import { PROJECT_STATUSES, type ProjectStatus } from '../data/types'
 import { XP_RULES, projectCosts, quoteExpiry } from '../lib/xp'
-import { onBoard, priced, pricedTotal } from '../lib/board'
+import { onBoard, priced, pricedRange } from '../lib/board'
 import { cn, daysUntil, fmtRelative, money, pluralise } from '../lib/utils'
 import { CoverImage } from '../components/project/ProjectCard'
 import { ProjectFormFields, fromProject, validateProject, type ProjectFormValue } from '../components/project/ProjectForm'
@@ -81,6 +81,8 @@ export default function ProjectPage() {
   // The price list and the board share one set of items; some are priced but deliberately not pinned.
   const items = useMemo(() => onBoard(allPins), [allPins])
   const pricedPins = useMemo(() => priced(allPins), [allPins])
+  // What is still to spend, as a range while options are open — never the sum of every option.
+  const pricedPlan = useMemo(() => pricedRange(pricedPins), [pricedPins])
 
   if (isPending || data.loading) return <ProjectSkeleton />
   if (!project) {
@@ -270,9 +272,9 @@ export default function ProjectPage() {
               </button>
             </div>
           )}
-          {tab === 'money' && <MoneyPanel project={project} quotes={quotes} expenses={expenses} contacts={data.contacts} priced={{ count: pricedPins.length, total: pricedTotal(pricedPins), onOpen: () => setTab('prices') }} />}
+          {tab === 'money' && <MoneyPanel project={project} quotes={quotes} expenses={expenses} contacts={data.contacts} priced={{ count: pricedPlan.open + pricedPlan.settled, low: pricedPlan.low, high: pricedPlan.high, onOpen: () => setTab('prices') }} />}
           {tab === 'photos' && <PhotosPanel project={project} images={images} />}
-          {tab === 'prices' && <PricesPanel project={project} items={allPins} />}
+          {tab === 'prices' && <PricesPanel project={project} items={allPins} expenses={expenses} contacts={data.contacts} onOpenMoney={() => setTab('money')} />}
           {tab === 'tasks' && <TasksPanel project={project} tasks={tasks} />}
         </motion.div>
       </div>
