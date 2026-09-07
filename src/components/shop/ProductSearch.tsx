@@ -25,9 +25,15 @@ interface Card extends Found {
   reading: boolean
 }
 
-/** How many of the results get their page read straight away, and how many at a time. */
+/**
+ * How many of the results get their page read straight away, and how many at a time.
+ *
+ * Measured against the live shops: a slow page plus a slow picture is 20-odd seconds, and no amount
+ * of parallelism shortens that one. What it does shorten is the wait for everything behind it —
+ * eight results three at a time is three waves; five at a time is two.
+ */
 const ENRICH = 8
-const AT_ONCE = 3
+const AT_ONCE = 5
 
 function cardFor(hit: ProductHit): Card {
   return {
