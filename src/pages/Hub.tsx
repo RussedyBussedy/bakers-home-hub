@@ -13,6 +13,7 @@ import { useActions, useEverything, useLevel } from '../data/hooks'
 import { ACHIEVEMENTS, XP_RULES, projectCosts, weeklyStreak } from '../lib/xp'
 import { cn, fmtRelative, greeting, homeTitle, money, num, pluralise, todayISO } from '../lib/utils'
 import { ProjectCard } from '../components/project/ProjectCard'
+import { HouseStrip } from '../components/house/HouseStrip'
 import { Avatar, CountUp, EmptyState, Reveal, SectionTitle, Skeleton } from '../components/ui/Bits'
 import { Button } from '../components/ui/Button'
 
@@ -146,6 +147,12 @@ export default function HubPage() {
             {active.map((p, i) => <ProjectCard key={p.id} project={p} quotes={data.quotes} expenses={data.expenses} tasks={data.tasks} index={i} compact />)}
           </div>
         )}
+      </section>
+
+      {/* The house — the running jobs that belong to no project */}
+      <section className="mt-8">
+        <SectionTitle sub="Shopping, chores and the meters" action={<Link to="/house" className="text-sm font-medium text-primary-text hover:underline">Open <ArrowRight className="inline size-3.5" /></Link>}>The house</SectionTitle>
+        <div className="mt-4"><HouseStrip /></div>
       </section>
 
       <div className="mt-8 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">

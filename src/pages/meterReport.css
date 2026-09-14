@@ -1,0 +1,228 @@
+/*
+ * The evidence pack prints on paper, so it is designed for paper: a fixed serif
+ * measure, black ink on white, and page breaks placed where a reader would
+ * expect them. The screen version is the same document with a toolbar bolted on
+ * — what you see is what comes out of the printer.
+ */
+
+.report-root {
+  min-height: 100dvh;
+  background: #57534e;
+  padding: 0 0 64px;
+}
+
+/* Toolbar — screen only */
+.report-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.report-bar-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+}
+@media (max-width: 560px) {
+  .report-bar-hint { display: none; }
+}
+
+/* The sheet */
+.sheet {
+  --ink-print: #1c1917;
+  --ink-soft: #57534e;
+  --ink-faint: #8a837c;
+  --rule: #d9d4cc;
+
+  max-width: 190mm;
+  margin: 24px auto;
+  padding: 22mm 18mm;
+  background: #fff;
+  color: var(--ink-print);
+  box-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.6);
+  font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+}
+
+.sheet h1 {
+  margin: 6px 0 2px;
+  font-family: inherit;
+  font-size: 22pt;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.sheet h2 {
+  margin: 0 0 6px;
+  font-size: 12.5pt;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border-bottom: 1.5px solid var(--ink-print);
+  padding-bottom: 4px;
+}
+.sheet h3 {
+  margin: 14px 0 4px;
+  font-size: 10.5pt;
+  font-style: italic;
+  font-weight: 600;
+}
+.sheet p { margin: 0 0 8px; }
+
+.eyebrow {
+  margin: 0;
+  font-size: 8.5pt;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.addr { color: var(--ink-soft); font-style: italic; }
+
+.sheet-head {
+  padding-bottom: 14px;
+  border-bottom: 3px double var(--ink-print);
+  margin-bottom: 18px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 18px;
+  margin: 14px 0 0;
+  font-size: 9.5pt;
+}
+.facts dt { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; font-size: 8pt; align-self: baseline; }
+.facts dd { margin: 0; }
+
+.block { margin: 0 0 20px; break-inside: auto; }
+.lede { font-size: 11pt; }
+.fineprint { font-size: 8.5pt; color: var(--ink-soft); font-style: italic; }
+.note { color: var(--ink-soft); font-style: italic; }
+
+/* Table */
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+.grid-table th {
+  text-align: left;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  border-bottom: 1.2px solid var(--ink-print);
+  padding: 4px 6px;
+  font-weight: 600;
+}
+.grid-table td {
+  padding: 4px 6px;
+  border-bottom: 0.5px solid var(--rule);
+}
+.grid-table tr { break-inside: avoid; }
+.grid-table .num { text-align: right; }
+.grid-table .strong { font-weight: 700; }
+.grid-table .muted { color: var(--ink-soft); }
+
+.notes { margin: 4px 0 0; padding-left: 18px; font-size: 9.5pt; }
+.notes li { margin-bottom: 2px; }
+
+/* Chart */
+.chart { width: 100%; height: auto; margin-top: 6px; break-inside: avoid; }
+
+/* Photographic plates */
+.plates { break-before: page; }
+.plate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.plate {
+  margin: 0;
+  break-inside: avoid;
+  border: 0.8px solid var(--rule);
+  padding: 6px;
+}
+.plate img {
+  display: block;
+  width: 100%;
+  height: 62mm;
+  object-fit: contain;
+  background: #f5f3f0;
+}
+.plate-missing {
+  display: grid;
+  place-items: center;
+  height: 62mm;
+  background: #f5f3f0;
+  color: var(--ink-faint);
+  font-size: 9pt;
+  font-style: italic;
+}
+.plate figcaption {
+  margin-top: 5px;
+  font-size: 8.5pt;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
+/* Footer & signature */
+.sheet-foot {
+  margin-top: 24px;
+  padding-top: 10px;
+  border-top: 1.5px solid var(--ink-print);
+  font-size: 8.5pt;
+  color: var(--ink-soft);
+  break-inside: avoid;
+}
+.sign {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  margin-top: 26px;
+}
+.sign div { display: flex; flex-direction: column; gap: 4px; }
+.sign .rule { display: block; border-bottom: 0.8px solid var(--ink-print); height: 22px; }
+.sign span:last-child { font-size: 8pt; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+
+/* ---- Printing ------------------------------------------------------- */
+@page {
+  size: A4;
+  margin: 16mm 14mm;
+}
+
+@media print {
+  .report-bar { display: none !important; }
+  .report-root { background: #fff; padding: 0; min-height: 0; }
+  .sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    font-size: 10pt;
+  }
+  .sheet-head { break-after: avoid; }
+  .plate img { height: 58mm; }
+  /* Keep the printer honest about the rules and fills. */
+  .sheet, .grid-table, .plate, .chart { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* A phone reading the sheet on screen shouldn't need to pinch. */
+@media (max-width: 720px) {
+  .sheet { margin: 12px; padding: 16px; font-size: 11.5px; }
+  .sheet h1 { font-size: 24px; }
+  .facts { grid-template-columns: 1fr; gap: 0 0; }
+  .facts dd { margin-bottom: 6px; }
+  .plate-grid { grid-template-columns: 1fr; }
+  .grid-table { font-size: 11px; }
+  .grid-table th, .grid-table td { padding: 3px 4px; }
+}

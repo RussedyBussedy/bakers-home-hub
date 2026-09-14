@@ -18,6 +18,10 @@ const screens = [
   { name: 'project-tasks', path: '/projects/p-kitchen', tab: 'Tasks' },
   { name: 'board', path: '/projects/p-kitchen/board', full: false },
   { name: 'contacts', path: '/contacts' },
+  { name: 'house-shopping', path: '/house?tab=shopping' },
+  { name: 'house-todo', path: '/house?tab=todo' },
+  { name: 'house-meters', path: '/house?tab=meters' },
+  { name: 'water-report', path: '/house/report/water' },
   { name: 'insights', path: '/insights' },
   { name: 'rewards', path: '/rewards' },
   { name: 'settings', path: '/settings' },
@@ -38,7 +42,7 @@ for (const theme of ['light', 'dark']) {
     await context.addInitScript((t) => {
       localStorage.setItem('hub-theme', t)
       localStorage.setItem('hub-demo-user', 'u-russel')
-      localStorage.removeItem('hub-demo-state-v2')
+      localStorage.removeItem('hub-demo-state-v3')
     }, theme)
     const page = await context.newPage()
     page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${theme}/${vpName}] ${page.url()} :: ${m.text()}`) })

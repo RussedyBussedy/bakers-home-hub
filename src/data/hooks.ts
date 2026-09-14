@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useAuth, useDb } from './session'
 import type {
-  Achievement, BlockerKind, BoardItem, Contact, Expense, NewBoardItem, NewContact, NewExpense, NewImage, NewProject, NewQuote,
-  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent, XpKind,
+  Achievement, BlockerKind, BoardItem, Contact, Expense, Household, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense, NewHouseTask, NewImage,
+  NewMeterReading, NewProject, NewQuote, NewShoppingItem, NewUtilityPurchase,
+  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Utility, UtilityPurchase, XpEvent, XpKind,
 } from './types'
+import { UTILITIES } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
+import { readingDue } from '../lib/meters'
 import { useUi } from '../store/ui'
 import { compressImage } from '../lib/images'
+import { addDays, format } from 'date-fns'
 import { fmtDate, todayISO, uid } from '../lib/utils'
 import { softNavigate } from '../lib/share'
 
@@ -25,6 +29,10 @@ export const keys = {
   nudges: ['nudges'] as QueryKey,
   visits: ['visits'] as QueryKey,
   invites: ['invites'] as QueryKey,
+  shopping: ['shopping'] as QueryKey,
+  houseTasks: ['house-tasks'] as QueryKey,
+  readings: ['readings'] as QueryKey,
+  purchases: ['purchases'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -44,6 +52,22 @@ export function useXp() { const { db } = useDb(); return useHouseholdQuery(keys.
 export function useAchievements() { const { db } = useDb(); return useHouseholdQuery(keys.achievements, () => db.listAchievements()) }
 export function useNudges() { const { db } = useDb(); return useHouseholdQuery(keys.nudges, () => db.listNudges()) }
 export function useVisits() { const { db } = useDb(); return useHouseholdQuery(keys.visits, () => db.listVisits()) }
+export function useShopping() { const { db } = useDb(); return useHouseholdQuery(keys.shopping, () => db.listShopping()) }
+export function useHouseTasks() { const { db } = useDb(); return useHouseholdQuery(keys.houseTasks, () => db.listHouseTasks()) }
+export function useReadings() { const { db } = useDb(); return useHouseholdQuery(keys.readings, () => db.listReadings()) }
+export function usePurchases() { const { db } = useDb(); return useHouseholdQuery(keys.purchases, () => db.listPurchases()) }
+
+/** The shopping list, the chores and the meters — everything that belongs to the house itself. */
+export function useHouse() {
+  const shopping = useShopping(), houseTasks = useHouseTasks(), readings = useReadings(), purchases = usePurchases()
+  return {
+    loading: [shopping, houseTasks, readings, purchases].some((q) => q.isPending),
+    shopping: shopping.data ?? [],
+    houseTasks: houseTasks.data ?? [],
+    readings: readings.data ?? [],
+    purchases: purchases.data ?? [],
+  }
+}
 
 /** Nudges addressed to me (or to everyone) that I haven't read yet. */
 export function useInbox() {
@@ -532,6 +556,166 @@ export function useActions() {
     try { await db.deleteNudge(id) } catch (e) { invalidate(keys.nudges); return fail(e, 'remove the nudge') }
   }, [setList, db, invalidate, fail])
 
+  // ---- the house: shopping list --------------------------------------------
+  /** Tells whoever it was meant for, unless that person is the one doing the telling. */
+  const tellAssignee = useCallback((assignee: string | null, message: string, link: string) => {
+    if (!assignee || assignee === me?.id) return
+    void quietNudge({ to_user: assignee, kind: 'todo', message, link })
+  }, [me, quietNudge])
+
+  const addShoppingItem = useCallback(async (input: NewShoppingItem) => {
+    if (!me || !household) throw new Error('Not signed in')
+    try {
+      const list = qc.getQueryData<ShoppingItem[]>(k(keys.shopping)) ?? []
+      const item = await db.createShoppingItem({ ...input, sort_order: input.sort_order ?? list.length + 1, household_id: household.id, created_by: me.id })
+      setList<ShoppingItem>(keys.shopping, (old) => [...old, item])
+      tellAssignee(item.assigned_to, `On the shopping list for you: ${item.title}`, '/house?tab=shopping')
+      return item
+    } catch (e) { return fail(e, 'add that to the list') }
+  }, [me, household, qc, k, db, setList, tellAssignee, fail])
+
+  const updateShoppingItem = useCallback(async (id: string, patch: Partial<ShoppingItem>) => {
+    const prev = qc.getQueryData<ShoppingItem[]>(k(keys.shopping))?.find((s) => s.id === id)
+    const next = { ...patch }
+    // Ticking is the whole point of a shared list, so it records who did it and when.
+    if (patch.done === true) { next.done_by = me?.id ?? null; next.completed_at = new Date().toISOString() }
+    if (patch.done === false) { next.done_by = null; next.completed_at = null }
+    setList<ShoppingItem>(keys.shopping, (old) => old.map((s) => (s.id === id ? { ...s, ...next } : s)))
+    try {
+      const saved = await db.updateShoppingItem(id, next)
+      setList<ShoppingItem>(keys.shopping, (old) => old.map((s) => (s.id === id ? saved : s)))
+      if (patch.done === true && !prev?.done) {
+        void award('shopping_done', null, saved.id, { once: true })
+        // Save the other person a wasted trip down the same aisle.
+        if (prev?.assigned_to && prev.assigned_to !== me?.id) {
+          void quietNudge({ to_user: prev.assigned_to, kind: 'done', message: `Got it — ${saved.title} is off the list.`, link: '/house?tab=shopping' })
+        }
+      }
+      if (patch.assigned_to && patch.assigned_to !== prev?.assigned_to && !saved.done) {
+        tellAssignee(saved.assigned_to, `On the shopping list for you: ${saved.title}`, '/house?tab=shopping')
+      }
+      return saved
+    } catch (e) { invalidate(keys.shopping); return fail(e, 'update the list') }
+  }, [qc, k, me, setList, db, award, quietNudge, tellAssignee, invalidate, fail])
+
+  const deleteShoppingItem = useCallback(async (id: string) => {
+    setList<ShoppingItem>(keys.shopping, (old) => old.filter((s) => s.id !== id))
+    try { await db.deleteShoppingItem(id) } catch (e) { invalidate(keys.shopping); return fail(e, 'remove that item') }
+  }, [setList, db, invalidate, fail])
+
+  const clearShoppingDone = useCallback(async () => {
+    const ids = (qc.getQueryData<ShoppingItem[]>(k(keys.shopping)) ?? []).filter((s) => s.done).map((s) => s.id)
+    if (!ids.length) return 0
+    setList<ShoppingItem>(keys.shopping, (old) => old.filter((s) => !ids.includes(s.id)))
+    try { await db.clearShoppingDone(ids); return ids.length } catch (e) { invalidate(keys.shopping); return fail(e, 'clear the list') }
+  }, [qc, k, setList, db, invalidate, fail])
+
+  // ---- the house: chores ---------------------------------------------------
+  const addHouseTask = useCallback(async (input: NewHouseTask) => {
+    if (!me || !household) throw new Error('Not signed in')
+    try {
+      const list = qc.getQueryData<HouseTask[]>(k(keys.houseTasks)) ?? []
+      const t = await db.createHouseTask({ ...input, sort_order: input.sort_order ?? list.length + 1, household_id: household.id, created_by: me.id })
+      setList<HouseTask>(keys.houseTasks, (old) => [...old, t])
+      tellAssignee(t.assigned_to, `Assigned to you: ${t.title}`, '/house?tab=todo')
+      return t
+    } catch (e) { return fail(e, 'add the job') }
+  }, [me, household, qc, k, db, setList, tellAssignee, fail])
+
+  const updateHouseTask = useCallback(async (id: string, patch: Partial<HouseTask>) => {
+    const prev = qc.getQueryData<HouseTask[]>(k(keys.houseTasks))?.find((t) => t.id === id)
+    const next = { ...patch }
+    if (patch.done === true) {
+      next.done_by = me?.id ?? null
+      next.completed_at = new Date().toISOString()
+      // A chore that comes back around isn't finished — it just isn't due again yet.
+      // One row keeps its history instead of breeding a new one every month.
+      if (prev?.repeat_days) {
+        next.done = false
+        next.due_date = format(addDays(new Date(), prev.repeat_days), 'yyyy-MM-dd')
+      }
+    }
+    if (patch.done === false) { next.done_by = null; next.completed_at = null }
+    setList<HouseTask>(keys.houseTasks, (old) => old.map((t) => (t.id === id ? { ...t, ...next } : t)))
+    try {
+      const saved = await db.updateHouseTask(id, next)
+      setList<HouseTask>(keys.houseTasks, (old) => old.map((t) => (t.id === id ? saved : t)))
+      if (patch.done === true && !prev?.done) {
+        void award('chore_done', null, `${saved.id}:${saved.completed_at ?? ''}`)
+        if (prev?.assigned_to && prev.assigned_to !== me?.id) {
+          void quietNudge({ to_user: prev.assigned_to, kind: 'done', message: `Done: ${saved.title}`, link: '/house?tab=todo' })
+        }
+      }
+      if (patch.assigned_to && patch.assigned_to !== prev?.assigned_to && !saved.done) {
+        tellAssignee(saved.assigned_to, `Assigned to you: ${saved.title}`, '/house?tab=todo')
+      }
+      return saved
+    } catch (e) { invalidate(keys.houseTasks); return fail(e, 'update the job') }
+  }, [qc, k, me, setList, db, award, quietNudge, tellAssignee, invalidate, fail])
+
+  const deleteHouseTask = useCallback(async (id: string) => {
+    setList<HouseTask>(keys.houseTasks, (old) => old.filter((t) => t.id !== id))
+    try { await db.deleteHouseTask(id) } catch (e) { invalidate(keys.houseTasks); return fail(e, 'remove the job') }
+  }, [setList, db, invalidate, fail])
+
+  // ---- the house: meters ---------------------------------------------------
+  const logReading = useCallback(async (input: Omit<NewMeterReading, 'photo_path'> & { file?: File | Blob | null; photo_path?: string | null }) => {
+    if (!me || !household) throw new Error('Not signed in')
+    try {
+      const { file, ...rest } = input
+      const photo_path = file ? await uploadFile(file, 'meters') : rest.photo_path ?? null
+      const r = await db.createReading({ ...rest, photo_path, household_id: household.id, created_by: me.id })
+      setList<MeterReading>(keys.readings, (old) => [...old, r].sort((a, b) => a.read_on.localeCompare(b.read_on)))
+      void award('reading_logged', null, r.id)
+      return r
+    } catch (e) { return fail(e, 'log the reading') }
+  }, [me, household, uploadFile, db, setList, award, fail])
+
+  const updateReading = useCallback(async (id: string, patch: Partial<MeterReading> & { file?: File | Blob | null }) => {
+    const { file, ...rest } = patch
+    setList<MeterReading>(keys.readings, (old) => old.map((r) => (r.id === id ? { ...r, ...rest } : r)))
+    try {
+      const photo_path = file ? await uploadFile(file, 'meters') : undefined
+      const saved = await db.updateReading(id, photo_path ? { ...rest, photo_path } : rest)
+      setList<MeterReading>(keys.readings, (old) => old.map((r) => (r.id === id ? saved : r)))
+      return saved
+    } catch (e) { invalidate(keys.readings); return fail(e, 'update the reading') }
+  }, [setList, uploadFile, db, invalidate, fail])
+
+  const deleteReading = useCallback(async (r: MeterReading) => {
+    setList<MeterReading>(keys.readings, (old) => old.filter((x) => x.id !== r.id))
+    try { await db.deleteReading(r.id); if (r.photo_path) void db.remove([r.photo_path]) } catch (e) { invalidate(keys.readings); return fail(e, 'remove the reading') }
+  }, [setList, db, invalidate, fail])
+
+  const logPurchase = useCallback(async (input: Omit<NewUtilityPurchase, 'receipt_path'> & { file?: File | Blob | null; receipt_path?: string | null }) => {
+    if (!me || !household) throw new Error('Not signed in')
+    try {
+      const { file, ...rest } = input
+      const receipt_path = file ? await uploadFile(file, 'meters') : rest.receipt_path ?? null
+      const p = await db.createPurchase({ ...rest, receipt_path, household_id: household.id, created_by: me.id })
+      setList<UtilityPurchase>(keys.purchases, (old) => [...old, p].sort((a, b) => a.bought_on.localeCompare(b.bought_on)))
+      return p
+    } catch (e) { return fail(e, 'log the top-up') }
+  }, [me, household, uploadFile, db, setList, fail])
+
+  const updatePurchase = useCallback(async (id: string, patch: Partial<UtilityPurchase>) => {
+    setList<UtilityPurchase>(keys.purchases, (old) => old.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+    try { return await db.updatePurchase(id, patch) } catch (e) { invalidate(keys.purchases); return fail(e, 'update the top-up') }
+  }, [setList, db, invalidate, fail])
+
+  const deletePurchase = useCallback(async (p: UtilityPurchase) => {
+    setList<UtilityPurchase>(keys.purchases, (old) => old.filter((x) => x.id !== p.id))
+    try { await db.deletePurchase(p.id); if (p.receipt_path) void db.remove([p.receipt_path]) } catch (e) { invalidate(keys.purchases); return fail(e, 'remove the top-up') }
+  }, [setList, db, invalidate, fail])
+
+  const updateHomeDetails = useCallback(async (patch: Partial<Pick<Household, 'water_meter_no' | 'electricity_meter_no' | 'municipal_account' | 'address'>>) => {
+    if (!household) throw new Error('Not signed in')
+    try {
+      await db.updateHousehold(household.id, patch)
+      await qc.invalidateQueries({ queryKey: ['bundle'] })
+    } catch (e) { return fail(e, 'save the home details') }
+  }, [household, db, qc, fail])
+
   // ---- board ---------------------------------------------------------------
   const addBoardItem = useCallback(async (input: NewBoardItem) => {
     if (!me) throw new Error('Not signed in')
@@ -583,11 +767,63 @@ export function useActions() {
     createExpense, updateExpense, deleteExpense,
     createTask, updateTask, deleteTask,
     logVisit, updateVisit, deleteVisit, setBlocker,
+    addShoppingItem, updateShoppingItem, deleteShoppingItem, clearShoppingDone,
+    addHouseTask, updateHouseTask, deleteHouseTask,
+    logReading, updateReading, deleteReading,
+    logPurchase, updatePurchase, deletePurchase, updateHomeDetails,
     addBoardItem, updateBoardItem, updateBoardItems, deleteBoardItem,
     sendNudge, markNudgesRead, deleteNudge,
     inviteSomeone, cancelInvite, removeMember, renameHousehold, setHouseholdCurrency, leaveHome,
   }
 }
+
+// ---------------------------------------------------------------------------
+// The meter reminder.
+// ---------------------------------------------------------------------------
+/**
+ * Puts an overdue meter reading on the other person's phone, once.
+ *
+ * The banner on the Meters tab only helps somebody already looking at it, and
+ * the whole risk is nobody looking for five weeks. So the first app opened after
+ * a reading goes over a month raises a household nudge — deduped against the
+ * last fortnight's nudges, because a reminder that arrives twice a day stops
+ * being a reminder.
+ */
+export function useMeterReminder() {
+  const { me, household } = useAuth()
+  const { db } = useDb()
+  const qc = useQueryClient()
+  const mode = db.mode
+  const { data: readings } = useReadings()
+  const { data: nudges } = useNudges()
+  const sent = useRef(false)
+
+  useEffect(() => {
+    if (sent.current || !me || !household || !readings || !nudges) return
+    const overdue = (['water', 'electricity'] as Utility[]).filter((u) => readingDue(readings, u).state === 'overdue')
+    if (!overdue.length) return
+
+    const fortnightAgo = Date.now() - 14 * 864e5
+    const already = nudges.some((n) => n.link === METER_NUDGE_LINK && new Date(n.created_at).getTime() > fortnightAgo)
+    if (already) { sent.current = true; return }
+
+    sent.current = true
+    const names = overdue.map((u) => UTILITIES[u].label.toLowerCase())
+    const which = names.length > 1 ? `${names[0]} and ${names[1]}` : names[0]
+    const days = Math.max(...overdue.map((u) => readingDue(readings, u).daysSince ?? 0))
+    void db.createNudge({
+      household_id: household.id,
+      from_user: me.id,
+      to_user: null,
+      kind: 'todo',
+      message: `The ${which} meter hasn't been read in ${days} days. A month-long gap is exactly what a disputed statement lands in.`,
+      project_id: null,
+      link: METER_NUDGE_LINK,
+    }).then(() => qc.invalidateQueries({ queryKey: [...keys.nudges, mode] })).catch(() => { /* best effort */ })
+  }, [me, household, readings, nudges, db, qc, mode])
+}
+
+const METER_NUDGE_LINK = '/house?tab=meters'
 
 // ---------------------------------------------------------------------------
 // Realtime — invalidate the right queries when the other person changes data.
@@ -612,6 +848,10 @@ export function useRealtimeSync() {
         case 'tasks': inv(keys.tasks); break
         case 'site_visits': inv(keys.visits); break
         case 'invites': inv(keys.invites); break
+        case 'shopping_items': inv(keys.shopping); break
+        case 'house_tasks': inv(keys.houseTasks); break
+        case 'meter_readings': inv(keys.readings); break
+        case 'utility_purchases': inv(keys.purchases); break
         case 'board_items': {
           const pid = (p.row?.project_id ?? p.old?.project_id) as string | undefined
           if (pid) inv(keys.board(pid)); else qc.invalidateQueries({ queryKey: keys.boardAll })

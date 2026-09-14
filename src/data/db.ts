@@ -1,11 +1,13 @@
 import type {
-  Achievement, BoardItem, Contact, Expense, HouseholdBundle, NewBoardItem, NewContact, NewExpense,
-  Invite, InvitePreview, NewImage, NewNudge, NewProject, NewQuote, NewSiteVisit, NewTask, Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Household, HouseholdBundle, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense,
+  Invite, InvitePreview, NewHouseTask, NewImage, NewMeterReading, NewNudge, NewProject, NewQuote, NewShoppingItem, NewSiteVisit, NewTask, NewUtilityPurchase,
+  Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent,
 } from './types'
 
 export type ChangeTable =
   | 'projects' | 'project_images' | 'contacts' | 'quotes' | 'expenses' | 'tasks'
   | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges' | 'site_visits' | 'invites'
+  | 'shopping_items' | 'house_tasks' | 'meter_readings' | 'utility_purchases'
 
 export interface ChangePayload {
   table: ChangeTable
@@ -38,6 +40,8 @@ export interface Db {
   updateProfile(id: string, patch: Partial<Pick<Profile, 'display_name' | 'color' | 'phone'>>): Promise<Profile>
   renameHousehold(id: string, name: string): Promise<void>
   setHouseholdCurrency(id: string, code: string): Promise<void>
+  /** Meter numbers, municipal account and address — what the evidence pack needs to name. */
+  updateHousehold(id: string, patch: Partial<Pick<Household, 'water_meter_no' | 'electricity_meter_no' | 'municipal_account' | 'address'>>): Promise<void>
   /** Moves somebody out of this home and into an empty one of their own. */
   removeMember(userId: string): Promise<void>
   leaveHousehold(): Promise<void>
@@ -94,6 +98,30 @@ export interface Db {
   createTask(input: NewTask & { created_by: string }): Promise<Task>
   updateTask(id: string, patch: Partial<Task>): Promise<Task>
   deleteTask(id: string): Promise<void>
+
+  // ---- the house ---------------------------------------------------
+  listShopping(): Promise<ShoppingItem[]>
+  createShoppingItem(input: NewShoppingItem & { household_id: string; created_by: string }): Promise<ShoppingItem>
+  updateShoppingItem(id: string, patch: Partial<ShoppingItem>): Promise<ShoppingItem>
+  deleteShoppingItem(id: string): Promise<void>
+  /** Clears the ticked-off items in one go, after a shop. */
+  clearShoppingDone(ids: string[]): Promise<void>
+
+  listHouseTasks(): Promise<HouseTask[]>
+  createHouseTask(input: NewHouseTask & { household_id: string; created_by: string }): Promise<HouseTask>
+  updateHouseTask(id: string, patch: Partial<HouseTask>): Promise<HouseTask>
+  deleteHouseTask(id: string): Promise<void>
+
+  // ---- meters ------------------------------------------------------
+  listReadings(): Promise<MeterReading[]>
+  createReading(input: NewMeterReading & { household_id: string; created_by: string }): Promise<MeterReading>
+  updateReading(id: string, patch: Partial<MeterReading>): Promise<MeterReading>
+  deleteReading(id: string): Promise<void>
+
+  listPurchases(): Promise<UtilityPurchase[]>
+  createPurchase(input: NewUtilityPurchase & { household_id: string; created_by: string }): Promise<UtilityPurchase>
+  updatePurchase(id: string, patch: Partial<UtilityPurchase>): Promise<UtilityPurchase>
+  deletePurchase(id: string): Promise<void>
 
   // ---- board -------------------------------------------------------
   listBoardItems(projectId: string): Promise<BoardItem[]>

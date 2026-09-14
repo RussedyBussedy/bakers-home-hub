@@ -23,6 +23,8 @@ import RewardsPage from './pages/Rewards'
 
 const InsightsPage = lazy(() => import('./pages/Insights'))
 const BoardPage = lazy(() => import('./pages/Board'))
+const HousePage = lazy(() => import('./pages/House'))
+const MeterReportPage = lazy(() => import('./pages/MeterReport'))
 
 function RequireAuth() {
   const { userId, loading, bundleError } = useAuth()
@@ -65,11 +67,14 @@ export default function App() {
                   <Route element={<RequireAuth />}>
                     {/* The board lives outside the shell; while its code arrives, show the plain background. */}
                     <Route path="/projects/:id/board" element={<Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}><BoardPage /></Suspense>} />
+                    {/* The evidence pack is a document, not a screen — no shell around it, so it prints clean. */}
+                    <Route path="/house/report/:utility" element={<Suspense fallback={<div className="min-h-dvh bg-bg" aria-busy="true" />}><MeterReportPage /></Suspense>} />
                     <Route element={<AppShell />}>
                       <Route index element={<HubPage />} />
                       <Route path="/projects" element={<ProjectsPage />} />
                       <Route path="/projects/new" element={<NewProjectPage />} />
                       <Route path="/projects/:id" element={<ProjectPage />} />
+                      <Route path="/house" element={<HousePage />} />
                       <Route path="/contacts" element={<ContactsPage />} />
                       <Route path="/insights" element={<InsightsPage />} />
                       <Route path="/rewards" element={<RewardsPage />} />

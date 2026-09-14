@@ -39,6 +39,11 @@ export interface Household {
   name: string
   /** ISO 4217 code — what everyone in this home sees prices in. Guessed at signup, changeable. */
   currency: string
+  /** Meter and account details, used on readings and on the evidence pack. */
+  water_meter_no: string
+  electricity_meter_no: string
+  municipal_account: string
+  address: string
   created_at: string
 }
 
@@ -289,11 +294,120 @@ export interface BoardItem {
   updated_at: string
 }
 
+// ---------------------------------------------------------------------------
+// The house itself — the shopping, the jobs and the meters that carry on
+// whether or not anything is being renovated.
+// ---------------------------------------------------------------------------
+
+export const SHOPPING_CATEGORIES = [
+  'Groceries', 'Hardware', 'Garden', 'Household', 'Paint', 'Pets', 'Pharmacy', 'Other',
+] as const
+
+export type ShoppingCategory = (typeof SHOPPING_CATEGORIES)[number]
+
+/** One thing to buy. `assigned_to` null means nobody in particular — anyone can grab it. */
+export interface ShoppingItem {
+  id: string
+  household_id: string
+  title: string
+  /** Free text so "2 kg" and "a bag" both work. */
+  qty: string
+  category: string
+  notes: string
+  est_price: number | null
+  done: boolean
+  assigned_to: string | null
+  /** Who actually ticked it off. */
+  done_by: string | null
+  completed_at: string | null
+  sort_order: number
+  created_by: string
+  created_at: string
+}
+
+/** A job around the house that belongs to no project. */
+export interface HouseTask {
+  id: string
+  household_id: string
+  title: string
+  notes: string
+  done: boolean
+  due_date: string | null
+  /** How often it comes back around, in days. Null for a one-off. */
+  repeat_days: number | null
+  assigned_to: string | null
+  done_by: string | null
+  completed_at: string | null
+  sort_order: number
+  created_by: string
+  created_at: string
+}
+
+export type Utility = 'water' | 'electricity'
+export type ReadingSource = 'self' | 'council' | 'estimate'
+
+export const READING_SOURCES: { value: ReadingSource; label: string; hint: string }[] = [
+  { value: 'self', label: 'Read it myself', hint: 'Off the meter face, with a photo' },
+  { value: 'council', label: 'Off a statement', hint: 'What the council says the meter read' },
+  { value: 'estimate', label: 'Estimated', hint: 'Nobody read the meter — a number was assumed' },
+]
+
+/** How each utility's readings behave, so the maths and the wording follow the meter. */
+export const UTILITIES: Record<Utility, {
+  label: string
+  /** What a reading is measured in. */
+  unit: string
+  /** What consumption is reported in — litres read better than thousandths of a kilolitre. */
+  usageUnit: string
+  /** Multiply a difference in `unit` by this to get `usageUnit`. */
+  usageFactor: number
+  /** Water dials only ever climb; a prepaid meter counts down and is topped up. */
+  direction: 'rising' | 'falling'
+}> = {
+  water: { label: 'Water', unit: 'kl', usageUnit: 'L', usageFactor: 1000, direction: 'rising' },
+  electricity: { label: 'Electricity', unit: 'kWh', usageUnit: 'kWh', usageFactor: 1, direction: 'falling' },
+}
+
+/** A dated number off a meter face, with the photograph that proves it. */
+export interface MeterReading {
+  id: string
+  household_id: string
+  utility: Utility
+  /** Water: kilolitres on the dial. Electricity: kWh left on the prepaid meter. */
+  reading: number
+  read_on: string
+  photo_path: string | null
+  source: ReadingSource
+  notes: string
+  created_by: string
+  created_at: string
+}
+
+/** A prepaid top-up: what was paid, and what landed on the meter. */
+export interface UtilityPurchase {
+  id: string
+  household_id: string
+  utility: Utility
+  bought_on: string
+  amount: number
+  units: number
+  token: string
+  notes: string
+  receipt_path: string | null
+  created_by: string
+  created_at: string
+}
+
+export type NewShoppingItem = Omit<ShoppingItem, 'id' | 'household_id' | 'created_by' | 'created_at' | 'done_by' | 'completed_at' | 'sort_order'> & { sort_order?: number }
+export type NewHouseTask = Omit<HouseTask, 'id' | 'household_id' | 'created_by' | 'created_at' | 'done_by' | 'completed_at' | 'sort_order'> & { sort_order?: number }
+export type NewMeterReading = Omit<MeterReading, 'id' | 'household_id' | 'created_by' | 'created_at'>
+export type NewUtilityPurchase = Omit<UtilityPurchase, 'id' | 'household_id' | 'created_by' | 'created_at'>
+
 export type XpKind =
   | 'project_created' | 'photo_added' | 'pin_added' | 'swatch_added' | 'quote_added'
   | 'quote_accepted' | 'contact_added' | 'expense_added' | 'task_completed'
   | 'project_completed' | 'under_budget' | 'on_time' | 'board_started' | 'project_started'
-  | 'visit_logged'
+  | 'visit_logged' | 'chore_done' | 'shopping_done' | 'reading_logged'
 
 export interface XpEvent {
   id: string

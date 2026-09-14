@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
 import { guessCurrencyCode, searchCountry } from '../lib/currency'
-import type { Achievement, BoardItem, Contact, Expense, Household, Invite, InvitePreview, Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Household, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -238,6 +238,62 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       await one(sb.from('tasks').delete().eq('id', id))
     },
 
+    async listShopping() {
+      return many<ShoppingItem>(sb.from('shopping_items').select('*').order('sort_order'))
+    },
+    async createShoppingItem(input) {
+      return one<ShoppingItem>(sb.from('shopping_items').insert({ sort_order: 0, ...input }).select().single())
+    },
+    async updateShoppingItem(id, patch) {
+      return one<ShoppingItem>(sb.from('shopping_items').update(patch).eq('id', id).select().single())
+    },
+    async deleteShoppingItem(id) {
+      await one(sb.from('shopping_items').delete().eq('id', id))
+    },
+    async clearShoppingDone(ids) {
+      if (!ids.length) return
+      await one(sb.from('shopping_items').delete().in('id', ids))
+    },
+
+    async listHouseTasks() {
+      return many<HouseTask>(sb.from('house_tasks').select('*').order('sort_order'))
+    },
+    async createHouseTask(input) {
+      return one<HouseTask>(sb.from('house_tasks').insert({ sort_order: 0, ...input }).select().single())
+    },
+    async updateHouseTask(id, patch) {
+      return one<HouseTask>(sb.from('house_tasks').update(patch).eq('id', id).select().single())
+    },
+    async deleteHouseTask(id) {
+      await one(sb.from('house_tasks').delete().eq('id', id))
+    },
+
+    async listReadings() {
+      return many<MeterReading>(sb.from('meter_readings').select('*').order('read_on', { ascending: true }).order('created_at', { ascending: true }))
+    },
+    async createReading(input) {
+      return one<MeterReading>(sb.from('meter_readings').insert(input).select().single())
+    },
+    async updateReading(id, patch) {
+      return one<MeterReading>(sb.from('meter_readings').update(patch).eq('id', id).select().single())
+    },
+    async deleteReading(id) {
+      await one(sb.from('meter_readings').delete().eq('id', id))
+    },
+
+    async listPurchases() {
+      return many<UtilityPurchase>(sb.from('utility_purchases').select('*').order('bought_on', { ascending: true }).order('created_at', { ascending: true }))
+    },
+    async createPurchase(input) {
+      return one<UtilityPurchase>(sb.from('utility_purchases').insert(input).select().single())
+    },
+    async updatePurchase(id, patch) {
+      return one<UtilityPurchase>(sb.from('utility_purchases').update(patch).eq('id', id).select().single())
+    },
+    async deletePurchase(id) {
+      await one(sb.from('utility_purchases').delete().eq('id', id))
+    },
+
     async listBoardItems(projectId) {
       return many<BoardItem>(sb.from('board_items').select('*').eq('project_id', projectId).order('z'))
     },
@@ -278,6 +334,9 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
     },
     async setHouseholdCurrency(id, code) {
       await one(sb.from('households').update({ currency: code }).eq('id', id))
+    },
+    async updateHousehold(id, patch) {
+      await one(sb.from('households').update(patch).eq('id', id))
     },
     async removeMember(userId) {
       const { error } = await sb.rpc('remove_member', { who: userId })

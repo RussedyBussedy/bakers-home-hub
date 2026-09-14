@@ -1,8 +1,8 @@
 import { addDays, format, subDays } from 'date-fns'
 import type {
-  Achievement, BoardItem, Contact, Expense, Household, Invite, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Household, HouseTask, Invite, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, UtilityPurchase, XpEvent,
 } from './types'
-import { SCENES, materialSwatch, roomScene } from '../lib/demoImages'
+import { SCENES, materialSwatch, meterFace, roomScene } from '../lib/demoImages'
 
 export const DEMO_USERS = {
   russel: 'u-russel',
@@ -24,6 +24,10 @@ export interface DemoState {
   nudges?: Nudge[]
   visits?: SiteVisit[]
   invites?: Invite[]
+  shopping?: ShoppingItem[]
+  houseTasks?: HouseTask[]
+  readings?: MeterReading[]
+  purchases?: UtilityPurchase[]
 }
 
 const d = (daysAgo: number, hour = 10) => {
@@ -41,7 +45,10 @@ export function buildDemoState(): DemoState {
   const R = DEMO_USERS.russel
   const K = DEMO_USERS.kay
 
-  const household: Household = { id: H, name: 'The Bakers', currency: 'ZAR', created_at: d(120) }
+  const household: Household = {
+    id: H, name: 'The Bakers', currency: 'ZAR',
+    water_meter_no: '24046929', electricity_meter_no: '14308043075', municipal_account: '', address: '', created_at: d(120),
+  }
   const profiles: Profile[] = [
     { id: R, household_id: H, display_name: 'Russel', color: '#B84D24', phone: '', created_at: d(120) },
     { id: K, household_id: H, display_name: 'Kay', color: '#7F5A9E', phone: '', created_at: d(120) },
@@ -278,5 +285,53 @@ export function buildDemoState(): DemoState {
     { id: 'v5', project_id: P.borehole, contact_id: C.borehole, visit_date: day(-4), outcome: 'arrived', notes: 'Pulled the pump, motor is toast. New one ordered.', logged_by: R, created_at: d(4, 12) },
   ]
 
-  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges, visits }
+  // ---- the house -----------------------------------------------------------
+  // The shopping and the chores that carry on whether or not anything is being renovated.
+  const shopping: ShoppingItem[] = [
+    { id: 's1', household_id: H, title: 'Wood primer', qty: '5 L', category: 'Paint', notes: 'Water-based, for the cabinet carcasses', est_price: 480, done: false, assigned_to: R, done_by: null, completed_at: null, sort_order: 1, created_by: K, created_at: d(3, 9) },
+    { id: 's2', household_id: H, title: 'Masking tape', qty: '3', category: 'Hardware', notes: '', est_price: 95, done: false, assigned_to: R, done_by: null, completed_at: null, sort_order: 2, created_by: K, created_at: d(3, 9) },
+    { id: 's3', household_id: H, title: 'Milk', qty: '2 L', category: 'Groceries', notes: '', est_price: 42, done: false, assigned_to: null, done_by: null, completed_at: null, sort_order: 3, created_by: R, created_at: d(1, 7) },
+    { id: 's4', household_id: H, title: 'Coffee beans', qty: '1 kg', category: 'Groceries', notes: 'The dark roast, not the breakfast one', est_price: 220, done: false, assigned_to: null, done_by: null, completed_at: null, sort_order: 4, created_by: K, created_at: d(1, 7) },
+    { id: 's5', household_id: H, title: 'Dog food', qty: '8 kg', category: 'Pets', notes: '', est_price: 510, done: false, assigned_to: K, done_by: null, completed_at: null, sort_order: 5, created_by: R, created_at: d(2, 19) },
+    { id: 's6', household_id: H, title: 'Compost', qty: '4 bags', category: 'Garden', notes: 'For the new beds along the wall', est_price: 260, done: false, assigned_to: null, done_by: null, completed_at: null, sort_order: 6, created_by: R, created_at: d(4, 16) },
+    { id: 's7', household_id: H, title: 'Dishwasher tablets', qty: '', category: 'Household', notes: '', est_price: 180, done: true, assigned_to: null, done_by: K, completed_at: d(1, 17), sort_order: 7, created_by: K, created_at: d(5, 8) },
+    { id: 's8', household_id: H, title: 'Silicone sealant', qty: '2', category: 'Hardware', notes: 'Clear, for the shower', est_price: 130, done: true, assigned_to: R, done_by: R, completed_at: d(2, 11), sort_order: 8, created_by: R, created_at: d(6, 8) },
+  ]
+
+  const houseTasks: HouseTask[] = [
+    { id: 'h1', household_id: H, title: 'Read the water meter', notes: 'Photograph the dial — we are still logging against the council.', done: false, due_date: day(2), repeat_days: 30, assigned_to: R, done_by: null, completed_at: null, sort_order: 1, created_by: R, created_at: d(30, 8) },
+    { id: 'h2', household_id: H, title: 'Service the pool pump', notes: '', done: false, due_date: day(-2), repeat_days: null, assigned_to: R, done_by: null, completed_at: null, sort_order: 2, created_by: K, created_at: d(12, 9) },
+    { id: 'h3', household_id: H, title: 'Book the dogs into kennels for December', notes: '', done: false, due_date: day(9), repeat_days: null, assigned_to: K, done_by: null, completed_at: null, sort_order: 3, created_by: K, created_at: d(6, 20) },
+    { id: 'h4', household_id: H, title: 'Clean the gutters before the rains', notes: 'Ladder is behind the lapa.', done: false, due_date: day(16), repeat_days: null, assigned_to: null, done_by: null, completed_at: null, sort_order: 4, created_by: R, created_at: d(8, 17) },
+    { id: 'h5', household_id: H, title: 'Replace the geyser element', notes: '', done: false, due_date: null, repeat_days: null, assigned_to: null, done_by: null, completed_at: null, sort_order: 5, created_by: R, created_at: d(20, 10) },
+    { id: 'h6', household_id: H, title: 'Pay the municipal account', notes: '', done: true, due_date: day(-5), repeat_days: 30, assigned_to: R, done_by: R, completed_at: d(5, 12), sort_order: 6, created_by: R, created_at: d(35, 8) },
+    { id: 'h7', household_id: H, title: 'Cut back the bougainvillea', notes: '', done: true, due_date: day(-11), repeat_days: null, assigned_to: K, done_by: K, completed_at: d(11, 15), sort_order: 7, created_by: K, created_at: d(25, 9) },
+  ]
+
+  // Water climbs; a leak in the middle of the record is what a dispute looks like.
+  const readings: MeterReading[] = [
+    { id: 'w1', household_id: H, utility: 'water', reading: 842, read_on: day(-118), photo_path: meterFace(842), source: 'self', notes: 'First reading after moving in.', created_by: R, created_at: d(118, 8) },
+    { id: 'w2', household_id: H, utility: 'water', reading: 871, read_on: day(-90), photo_path: meterFace(871), source: 'self', notes: '', created_by: R, created_at: d(90, 8) },
+    { id: 'w3', household_id: H, utility: 'water', reading: 908, read_on: day(-59), photo_path: meterFace(908), source: 'self', notes: 'Higher than it should be — nothing obviously running.', created_by: R, created_at: d(59, 8) },
+    { id: 'w4', household_id: H, utility: 'water', reading: 958, read_on: day(-30), photo_path: meterFace(958), source: 'self', notes: 'Meter ticks over with every tap closed.', created_by: R, created_at: d(30, 8) },
+    { id: 'w5', household_id: H, utility: 'water', reading: 1012, read_on: day(-2), photo_path: meterFace(1012), source: 'self', notes: 'Isolating valve closed — watching it from here.', created_by: R, created_at: d(2, 8) },
+  ]
+
+  // Prepaid electricity: the balance falls between top-ups and jumps when one lands.
+  const elec: MeterReading[] = [
+    { id: 'e1', household_id: H, utility: 'electricity', reading: 612, read_on: day(-46), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(46, 19) },
+    { id: 'e2', household_id: H, utility: 'electricity', reading: 431, read_on: day(-31), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(31, 19) },
+    { id: 'e3', household_id: H, utility: 'electricity', reading: 268, read_on: day(-17), photo_path: null, source: 'self', notes: '', created_by: K, created_at: d(17, 20) },
+    { id: 'e4', household_id: H, utility: 'electricity', reading: 856, read_on: day(-9), photo_path: null, source: 'self', notes: 'After the R3 000 top-up.', created_by: R, created_at: d(9, 18) },
+    { id: 'e5', household_id: H, utility: 'electricity', reading: 742, read_on: day(-1), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(1, 18) },
+  ]
+
+  const purchases: UtilityPurchase[] = [
+    { id: 'up1', household_id: H, utility: 'electricity', bought_on: day(-60), amount: 500, units: 128.9, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(60, 18) },
+    { id: 'up2', household_id: H, utility: 'electricity', bought_on: day(-38), amount: 500, units: 96.4, token: '', notes: 'First top-up of the month — service fee came off this one.', receipt_path: null, created_by: R, created_at: d(38, 18) },
+    { id: 'up3', household_id: H, utility: 'electricity', bought_on: day(-24), amount: 500, units: 129, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(24, 18) },
+    { id: 'up4', household_id: H, utility: 'electricity', bought_on: day(-10), amount: 3000, units: 774.1, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(10, 18) },
+  ]
+
+  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges, visits, shopping, houseTasks, readings: [...readings, ...elec], purchases }
 }

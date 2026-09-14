@@ -1,0 +1,160 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Camera, ImagePlus, X } from 'lucide-react'
+import { READING_SOURCES, UTILITIES, type MeterReading, type ReadingSource, type Utility } from '../../data/types'
+import { useActions, useMediaUrl } from '../../data/hooks'
+import { useAuth } from '../../data/session'
+import { latestReading, readingsFor, usedLabel } from '../../lib/meters'
+import { cn, fmtDate, todayISO } from '../../lib/utils'
+import { Button } from '../ui/Button'
+import { DateInput, Field, Input, Select, Textarea } from '../ui/Field'
+import { Sheet } from '../ui/Sheet'
+
+/**
+ * Capturing a reading.
+ *
+ * The photograph is the part that matters — a number typed into an app proves
+ * nothing, but a number next to a dated picture of the dial is evidence. So the
+ * camera is the first thing on the form, not an afterthought at the bottom.
+ */
+export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  utility: Utility
+  readings: MeterReading[]
+  edit?: MeterReading | null
+}) {
+  const { logReading, updateReading } = useActions()
+  const { household } = useAuth()
+  const meta = UTILITIES[utility]
+
+  const [value, setValue] = useState('')
+  const [when, setWhen] = useState(todayISO())
+  const [source, setSource] = useState<ReadingSource>('self')
+  const [notes, setNotes] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const existingPhoto = useMediaUrl(edit?.photo_path)
+
+  useEffect(() => {
+    if (!open) return
+    setValue(edit ? String(edit.reading) : '')
+    setWhen(edit?.read_on ?? todayISO())
+    setSource(edit?.source ?? 'self')
+    setNotes(edit?.notes ?? '')
+    setFile(null); setPreview(null)
+  }, [open, edit])
+
+  useEffect(() => {
+    if (!file) { setPreview(null); return }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const previous = edit
+    ? readingsFor(readings, utility).filter((r) => r.read_on <= edit.read_on && r.id !== edit.id).pop() ?? null
+    : latestReading(readings, utility)
+
+  // What this reading would mean, worked out as it is typed — the best moment to
+  // catch a digit in the wrong place is before it is saved.
+  const n = Number(value)
+  const delta = previous && value.trim() !== '' && isFinite(n)
+    ? (meta.direction === 'rising' ? n - Number(previous.reading) : Number(previous.reading) - n) * meta.usageFactor
+    : null
+  const backwards = delta !== null && delta < 0
+  const meterNo = utility === 'water' ? household?.water_meter_no : household?.electricity_meter_no
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!value.trim() || !isFinite(n)) return
+    setBusy(true)
+    try {
+      if (edit) await updateReading(edit.id, { reading: n, read_on: when, source, notes: notes.trim(), file })
+      else await logReading({ utility, reading: n, read_on: when, source, notes: notes.trim(), file, photo_path: null })
+      onOpenChange(false)
+    } catch { /* toast */ } finally { setBusy(false) }
+  }
+
+  const photo = preview ?? (file ? null : existingPhoto)
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={edit ? 'Edit the reading' : `New ${meta.label.toLowerCase()} reading`}
+      description={meterNo ? `Meter ${meterNo}` : undefined}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={save} loading={busy} disabled={!value.trim()}>{edit ? 'Save' : 'Log it'}</Button>
+        </>
+      }
+    >
+      <form onSubmit={save} className="space-y-4 pt-1">
+        {/* The photo of the dial */}
+        <div>
+          <p className="mb-1.5 text-[13px] font-medium text-ink-2">Photo of the meter</p>
+          {photo ? (
+            <div className="relative overflow-hidden rounded-2xl border border-line">
+              <img src={photo} alt="The meter face" className="max-h-56 w-full object-cover" />
+              <button type="button" onClick={() => { setFile(null); if (inputRef.current) inputRef.current.value = '' }} className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-ink/70 text-bg backdrop-blur" aria-label="Remove photo">
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" className="flex-1" leading={<Camera className="size-4" />} onClick={() => {
+                const i = document.createElement('input')
+                i.type = 'file'; i.accept = 'image/*'; i.setAttribute('capture', 'environment')
+                i.onchange = () => setFile(i.files?.[0] ?? null)
+                i.click()
+              }}>Take one</Button>
+              <Button type="button" variant="secondary" className="flex-1" leading={<ImagePlus className="size-4" />} onClick={() => inputRef.current?.click()}>Choose</Button>
+            </div>
+          )}
+          <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { setFile(e.target.files?.[0] ?? null); e.target.value = '' }} />
+          <p className="mt-1.5 text-xs text-ink-3">The picture is what makes the record worth anything in a dispute.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={`Reading (${meta.unit})`} required>
+          {(id) => (
+            <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" type="number" step="any" placeholder={meta.direction === 'rising' ? '1012' : '742'} autoFocus />
+          )}
+          </Field>
+          <Field label="Read on" required>
+          {(id) => (
+            <DateInput id={id} value={when} onChange={(e) => setWhen(e.target.value)} max={todayISO()} />
+          )}
+          </Field>
+        </div>
+
+        {delta !== null && (
+          <div className={cn('rounded-2xl border px-3.5 py-2.5 text-[13px]', backwards ? 'border-danger/30 bg-danger-soft text-danger' : 'border-line bg-surface-2 text-ink-2')}>
+            {backwards ? (
+              <>That’s <strong>lower</strong> than the {fmtDate(previous!.read_on, 'd MMM')} reading of {Number(previous!.reading).toLocaleString()} {meta.unit}. Worth a second look at the dial before you save.</>
+            ) : (
+              <>{usedLabel(delta, utility)} since {fmtDate(previous!.read_on, 'd MMM')}.</>
+            )}
+          </div>
+        )}
+
+        <Field label="Where the number came from">
+          {(id) => (
+            <Select id={id} value={source} onChange={(e) => setSource(e.target.value as ReadingSource)}>
+            {READING_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label} — {s.hint}</option>)}
+          </Select>
+          )}
+          </Field>
+
+        <Field label="Notes" hint="Anything you'd want to remember a year from now.">
+          {(id) => (
+            <Textarea id={id} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="e.g. Meter still ticking with every tap closed." />
+          )}
+          </Field>
+      </form>
+    </Sheet>
+  )
+}

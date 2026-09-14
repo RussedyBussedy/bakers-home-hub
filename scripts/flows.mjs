@@ -5,7 +5,7 @@ import fs from 'node:fs'
 const base = process.argv[2] || 'http://127.0.0.1:4173'
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' })
 const context = await browser.newContext({ viewport: { width: 1280, height: 860 } })
-await context.addInitScript(() => { localStorage.setItem('hub-demo-user', 'u-russel'); if (!sessionStorage.getItem('flows-init')) { localStorage.removeItem('hub-demo-state-v2'); sessionStorage.setItem('flows-init', '1') } localStorage.setItem('hub-theme', 'light') })
+await context.addInitScript(() => { localStorage.setItem('hub-demo-user', 'u-russel'); if (!sessionStorage.getItem('flows-init')) { localStorage.removeItem('hub-demo-state-v3'); sessionStorage.setItem('flows-init', '1') } localStorage.setItem('hub-theme', 'light') })
 const page = await context.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push('PAGEERROR ' + e.message))
@@ -462,9 +462,9 @@ await step('invite: make a link, see it pending, then cancel it', async () => {
 
   // The rest is what the invited person sees, so it needs a browser that is NOT signed in —
   // carrying over the demo data, but none of the session.
-  const demoState = await page.evaluate(() => localStorage.getItem('hub-demo-state-v2'))
+  const demoState = await page.evaluate(() => localStorage.getItem('hub-demo-state-v3'))
   const guest = await browser.newContext({ viewport: { width: 1280, height: 860 } })
-  await guest.addInitScript((st) => { localStorage.setItem('hub-demo-state-v2', st); localStorage.setItem('hub-theme', 'light') }, demoState)
+  await guest.addInitScript((st) => { localStorage.setItem('hub-demo-state-v3', st); localStorage.setItem('hub-theme', 'light') }, demoState)
   const visitor = await guest.newPage()
   try {
     const code = link.split('/join/')[1]
@@ -551,7 +551,7 @@ await step('settings: calm movement sticks and stops the entrance animation', as
   if (await page.evaluate(() => localStorage.getItem('hub-motion')) !== 'calm') throw new Error('the choice was not remembered')
   // With movement off, a page must be fully opaque on the very first frame after a route change.
   await page.goto(base + '/projects', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('link', { name: 'Contacts' }).first().click()
+  await page.getByRole('link', { name: 'House' }).first().click()
   await page.waitForTimeout(60)
   const o = await page.evaluate(() => {
     const el = document.querySelector('main > div')
@@ -600,6 +600,115 @@ await step('settings: the currency switches the whole app, and converts nothing'
   await page.getByLabel('Currency').selectOption('ZAR')
   await page.waitForTimeout(700)
   if (await page.getByLabel('Currency').inputValue() !== 'ZAR') throw new Error('could not switch back')
+})
+
+// ---------------------------------------------------------------------------
+// The house: shopping, chores and meters
+// ---------------------------------------------------------------------------
+await step('shopping: add, assign and tick off', async () => {
+  await page.goto(base + '/house?tab=shopping', { waitUntil: 'networkidle' })
+  await page.getByLabel('What to buy').fill('Cable ties')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.waitForTimeout(600)
+  const row = page.locator('p', { hasText: 'Cable ties' }).first()
+  if (!(await row.count())) throw new Error('the new item never appeared')
+
+  // Ticking it moves it to the trolley and records who did it.
+  await page.getByRole('checkbox', { name: 'Cable ties' }).first().click()
+  await page.waitForTimeout(700)
+  const trolley = page.locator('div').filter({ hasText: /^In the trolley/ }).first()
+  if (!(await trolley.count())) throw new Error('nothing landed in the trolley')
+  if (!/Russel got it/.test(await page.locator('text=Cable ties').first().locator('xpath=../..').innerText())) {
+    throw new Error('the tick did not record who did it')
+  }
+  await shot('10-shopping')
+})
+
+await step('shopping: filters count what they say', async () => {
+  await page.goto(base + '/house?tab=shopping', { waitUntil: 'networkidle' })
+  const grabs = await page.getByRole('button', { name: /Up for grabs/ }).innerText()
+  await page.getByRole('button', { name: /Up for grabs/ }).click()
+  await page.waitForTimeout(400)
+  const n = Number(grabs.match(/(\d+)/)?.[1] ?? '0')
+  const rows = await page.getByRole('checkbox').count()
+  if (n > 0 && rows === 0) throw new Error(`filter says ${n} but shows nothing`)
+})
+
+await step('chores: a repeating job rolls forward instead of vanishing', async () => {
+  await page.goto(base + '/house?tab=todo', { waitUntil: 'networkidle' })
+  const meter = page.getByRole('checkbox', { name: 'Read the water meter' }).first()
+  if (!(await meter.count())) throw new Error('the seeded repeating chore is missing')
+  await meter.click()
+  await page.waitForTimeout(800)
+  // It must still be on the open list, with a new date and a "last done" note.
+  const still = page.locator('p', { hasText: 'Read the water meter' }).first()
+  if (!(await still.count())) throw new Error('the repeating chore disappeared when ticked')
+  const meta = await still.locator('xpath=following-sibling::div[1]').innerText()
+  if (!/Last done/.test(meta)) throw new Error(`no record it was done: ${meta}`)
+  await shot('11-chores')
+})
+
+await step('meters: water consumption is worked out between readings', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  const using = page.locator('text=Using now').locator('xpath=following-sibling::*[1]').first()
+  const rate = await settledText(using)
+  // The seed leaks hard: 54 kl over 28 days is about 1 930 L a day.
+  if (!/L\/day/.test(rate)) throw new Error(`no daily rate shown: ${rate}`)
+  const n = Number(rate.replace(/[^\d]/g, ''))
+  if (!(n > 1000 && n < 3000)) throw new Error(`daily rate looks wrong: ${rate}`)
+  await shot('12-meters-water')
+})
+
+await step('meters: a new reading lands and changes the rate', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Log a reading' }).click()
+  await page.waitForTimeout(600)
+  await page.getByLabel(/Reading \(kl\)/).fill('1014')
+  await page.getByRole('button', { name: 'Log it' }).click()
+  await page.waitForTimeout(900)
+  const first = await page.locator('.divide-y > li').first().innerText()
+  if (!/1,014/.test(first)) throw new Error(`the new reading is not at the top: ${first}`)
+})
+
+await step('meters: prepaid shows a balance, a rate and a runway', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: /Electricity/ }).click()
+  await page.waitForTimeout(800)
+  const body = await page.locator('main').innerText()
+  if (!/left on the meter/i.test(body)) throw new Error('no prepaid balance')
+  if (!/kWh/.test(body)) throw new Error('no units anywhere')
+  if (!/R\s?\d/.test(body)) throw new Error('no rand figure — the top-ups are not being priced')
+  await shot('13-meters-electricity')
+})
+
+await step('the evidence pack carries the readings', async () => {
+  await page.goto(base + '/house/report/water', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(900)
+  const text = await page.locator('article.sheet').innerText()
+  if (!/consumption record/i.test(text)) throw new Error('not the report')
+  if (!/Readings/.test(text)) throw new Error('no readings table')
+  // Every seeded reading must appear in the table.
+  const rows = await page.locator('.grid-table tbody tr').count()
+  if (rows < 5) throw new Error(`only ${rows} readings made the report`)
+  if (!/signature/i.test(text)) throw new Error('nothing to sign')
+  // The plates are the point of the pack — a photo that never resolves is a blank page.
+  const plates = await page.locator('.plate img').count()
+  if (plates < 5) throw new Error(`only ${plates} photographs made the plates`)
+  const blank = await page.evaluate(() => [...document.querySelectorAll('.plate img')].filter((i) => !i.complete || i.naturalWidth === 0).length)
+  if (blank) throw new Error(`${blank} plates never loaded their photograph`)
+  if (!/Plate 1/.test(text)) throw new Error('the plates are not numbered')
+  await shot('14-water-report')
+})
+
+await step('the Hub says what the house needs', async () => {
+  await page.goto(base + '/', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(700)
+  const strip = page.locator('section').filter({ hasText: 'Shopping, chores and the meters' }).last()
+  if (!(await strip.count())) throw new Error('the house strip is missing from the Hub')
+  const t = await strip.innerText()
+  if (!/shopping list/i.test(t) || !/meters/i.test(t)) throw new Error(`the strip is incomplete: ${t.replace(/\n/g, ' / ')}`)
+  await strip.getByRole('link', { name: /shopping list/i }).click()
+  await page.waitForURL(/\/house/, { timeout: 5000 })
 })
 
 console.log(errors.length ? `\n${errors.length} errors:\n${errors.join('\n')}` : '\nNo console/page errors.')

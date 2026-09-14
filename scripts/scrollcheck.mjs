@@ -75,7 +75,7 @@ for (const vp of [{ name: 'desktop', width: 1280, height: 720 }, { name: 'landsc
   } else console.log(`  skip  page too short to scroll past the tab bar (max ${maxP}, bar ${barTop})`)
 
   // 4. frame recorder over a few route changes: look for blank frames and the splash
-  const routes = ['/', '/projects', '/insights', '/contacts', '/rewards', '/']
+  const routes = ['/', '/projects', '/insights', '/house', '/rewards', '/']
   await page.goto(base + '/')
   await page.waitForTimeout(900)
   let blank = 0, splash = 0, frames = 0, maxSwing = 0

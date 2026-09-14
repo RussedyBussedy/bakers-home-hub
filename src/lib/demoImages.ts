@@ -111,3 +111,48 @@ export const SCENES: Record<string, Scene> = {
   lapa: { wall: '#F0DEC2', wall2: '#E4C79E', floor: '#C8A46B', accent: '#B5563A', light: '#FBE2A8', variant: 'lapa' },
   study: { wall: '#E4E1DA', wall2: '#C7C2B8', floor: '#8B6D4B', accent: '#2E3A3F', light: '#F5F1E8', variant: 'study' },
 }
+
+/**
+ * A meter face, for the demo's readings.
+ *
+ * The evidence pack is only worth looking at with photographs in it, and the
+ * demo has no camera. This draws the dial that a photo would show — the odometer
+ * wheels, the red litre hands, the serial plate — so the plates in the report
+ * are the right shape and the right proportions.
+ */
+export function meterFace(reading: number, serial = '24046929'): string {
+  const whole = String(Math.floor(reading)).padStart(5, '0').slice(-5)
+  // The fractional wheels a water meter shows in red: hundreds and tens of litres.
+  const frac = String(Math.round((reading % 1) * 100)).padStart(2, '0')
+  const digit = (d: string, i: number, red: boolean) => `
+    <rect x="${196 + i * 62}" y="236" width="56" height="78" rx="5" fill="${red ? '#8E2B20' : '#25211E'}"/>
+    <text x="${224 + i * 62}" y="296" font-family="DIN, Helvetica, Arial, sans-serif" font-size="52" font-weight="700"
+      text-anchor="middle" fill="#F2EFE9">${d}</text>`
+
+  return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+    <rect width="800" height="600" fill="#6E6A63"/>
+    <rect x="0" y="470" width="800" height="130" fill="#514E48"/>
+    <circle cx="400" cy="300" r="252" fill="#8C877E"/>
+    <circle cx="400" cy="300" r="236" fill="#413E39"/>
+    <circle cx="400" cy="300" r="222" fill="#CFCABF"/>
+    <circle cx="400" cy="300" r="222" fill="none" stroke="#9A958B" stroke-width="6"/>
+    ${Array.from({ length: 40 }, (_, i) => {
+      const a = (i / 40) * Math.PI * 2
+      const long = i % 5 === 0
+      const r1 = long ? 186 : 196, r2 = 208
+      return `<line x1="${400 + Math.sin(a) * r1}" y1="${300 - Math.cos(a) * r1}" x2="${400 + Math.sin(a) * r2}" y2="${300 - Math.cos(a) * r2}" stroke="#6E6A63" stroke-width="${long ? 4 : 2}"/>`
+    }).join('')}
+    ${whole.split('').map((d, i) => digit(d, i, false)).join('')}
+    ${frac.split('').map((d, i) => digit(d, i + 5, true)).join('')}
+    <rect x="192" y="232" width="440" height="86" rx="8" fill="none" stroke="#25211E" stroke-width="4"/>
+    <text x="400" y="205" font-family="Helvetica, Arial, sans-serif" font-size="26" letter-spacing="4"
+      text-anchor="middle" fill="#57534C">m³</text>
+    <text x="400" y="372" font-family="Helvetica, Arial, sans-serif" font-size="22" letter-spacing="3"
+      text-anchor="middle" fill="#6E6A63">No. ${serial}</text>
+    <circle cx="400" cy="424" r="38" fill="#CFCABF" stroke="#9A958B" stroke-width="4"/>
+    <line x1="400" y1="424" x2="${400 + Math.sin(reading * 2.3) * 30}" y2="${424 - Math.cos(reading * 2.3) * 30}" stroke="#8E2B20" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="400" cy="424" r="5" fill="#8E2B20"/>
+    <rect width="800" height="600" filter="url(#g)" opacity="0.5"/>
+    <defs>${GRAIN}</defs>
+  </svg>`)
+}

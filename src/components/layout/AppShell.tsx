@@ -1,20 +1,23 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, Compass, Home, Plus, Settings, Trophy, Users, Zap, Flame } from 'lucide-react'
+import { BarChart3, Compass, Home, HousePlug, Plus, Settings, Trophy, Zap, Flame } from 'lucide-react'
 import { Suspense, useEffect, type ReactNode } from 'react'
 import { cn, homeTitle, num } from '../../lib/utils'
 import { useAuth } from '../../data/session'
 import { useCalm } from '../../store/ui'
-import { useInbox, useLevel, useRealtimeSync, useXp } from '../../data/hooks'
+import { useInbox, useLevel, useMeterReminder, useRealtimeSync, useXp } from '../../data/hooks'
 import { weeklyStreak } from '../../lib/xp'
 import { Avatar } from '../ui/Bits'
 import { Tooltip } from '../ui/Menu'
 import { HouseMark } from './HouseMark'
 
+// Five is what a phone's bottom bar holds without the labels going to crumbs.
+// Contacts lost its slot to the House — a contact is looked up from inside a
+// quote or an expense, where it is needed, rather than browsed for its own sake.
 const NAV = [
   { to: '/', label: 'Hub', icon: Home, end: true },
   { to: '/projects', label: 'Projects', icon: Compass },
-  { to: '/contacts', label: 'Contacts', icon: Users },
+  { to: '/house', label: 'House', icon: HousePlug },
   { to: '/insights', label: 'Insights', icon: BarChart3 },
   { to: '/rewards', label: 'Rewards', icon: Trophy },
 ]
@@ -23,6 +26,7 @@ const BASE_TITLE = typeof document !== 'undefined' && document.title ? document.
 
 export function AppShell() {
   useRealtimeSync()
+  useMeterReminder()
   const { me, household } = useAuth()
   const level = useLevel()
   const { data: xp } = useXp()
@@ -55,7 +59,7 @@ export function AppShell() {
   // Fetch the lazy pages while the person is reading, so tapping Insights or a board never waits on a download.
   useEffect(() => {
     const w = window as Window & { requestIdleCallback?: (cb: () => void) => number }
-    const preload = () => { void import('../../pages/Insights'); void import('../../pages/Board') }
+    const preload = () => { void import('../../pages/Insights'); void import('../../pages/Board'); void import('../../pages/House') }
     if (w.requestIdleCallback) w.requestIdleCallback(preload)
     else window.setTimeout(preload, 1200)
   }, [])

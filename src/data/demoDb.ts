@@ -1,9 +1,9 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Invite, InvitePreview, Nudge, Profile, Project, ProjectImage, Quote, SiteVisit, Task, Unfurled, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
-const STORAGE_KEY = 'hub-demo-state-v2'
+const STORAGE_KEY = 'hub-demo-state-v3'
 const SESSION_KEY = 'hub-demo-user'
 const CHANNEL = 'hub-demo-sync'
 
@@ -127,6 +127,9 @@ export function createDemoDb(): Db {
     },
     async setHouseholdCurrency(_id, code) {
       return mutate('profiles', 'UPDATE', () => { state.household.currency = code })
+    },
+    async updateHousehold(_id, patch) {
+      return mutate('profiles', 'UPDATE', () => { Object.assign(state.household, patch) })
     },
     async removeMember(userId) {
       return mutate('profiles', 'DELETE', () => { state.profiles = state.profiles.filter((p) => p.id !== userId) })
@@ -356,6 +359,95 @@ export function createDemoDb(): Db {
     },
     async deleteTask(id) {
       await mutate('tasks', 'DELETE', () => { state.tasks = state.tasks.filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listShopping() {
+      return delay([...(state.shopping ?? [])].sort((a, b) => a.sort_order - b.sort_order))
+    },
+    async createShoppingItem(input) {
+      return mutate('shopping_items', 'INSERT', () => {
+        const list = (state.shopping ??= [])
+        const s: ShoppingItem = { ...input, sort_order: input.sort_order ?? list.length + 1, id: uid(), done_by: null, completed_at: null, created_at: nowISO() }
+        list.push(s)
+        return s
+      })
+    },
+    async updateShoppingItem(id, patch) {
+      return mutate('shopping_items', 'UPDATE', () => {
+        const s = (state.shopping ??= []).find((x) => x.id === id)!
+        Object.assign(s, patch)
+        return { ...s }
+      })
+    },
+    async deleteShoppingItem(id) {
+      await mutate('shopping_items', 'DELETE', () => { state.shopping = (state.shopping ?? []).filter((x) => x.id !== id); return undefined }, { id })
+    },
+    async clearShoppingDone(ids) {
+      await mutate('shopping_items', 'DELETE', () => { state.shopping = (state.shopping ?? []).filter((x) => !ids.includes(x.id)); return undefined })
+    },
+
+    async listHouseTasks() {
+      return delay([...(state.houseTasks ?? [])].sort((a, b) => a.sort_order - b.sort_order))
+    },
+    async createHouseTask(input) {
+      return mutate('house_tasks', 'INSERT', () => {
+        const list = (state.houseTasks ??= [])
+        const t: HouseTask = { ...input, sort_order: input.sort_order ?? list.length + 1, id: uid(), done_by: null, completed_at: null, created_at: nowISO() }
+        list.push(t)
+        return t
+      })
+    },
+    async updateHouseTask(id, patch) {
+      return mutate('house_tasks', 'UPDATE', () => {
+        const t = (state.houseTasks ??= []).find((x) => x.id === id)!
+        Object.assign(t, patch)
+        return { ...t }
+      })
+    },
+    async deleteHouseTask(id) {
+      await mutate('house_tasks', 'DELETE', () => { state.houseTasks = (state.houseTasks ?? []).filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listReadings() {
+      return delay([...(state.readings ?? [])].sort((a, b) => a.read_on.localeCompare(b.read_on) || a.created_at.localeCompare(b.created_at)))
+    },
+    async createReading(input) {
+      return mutate('meter_readings', 'INSERT', () => {
+        const r: MeterReading = { ...input, id: uid(), created_at: nowISO() }
+        ;(state.readings ??= []).push(r)
+        return r
+      })
+    },
+    async updateReading(id, patch) {
+      return mutate('meter_readings', 'UPDATE', () => {
+        const r = (state.readings ??= []).find((x) => x.id === id)!
+        Object.assign(r, patch)
+        return { ...r }
+      })
+    },
+    async deleteReading(id) {
+      await mutate('meter_readings', 'DELETE', () => { state.readings = (state.readings ?? []).filter((x) => x.id !== id); return undefined }, { id })
+    },
+
+    async listPurchases() {
+      return delay([...(state.purchases ?? [])].sort((a, b) => a.bought_on.localeCompare(b.bought_on) || a.created_at.localeCompare(b.created_at)))
+    },
+    async createPurchase(input) {
+      return mutate('utility_purchases', 'INSERT', () => {
+        const p: UtilityPurchase = { ...input, id: uid(), created_at: nowISO() }
+        ;(state.purchases ??= []).push(p)
+        return p
+      })
+    },
+    async updatePurchase(id, patch) {
+      return mutate('utility_purchases', 'UPDATE', () => {
+        const p = (state.purchases ??= []).find((x) => x.id === id)!
+        Object.assign(p, patch)
+        return { ...p }
+      })
+    },
+    async deletePurchase(id) {
+      await mutate('utility_purchases', 'DELETE', () => { state.purchases = (state.purchases ?? []).filter((x) => x.id !== id); return undefined }, { id })
     },
 
     async listBoardItems(projectId) {

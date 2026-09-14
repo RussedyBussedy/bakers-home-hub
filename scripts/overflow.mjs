@@ -33,6 +33,8 @@ const PAGES = (pid) => [
   ['project-tasks', `/projects/${pid}?tab=tasks`],
   ['project-photos', `/projects/${pid}?tab=photos`],
   ['contacts', '/contacts'],
+  ['house', '/house'],
+  ['house-meters', '/house?tab=meters'],
   ['insights', '/insights'],
   ['rewards', '/rewards'],
   ['settings', '/settings'],
@@ -47,7 +49,7 @@ for (const { name: vpName, width, height, mobile } of viewports) {
   // Seed, then lengthen some titles directly in the demo state.
   await page.goto(base + '/', { waitUntil: 'networkidle' })
   const pid = await page.evaluate((LONG) => {
-    const key = 'hub-demo-state-v2'
+    const key = 'hub-demo-state-v3'
     const s = JSON.parse(localStorage.getItem(key))
     const p = s.projects.find((x) => x.status === 'in_progress')
     p.title = LONG.project

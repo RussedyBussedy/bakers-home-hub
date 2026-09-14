@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, KeyRound, LogOut, Minus, Monitor, Moon, RotateCcw, Smartphone, Sparkles, Sun } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Check, KeyRound, LogOut, Minus, Monitor, Moon, RotateCcw, Smartphone, Sparkles, Sun, Users } from 'lucide-react'
 import { Page } from '../components/layout/AppShell'
 import { useActions } from '../data/hooks'
 import { useAuth, useDb } from '../data/session'
@@ -103,6 +104,8 @@ export default function SettingsPage() {
         </section>
 
         <People onEditMember={editMember} />
+
+        <HomeSection />
 
         <MoneySection />
 
@@ -221,6 +224,69 @@ function MoneySection() {
         </div>
       </div>
       <p className="mt-3 text-[12px] text-ink-3">Nothing gets converted — a quote saved as 12&thinsp;000 still reads 12&thinsp;000, with the new symbol on it.</p>
+    </section>
+  )
+}
+
+/**
+ * The house's own details.
+ *
+ * Meter numbers and the municipal account only matter in one place — the top of
+ * the evidence pack, where a clerk needs to match the document to an account
+ * without taking anyone's word for it. So they live here, entered once.
+ */
+function HomeSection() {
+  const { household } = useAuth()
+  const { updateHomeDetails } = useActions()
+  const toast = useUi((s) => s.toast)
+  const navigate = useNavigate()
+  const [address, setAddress] = useState(household?.address ?? '')
+  const [water, setWater] = useState(household?.water_meter_no ?? '')
+  const [elec, setElec] = useState(household?.electricity_meter_no ?? '')
+  const [account, setAccount] = useState(household?.municipal_account ?? '')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!household) return
+    setAddress(household.address ?? '')
+    setWater(household.water_meter_no ?? '')
+    setElec(household.electricity_meter_no ?? '')
+    setAccount(household.municipal_account ?? '')
+  }, [household])
+
+  const dirty = address !== (household?.address ?? '') || water !== (household?.water_meter_no ?? '')
+    || elec !== (household?.electricity_meter_no ?? '') || account !== (household?.municipal_account ?? '')
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      await updateHomeDetails({ address: address.trim(), water_meter_no: water.trim(), electricity_meter_no: elec.trim(), municipal_account: account.trim() })
+      toast({ title: 'Saved', tone: 'success' })
+    } catch { /* toast */ } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-xl">Your home</h2>
+      <p className="mt-1 text-sm text-ink-2">Printed at the top of a meter evidence pack, so the council can match it to your account.</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <Field label="Address" className="sm:col-span-2">
+          {(id) => <Input id={id} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="17 Olifant Street, Brackendowns" />}
+        </Field>
+        <Field label="Water meter number">
+          {(id) => <Input id={id} value={water} onChange={(e) => setWater(e.target.value)} inputMode="numeric" placeholder="24046929" />}
+        </Field>
+        <Field label="Electricity meter number">
+          {(id) => <Input id={id} value={elec} onChange={(e) => setElec(e.target.value)} inputMode="numeric" placeholder="14308043075" />}
+        </Field>
+        <Field label="Municipal account" className="sm:col-span-2">
+          {(id) => <Input id={id} value={account} onChange={(e) => setAccount(e.target.value)} inputMode="numeric" placeholder="Account number on the statement" />}
+        </Field>
+      </div>
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <Button variant="ghost" leading={<Users className="size-4" />} onClick={() => navigate('/contacts')}>Contacts &amp; suppliers</Button>
+        <Button onClick={save} loading={busy} disabled={!dirty}>Save</Button>
+      </div>
     </section>
   )
 }

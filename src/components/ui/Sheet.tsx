@@ -114,7 +114,7 @@ interface PromptRequest {
   label?: string
   placeholder?: string
   initial?: string
-  type?: 'text' | 'date'
+  type?: 'text' | 'date' | 'number'
   confirmLabel?: string
   resolve: (value: string | null) => void
 }
@@ -151,6 +151,8 @@ export function PromptHost() {
         <input
           id="prompt-input"
           type={req?.type ?? 'text'}
+          inputMode={req?.type === 'number' ? 'decimal' : undefined}
+          step={req?.type === 'number' ? 'any' : undefined}
           autoFocus
           value={value}
           placeholder={req?.placeholder}
