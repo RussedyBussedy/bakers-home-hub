@@ -18,6 +18,9 @@
   --ink: #1e1a16;
   --ink-2: #5e554c;
   --ink-3: #8a8078;
+  /* How much of the top of the screen the hardware owns. Zero everywhere but a
+     home-screen app on a notched phone. */
+  --inset-top: env(safe-area-inset-top, 0px);
   --line: #e6dccf;
   --line-strong: #d3c5b3;
 
@@ -310,6 +313,20 @@
 }
 @utility safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/*
+ * A bar that pins below the phone's status bar rather than under it.
+ *
+ * `sticky top-0` pins to the scrollport, and in a home-screen app the scrollport
+ * starts behind the clock and the battery — so the tab pills ended up tucked
+ * under them. Pinning at the inset instead drops the bar clear, and `.inset-cap`
+ * in the shell paints the strip it leaves above so nothing scrolls visibly past
+ * the clock. The inset goes through a variable so a test can stand in for a
+ * notch that a desktop browser doesn't have.
+ */
+@utility sticky-top-safe {
+  position: sticky;
+  top: var(--inset-top);
 }
 /* Keeps at least the element's own top padding, and more under a phone's notch / status bar. */
 @utility safe-top {

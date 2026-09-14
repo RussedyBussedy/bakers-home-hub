@@ -180,7 +180,7 @@ export default function ProjectPage() {
 
         {/* Tabs */}
         <div ref={tabsTop} aria-hidden className="mt-6" />
-        <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+        <div className="sticky-top-safe z-20 -mx-4 bg-bg/95 px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
           <div role="tablist" className="flex gap-1 overflow-x-auto scrollbar-none">
             {TABS.map((t) => {
               const active = tab === t.value

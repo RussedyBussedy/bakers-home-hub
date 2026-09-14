@@ -711,6 +711,52 @@ await step('the Hub says what the house needs', async () => {
   await page.waitForURL(/\/house/, { timeout: 5000 })
 })
 
+await step('sticky tabs pin clear of a phone\'s status bar', async () => {
+  // No desktop browser has a notch, so stand one in and check the bar respects it.
+  const INSET = 47
+  for (const [name, path] of [['house', '/house?tab=meters'], ['project', '/projects/p-kitchen?tab=money']]) {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(base + path, { waitUntil: 'networkidle' })
+    await page.evaluate((n) => document.documentElement.style.setProperty('--inset-top', n + 'px'), INSET)
+    await page.waitForTimeout(700)
+    await page.evaluate(() => window.scrollTo(0, 900))
+    await page.waitForTimeout(500)
+
+    const bar = await page.locator('[role=tablist]').first().boundingBox()
+    if (!bar) throw new Error(`${name}: no tab bar`)
+    // Pinned (not scrolled away) AND below the status bar, never under it.
+    if (bar.y > 200) throw new Error(`${name}: the bar scrolled away (y=${bar.y})`)
+    if (bar.y < INSET) throw new Error(`${name}: the pills sit under the status bar (y=${bar.y}, inset=${INSET})`)
+
+    // The strip the clock lives in must be painted over, not see-through.
+    const cap = await page.evaluate(() => {
+      const el = document.querySelector('[data-inset-cap]')
+      if (!el) return null
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el)
+      // The bottom nav is the other full-width fixed element in the shell — if the cap
+      // matches it, it reaches as far across as anything can.
+      const nav = document.querySelector('nav[aria-label="Primary"]')
+      return { top: Math.round(r.top), h: Math.round(r.height), w: Math.round(r.width), page: nav ? Math.round(nav.getBoundingClientRect().width) : 0, bg: cs.backgroundColor, z: cs.zIndex, pos: cs.position }
+    })
+    if (!cap) throw new Error(`${name}: no status-bar cap in the shell`)
+    if (cap.pos !== 'fixed' || cap.top !== 0) throw new Error(`${name}: the cap is not anchored to the top (${cap.pos} @ ${cap.top})`)
+    if (cap.h !== INSET) throw new Error(`${name}: the cap does not match the inset (${cap.h} vs ${INSET})`)
+    if (cap.w < cap.page - 1) throw new Error(`${name}: the cap is narrower than the bottom bar (${cap.w} vs ${cap.page})`)
+    if (/rgba\(0, 0, 0, 0\)|transparent/.test(cap.bg)) throw new Error(`${name}: the cap is see-through (${cap.bg})`)
+    if (Number(cap.z) <= 20) throw new Error(`${name}: the cap sits under the tab bar (z=${cap.z})`)
+
+    await page.evaluate(() => document.documentElement.style.removeProperty('--inset-top'))
+  }
+  // With no notch it must behave exactly as before: flush to the top.
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(600)
+  await page.evaluate(() => window.scrollTo(0, 900))
+  await page.waitForTimeout(400)
+  const plain = await page.locator('[role=tablist]').first().boundingBox()
+  if (!plain || plain.y > 40) throw new Error(`no-notch case regressed (y=${plain?.y})`)
+  await page.setViewportSize({ width: 1280, height: 860 })
+})
+
 console.log(errors.length ? `\n${errors.length} errors:\n${errors.join('\n')}` : '\nNo console/page errors.')
 await browser.close()
 if (failed || errors.length) process.exit(1)

@@ -123,6 +123,16 @@ export function AppShell() {
         </div>
       </aside>
 
+      {/* The strip the hardware owns, painted in the app's own background so a page
+          scrolling under a sticky bar never shows through beside the clock. Zero
+          height on anything without a notch, so it costs nothing elsewhere. */}
+      <div
+        aria-hidden
+        data-inset-cap
+        className="pointer-events-none fixed inset-x-0 top-0 z-[25] bg-bg lg:left-[264px]"
+        style={{ height: 'var(--inset-top)' }}
+      />
+
       {/* Content */}
       <main className="min-w-0 overflow-x-clip pb-[calc(84px+env(safe-area-inset-bottom))] short:pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-10 lg:pl-[264px]">
         {/* Lazy pages resolve here, inside the shell — never by swapping the whole app for the splash screen. */}

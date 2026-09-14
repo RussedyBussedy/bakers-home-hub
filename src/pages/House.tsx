@@ -71,7 +71,7 @@ export default function HousePage() {
         Everything at {homeTitle(household?.name).replace(/ Hub$/, '')} that isn’t a project — what to buy, what needs doing, and what the meters say.
       </p>
 
-      <div className="sticky top-0 z-20 -mx-4 bg-bg/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+      <div className="sticky-top-safe z-20 -mx-4 bg-bg/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
         <div role="tablist" className="flex gap-1 overflow-x-auto scrollbar-none">
           {TABS.map((t) => {
             const active = tab === t.value
