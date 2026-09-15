@@ -199,11 +199,79 @@ export function perDayLabel(perDay: number | null, utility: Utility): string {
   return `${n.toLocaleString()} ${unit}/day`
 }
 
+/** What typing a dial straight across turned out to mean. */
+export interface DialReading {
+  /** The value in the meter's own unit — 1046.6205 kl. */
+  value: number
+  /** The black wheels. */
+  whole: number
+  /** The red wheels, as written (so "0620" keeps its leading zero). */
+  fraction: string
+  /** True when the person typed a decimal point themselves and we took them at their word. */
+  literal: boolean
+}
+
+/**
+ * Reads the dial the way it is written on the meter.
+ *
+ * A domestic water meter puts whole kilolitres on black wheels and the
+ * fraction on red ones, and the natural thing is to read straight across:
+ * 1046 then 6205. Typed as one number that is ten million, which is how a
+ * household came to look like it was using six million litres a day. So the
+ * trailing `decimals` wheels are split back off — unless a decimal point was
+ * typed, in which case the person has already said where it goes.
+ */
+export function parseDial(text: string, decimals: number): DialReading | null {
+  const cleaned = String(text ?? '').trim().replace(/[\s,_]/g, '')
+  if (!cleaned) return null
+
+  // A typed point (or comma, handled above) means: this is the number, as written.
+  if (cleaned.includes('.')) {
+    const v = Number(cleaned)
+    if (!isFinite(v)) return null
+    const [w, f = ''] = cleaned.split('.')
+    return { value: v, whole: Math.trunc(Number(w) || 0), fraction: f, literal: true }
+  }
+
+  if (!/^-?\d+$/.test(cleaned)) return null
+  const negative = cleaned.startsWith('-')
+  const digits = negative ? cleaned.slice(1) : cleaned
+  const d = Math.max(0, Math.floor(decimals || 0))
+
+  // Nothing to split: a meter with no red wheels, or fewer digits than it has.
+  if (d === 0 || digits.length <= d) {
+    const v = Number(cleaned)
+    return isFinite(v) ? { value: v, whole: Math.trunc(v), fraction: '', literal: false } : null
+  }
+
+  const whole = digits.slice(0, digits.length - d)
+  const fraction = digits.slice(digits.length - d)
+  const value = Number(`${negative ? '-' : ''}${whole}.${fraction}`)
+  return isFinite(value) ? { value, whole: Number(whole), fraction, literal: false } : null
+}
+
 /** A reading as it should be written down: the number, then the unit off the dial. */
-export function readingLabel(value: number, utility: Utility): string {
+export function readingLabel(value: number, utility: Utility, decimals = 3): string {
   const unit = UTILITIES[utility].unit
-  const n = Number(value)
-  return `${(Math.round(n * 1000) / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${unit}`
+  const d = Math.max(0, Math.min(6, Math.floor(decimals || 0)))
+  return `${Number(value).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })} ${unit}`
+}
+
+/**
+ * The same reading said in plain words — "1 046 kl and 620.5 L" — so a number
+ * split off a dial can be checked against the dial at a glance.
+ */
+export function dialInWords(r: DialReading, utility: Utility): string {
+  const meta = UTILITIES[utility]
+  const whole = `${Math.trunc(r.value).toLocaleString()} ${meta.unit}`
+  // Work from the digits as written, not from the float: 1046.6205 minus 1046 is
+  // 0.62049999… in binary, which quietly loses the tenth of a litre the last red
+  // wheel exists to show.
+  const written = r.fraction || String(r.value).split('.')[1] || ''
+  if (!written || !Number(written)) return whole
+  const inUsage = Number(`0.${written}`) * meta.usageFactor
+  const n = Math.round(inUsage * 10) / 10
+  return `${whole} and ${n.toLocaleString()} ${meta.usageUnit}`
 }
 
 /** Litres or kWh, written the way a person would say them. */

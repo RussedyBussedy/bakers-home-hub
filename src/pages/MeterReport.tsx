@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, Printer } from 'lucide-react'
 import { UTILITIES, type MeterReading, type Utility } from '../data/types'
 import { useHouse } from '../data/hooks'
 import { useAuth, useDb } from '../data/session'
-import { meterPeriods, perDayLabel, readingsFor, usedLabel } from '../lib/meters'
+import { meterPeriods, perDayLabel, readingLabel, readingsFor, usedLabel } from '../lib/meters'
 import { fmtDate, homeTitle, pluralise } from '../lib/utils'
 import { Button } from '../components/ui/Button'
 import './meterReport.css'
@@ -57,6 +57,8 @@ export default function MeterReportPage() {
   const peak = good.length ? good.reduce((a, b) => (b.perDay > a.perDay ? b : a)) : null
   const quietest = good.length ? good.reduce((a, b) => (b.perDay < a.perDay ? b : a)) : null
   const meterNo = utility === 'water' ? household?.water_meter_no : household?.electricity_meter_no
+  const decimals = (utility === 'water' ? household?.water_meter_decimals : household?.electricity_meter_decimals) ?? (utility === 'water' ? 3 : 0)
+  const dial = (v: number) => readingLabel(v, utility, decimals).replace(` ${meta.unit}`, '')
   const compiled = new Date()
 
   if (data.loading) {
@@ -100,8 +102,8 @@ export default function MeterReportPage() {
               <h2>Summary</h2>
               <p className="lede">
                 {first && last && (
-                  <>The meter read <strong>{Number(first.reading).toLocaleString()} {meta.unit}</strong> on {fmtDate(first.read_on, 'd MMMM yyyy')} and{' '}
-                  <strong>{Number(last.reading).toLocaleString()} {meta.unit}</strong> on {fmtDate(last.read_on, 'd MMMM yyyy')}
+                  <>The meter read <strong>{dial(Number(first.reading))} {meta.unit}</strong> on {fmtDate(first.read_on, 'd MMMM yyyy')} and{' '}
+                  <strong>{dial(Number(last.reading))} {meta.unit}</strong> on {fmtDate(last.read_on, 'd MMMM yyyy')}
                   {average !== null && <> — {usedLabel(totalUsed, utility)} over {pluralise(totalDays, 'day')}, an average of <strong>{perDayLabel(average, utility)}</strong></>}.</>
                 )}
                 {peak && quietest && peak !== quietest && (
@@ -151,7 +153,7 @@ export default function MeterReportPage() {
                       <tr key={r.id}>
                         <td className="num muted">{i + 1}</td>
                         <td>{fmtDate(r.read_on, 'd MMM yyyy')}</td>
-                        <td className="num strong">{Number(r.reading).toLocaleString()}</td>
+                        <td className="num strong">{dial(Number(r.reading))}</td>
                         <td className="num">{p && !p.suspect ? Math.round(p.used).toLocaleString() : '—'}</td>
                         <td className="num muted">{p ? p.days : '—'}</td>
                         <td className="num strong">{p && !p.suspect ? Math.round(p.perDay).toLocaleString() : '—'}</td>
@@ -184,7 +186,7 @@ export default function MeterReportPage() {
                       {urls[r.photo_path!] ? (
                         <img
                           src={urls[r.photo_path!]}
-                          alt={`Meter reading ${Number(r.reading).toLocaleString()} ${meta.unit} on ${fmtDate(r.read_on, 'd MMMM yyyy')}`}
+                          alt={`Meter reading ${dial(Number(r.reading))} ${meta.unit} on ${fmtDate(r.read_on, 'd MMMM yyyy')}`}
                           onLoad={() => setLoaded((n) => n + 1)}
                           onError={() => setFailed((n) => n + 1)}
                         />
@@ -192,7 +194,7 @@ export default function MeterReportPage() {
                         <div className="plate-missing">Photograph could not be loaded</div>
                       )}
                       <figcaption>
-                        <strong>Plate {i + 1}</strong> · {fmtDate(r.read_on, 'd MMMM yyyy')} · {Number(r.reading).toLocaleString()} {meta.unit}
+                        <strong>Plate {i + 1}</strong> · {fmtDate(r.read_on, 'd MMMM yyyy')} · {dial(Number(r.reading))} {meta.unit}
                         {profileById(r.created_by) ? ` · photographed by ${profileById(r.created_by)!.display_name}` : ''}
                       </figcaption>
                     </figure>

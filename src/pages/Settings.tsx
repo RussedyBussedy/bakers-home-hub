@@ -242,7 +242,9 @@ function HomeSection() {
   const navigate = useNavigate()
   const [address, setAddress] = useState(household?.address ?? '')
   const [water, setWater] = useState(household?.water_meter_no ?? '')
+  const [waterDp, setWaterDp] = useState(String(household?.water_meter_decimals ?? 3))
   const [elec, setElec] = useState(household?.electricity_meter_no ?? '')
+  const [elecDp, setElecDp] = useState(String(household?.electricity_meter_decimals ?? 0))
   const [account, setAccount] = useState(household?.municipal_account ?? '')
   const [busy, setBusy] = useState(false)
 
@@ -250,17 +252,23 @@ function HomeSection() {
     if (!household) return
     setAddress(household.address ?? '')
     setWater(household.water_meter_no ?? '')
+    setWaterDp(String(household.water_meter_decimals ?? 3))
     setElec(household.electricity_meter_no ?? '')
+    setElecDp(String(household.electricity_meter_decimals ?? 0))
     setAccount(household.municipal_account ?? '')
   }, [household])
 
   const dirty = address !== (household?.address ?? '') || water !== (household?.water_meter_no ?? '')
     || elec !== (household?.electricity_meter_no ?? '') || account !== (household?.municipal_account ?? '')
+    || Number(waterDp) !== (household?.water_meter_decimals ?? 3) || Number(elecDp) !== (household?.electricity_meter_decimals ?? 0)
 
   const save = async () => {
     setBusy(true)
     try {
-      await updateHomeDetails({ address: address.trim(), water_meter_no: water.trim(), electricity_meter_no: elec.trim(), municipal_account: account.trim() })
+      await updateHomeDetails({
+        address: address.trim(), water_meter_no: water.trim(), electricity_meter_no: elec.trim(), municipal_account: account.trim(),
+        water_meter_decimals: Number(waterDp), electricity_meter_decimals: Number(elecDp),
+      })
       toast({ title: 'Saved', tone: 'success' })
     } catch { /* toast */ } finally { setBusy(false) }
   }
@@ -278,6 +286,14 @@ function HomeSection() {
         </Field>
         <Field label="Electricity meter number">
           {(id) => <Input id={id} value={elec} onChange={(e) => setElec(e.target.value)} inputMode="numeric" placeholder="14308043075" />}
+        </Field>
+        {/* How many wheels at the end of each dial are the red, fractional ones —
+            what a reading typed straight across gets split on. */}
+        <Field label="Red wheels on the water dial" hint="The fractional ones at the end.">
+          {() => <Segmented<string> value={waterDp} onChange={setWaterDp} size="sm" options={[0, 1, 2, 3, 4].map((d) => ({ value: String(d), label: d === 0 ? 'None' : String(d) }))} />}
+        </Field>
+        <Field label="Decimals on the electricity meter" hint="A prepaid meter usually shows whole units.">
+          {() => <Segmented<string> value={elecDp} onChange={setElecDp} size="sm" options={[0, 1, 2, 3, 4].map((d) => ({ value: String(d), label: d === 0 ? 'None' : String(d) }))} />}
         </Field>
         <Field label="Municipal account" className="sm:col-span-2">
           {(id) => <Input id={id} value={account} onChange={(e) => setAccount(e.target.value)} inputMode="numeric" placeholder="Account number on the statement" />}

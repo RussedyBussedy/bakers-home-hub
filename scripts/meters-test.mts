@@ -9,7 +9,7 @@
  */
 import { addDays, format, subDays } from 'date-fns'
 import type { MeterReading, UtilityPurchase } from '../src/data/types'
-import { blendedRate, meterPeriods, prepaidOutlook, readingDue, recentPerDay } from '../src/lib/meters'
+import { blendedRate, dialInWords, meterPeriods, parseDial, prepaidOutlook, readingDue, readingLabel, recentPerDay } from '../src/lib/meters'
 
 let failed = 0
 function eq(got: unknown, want: unknown, label: string) {
@@ -145,6 +145,55 @@ eq(prepaidOutlook([], [], 'electricity', NOW), null, 'forecast: no readings, no 
 {
   const future: MeterReading = { ...water(900, 0), read_on: format(addDays(NOW, 2), 'yyyy-MM-dd') }
   eq(readingDue([future], 'water', NOW).daysSince, 0, 'due: a date in the future is not negative days')
+}
+
+// --- reading the dial straight across --------------------------------------
+{
+  // The Bakers' meter: four black wheels, four red. 1046 | 6205.
+  const r = parseDial('10466205', 4)!
+  eq(r.value, 1046.6205, 'dial: four red wheels split off the end')
+  eq(r.whole, 1046, 'dial: the black wheels')
+  eq(r.fraction, '6205', 'dial: the red wheels, as written')
+  eq(r.literal, false, 'dial: it was split, not taken at face value')
+  eq(dialInWords(r, 'water'), '1,046 kl and 620.5 L', 'dial: said in plain words')
+
+  // The two readings that started this: 1187.1 L over two days, not six million.
+  const a = parseDial('10454334', 4)!, b = parseDial('10466205', 4)!
+  near((b.value - a.value) * 1000, 1187.1, 'dial: two days of ordinary household use', 0.05)
+}
+
+{
+  // Leading zeros on the red wheels have to survive — .0620 is not .620.
+  const r = parseDial('10460620', 4)!
+  eq(r.value, 1046.062, 'dial: a leading zero in the fraction')
+  eq(r.fraction, '0620', 'dial: the zero is kept as written')
+  eq(readingLabel(r.value, 'water', 4), '1,046.0620 kl', 'dial: printed back at the dial’s own precision')
+}
+
+{
+  // A typed point means the person has already said where it goes.
+  const r = parseDial('1046.6205', 4)!
+  eq(r.value, 1046.6205, 'dial: a typed decimal point is obeyed')
+  eq(r.literal, true, 'dial: and marked as taken literally')
+  eq(parseDial('958', 3)!.value, 958, 'dial: fewer digits than red wheels is left alone')
+  eq(parseDial('742', 0)!.value, 742, 'dial: a meter with no red wheels')
+}
+
+{
+  // What people actually type.
+  eq(parseDial('1 046 6205', 4)!.value, 1046.6205, 'dial: spaces ignored')
+  eq(parseDial('10,466,205', 4)!.value, 1046.6205, 'dial: thousands separators ignored')
+  eq(parseDial('', 4), null, 'dial: nothing typed, nothing read')
+  eq(parseDial('   ', 4), null, 'dial: blank')
+  eq(parseDial('abc', 4), null, 'dial: letters are not a reading')
+  eq(parseDial('12ab34', 4), null, 'dial: half a number is not a reading')
+}
+
+{
+  // The old three-wheel default still behaves.
+  eq(parseDial('958205', 3)!.value, 958.205, 'dial: three red wheels')
+  eq(parseDial('1012000', 3)!.value, 1012, 'dial: red wheels all at zero')
+  eq(readingLabel(1012, 'water', 3), '1,012.000 kl', 'dial: trailing zeros are shown, not trimmed')
 }
 
 console.log(failed ? `\n${failed} failed` : '\nAll good.')

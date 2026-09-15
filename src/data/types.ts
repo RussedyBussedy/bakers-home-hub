@@ -42,6 +42,12 @@ export interface Household {
   /** Meter and account details, used on readings and on the evidence pack. */
   water_meter_no: string
   electricity_meter_no: string
+  /**
+   * How many of the wheels on the dial are the red, fractional ones.
+   * A reading typed straight across the dial is split on this.
+   */
+  water_meter_decimals: number
+  electricity_meter_decimals: number
   municipal_account: string
   address: string
   created_at: string

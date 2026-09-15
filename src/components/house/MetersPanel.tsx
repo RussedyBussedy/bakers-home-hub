@@ -6,7 +6,7 @@ import { UTILITIES, type MeterReading, type Utility, type UtilityPurchase } from
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import {
-  blendedRate, meterPeriods, perDayLabel, prepaidOutlook, purchaseRate, purchasesFor, readingDue, readingsFor, usedLabel,
+  blendedRate, meterPeriods, perDayLabel, prepaidOutlook, purchaseRate, purchasesFor, readingDue, readingLabel, readingsFor, usedLabel,
 } from '../../lib/meters'
 import { cn, fmtDate, money, pluralise } from '../../lib/utils'
 import { EmptyState, Pill, Reveal, Stat } from '../ui/Bits'
@@ -51,6 +51,7 @@ export function MetersPanel({ readings, purchases }: { readings: MeterReading[];
   })), [periods])
 
   const meterNo = utility === 'water' ? household?.water_meter_no : household?.electricity_meter_no
+  const decimals = (utility === 'water' ? household?.water_meter_decimals : household?.electricity_meter_decimals) ?? (utility === 'water' ? 3 : 0)
 
   const removeReading = async (r: MeterReading) => {
     const ok = await confirm({ title: 'Delete this reading?', description: `The ${fmtDate(r.read_on, 'd MMM yyyy')} reading and its photo go for good. The record will have a gap where it was.`, confirmLabel: 'Delete', danger: true })
@@ -81,7 +82,7 @@ export function MetersPanel({ readings, purchases }: { readings: MeterReading[];
       {/* The numbers */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Last reading" hint={latest ? `${fmtDate(latest.read_on, 'EEE d MMM')}${meterNo ? ` · meter ${meterNo}` : ''}` : 'Nothing logged yet'}>
-          <span className="tabular">{latest ? `${Number(latest.reading).toLocaleString()} ` : '—'}<span className="text-base text-ink-3">{latest ? meta.unit : ''}</span></span>
+          <span className="tabular">{latest ? readingLabel(Number(latest.reading), utility, decimals).replace(` ${meta.unit}`, ' ') : '—'}<span className="text-base text-ink-3">{latest ? meta.unit : ''}</span></span>
         </Stat>
         <Stat
           label="Using now"
@@ -190,6 +191,7 @@ export function MetersPanel({ readings, purchases }: { readings: MeterReading[];
                   perDay={period && !period.suspect ? period.perDay : null}
                   used={period && !period.suspect ? period.used : null}
                   suspect={Boolean(period?.suspect)}
+                  decimals={decimals}
                   index={idx}
                   onEdit={() => { setEditing(r); setSheet(true) }}
                   onDelete={() => removeReading(r)}
@@ -274,12 +276,13 @@ function DueBanner({ state, daysSince, utility, onLog }: { state: ReturnType<typ
   )
 }
 
-function ReadingRow({ reading: r, utility, perDay, used, suspect, index, onEdit, onDelete }: {
+function ReadingRow({ reading: r, utility, perDay, used, suspect, decimals, index, onEdit, onDelete }: {
   reading: MeterReading
   utility: Utility
   perDay: number | null
   used: number | null
   suspect: boolean
+  decimals: number
   index: number
   onEdit: () => void
   onDelete: () => void
@@ -301,7 +304,7 @@ function ReadingRow({ reading: r, utility, perDay, used, suspect, index, onEdit,
       )}
       <div className="min-w-0 flex-1">
         <p className="text-[15px] text-ink">
-          <span className="tabular font-medium">{Number(r.reading).toLocaleString()}</span> <span className="text-ink-3">{meta.unit}</span>
+          <span className="tabular font-medium">{readingLabel(Number(r.reading), utility, decimals).replace(` ${meta.unit}`, '')}</span> <span className="text-ink-3">{meta.unit}</span>
           {r.source !== 'self' && <Pill size="sm" tone={r.source === 'estimate' ? 'ochre' : 'neutral'} className="ml-2">{r.source === 'council' ? 'Council' : 'Estimated'}</Pill>}
         </p>
         <p className="mt-0.5 text-xs text-ink-3">
@@ -332,7 +335,7 @@ function ReadingRow({ reading: r, utility, perDay, used, suspect, index, onEdit,
         <div className="fixed inset-0 z-[120] grid place-items-center bg-ink/80 p-4" onClick={() => setZoom(false)} role="dialog">
           <figure className="max-h-full">
             <img src={photo} alt={`Meter on ${fmtDate(r.read_on, 'd MMM yyyy')}`} className="max-h-[80dvh] rounded-2xl object-contain" />
-            <figcaption className="mt-3 text-center text-sm text-bg">{Number(r.reading).toLocaleString()} {meta.unit} · {fmtDate(r.read_on, 'EEE d MMMM yyyy')}</figcaption>
+            <figcaption className="mt-3 text-center text-sm text-bg">{readingLabel(Number(r.reading), utility, decimals)} · {fmtDate(r.read_on, 'EEE d MMMM yyyy')}</figcaption>
           </figure>
         </div>
       )}

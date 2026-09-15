@@ -3,10 +3,10 @@ import { Camera, ImagePlus, X } from 'lucide-react'
 import { READING_SOURCES, UTILITIES, type MeterReading, type ReadingSource, type Utility } from '../../data/types'
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
-import { latestReading, readingsFor, usedLabel } from '../../lib/meters'
+import { dialInWords, latestReading, parseDial, readingsFor, usedLabel } from '../../lib/meters'
 import { cn, fmtDate, todayISO } from '../../lib/utils'
 import { Button } from '../ui/Button'
-import { DateInput, Field, Input, Select, Textarea } from '../ui/Field'
+import { DateInput, Field, Input, Segmented, Select, Textarea } from '../ui/Field'
 import { Sheet } from '../ui/Sheet'
 
 /**
@@ -23,9 +23,11 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
   readings: MeterReading[]
   edit?: MeterReading | null
 }) {
-  const { logReading, updateReading } = useActions()
+  const { logReading, updateReading, updateHomeDetails } = useActions()
   const { household } = useAuth()
   const meta = UTILITIES[utility]
+  const decimals = Math.max(0, Math.min(6,
+    (utility === 'water' ? household?.water_meter_decimals : household?.electricity_meter_decimals) ?? (utility === 'water' ? 3 : 0)))
 
   const [value, setValue] = useState('')
   const [when, setWhen] = useState(todayISO())
@@ -39,12 +41,13 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
 
   useEffect(() => {
     if (!open) return
-    setValue(edit ? String(edit.reading) : '')
+    // Show it back the way it was read off the dial, red wheels and all.
+    setValue(edit ? Number(edit.reading).toFixed(decimals) : '')
     setWhen(edit?.read_on ?? todayISO())
     setSource(edit?.source ?? 'self')
     setNotes(edit?.notes ?? '')
     setFile(null); setPreview(null)
-  }, [open, edit])
+  }, [open, edit, decimals])
 
   useEffect(() => {
     if (!file) { setPreview(null); return }
@@ -57,10 +60,13 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
     ? readingsFor(readings, utility).filter((r) => r.read_on <= edit.read_on && r.id !== edit.id).pop() ?? null
     : latestReading(readings, utility)
 
+  // Typed straight across the dial, then split back into whole and fraction.
+  const dial = parseDial(value, decimals)
+  const n = dial ? dial.value : NaN
+
   // What this reading would mean, worked out as it is typed — the best moment to
   // catch a digit in the wrong place is before it is saved.
-  const n = Number(value)
-  const delta = previous && value.trim() !== '' && isFinite(n)
+  const delta = previous && dial && isFinite(n)
     ? (meta.direction === 'rising' ? n - Number(previous.reading) : Number(previous.reading) - n) * meta.usageFactor
     : null
   const backwards = delta !== null && delta < 0
@@ -68,7 +74,7 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
-    if (!value.trim() || !isFinite(n)) return
+    if (!dial || !isFinite(n)) return
     setBusy(true)
     try {
       if (edit) await updateReading(edit.id, { reading: n, read_on: when, source, notes: notes.trim(), file })
@@ -88,7 +94,7 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} loading={busy} disabled={!value.trim()}>{edit ? 'Save' : 'Log it'}</Button>
+          <Button onClick={save} loading={busy} disabled={!dial}>{edit ? 'Save' : 'Log it'}</Button>
         </>
       }
     >
@@ -119,9 +125,9 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label={`Reading (${meta.unit})`} required>
+          <Field label="Every digit on the dial" required hint={decimals > 0 ? `Black wheels then the ${decimals} red ones — straight across, no full stop.` : 'The number on the meter.'}>
           {(id) => (
-            <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" type="number" step="any" placeholder={meta.direction === 'rising' ? '1012' : '742'} autoFocus />
+            <Input id={id} value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ''))} inputMode="numeric" placeholder={decimals > 0 ? '1046' + '6205'.slice(0, decimals) : '742'} autoFocus />
           )}
           </Field>
           <Field label="Read on" required>
@@ -131,15 +137,36 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
           </Field>
         </div>
 
-        {delta !== null && (
-          <div className={cn('rounded-2xl border px-3.5 py-2.5 text-[13px]', backwards ? 'border-danger/30 bg-danger-soft text-danger' : 'border-line bg-surface-2 text-ink-2')}>
-            {backwards ? (
-              <>That’s <strong>lower</strong> than the {fmtDate(previous!.read_on, 'd MMM')} reading of {Number(previous!.reading).toLocaleString()} {meta.unit}. Worth a second look at the dial before you save.</>
-            ) : (
-              <>{usedLabel(delta, utility)} since {fmtDate(previous!.read_on, 'd MMM')}.</>
+        {/* What the app made of it. A split in the wrong place is invisible in the
+            stored number but obvious here, before it is saved. */}
+        {dial && (
+          <div className="rounded-2xl border border-line bg-surface-2 px-3.5 py-3">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-ink-3">Reads as</p>
+            <p className="mt-0.5 font-display-tight text-2xl tabular text-ink">
+              {Math.trunc(dial.value).toLocaleString()}<span className="text-ink-3">{dial.fraction ? `.${dial.fraction}` : ''} {meta.unit}</span>
+            </p>
+            <p className="mt-0.5 text-[13px] text-ink-2">{dialInWords(dial, utility)}</p>
+            {delta !== null && (
+              <p className={cn('mt-2 border-t border-line pt-2 text-[13px]', backwards ? 'text-danger' : 'text-ink-2')}>
+                {backwards
+                  ? <>That’s <strong>lower</strong> than the {fmtDate(previous!.read_on, 'd MMM')} reading of {Number(previous!.reading).toLocaleString()} {meta.unit} — worth another look at the dial.</>
+                  : <>{usedLabel(delta, utility)} since {fmtDate(previous!.read_on, 'd MMM')}.</>}
+              </p>
             )}
           </div>
         )}
+
+        {/* Set once per meter, but kept here because this is where being wrong shows. */}
+        <Field label="Red wheels on this meter" hint="The fractional ones at the end. Change it if the split above looks wrong.">
+          {() => (
+            <Segmented<string>
+              value={String(decimals)}
+              onChange={(v) => void updateHomeDetails(utility === 'water' ? { water_meter_decimals: Number(v) } : { electricity_meter_decimals: Number(v) })}
+              size="sm"
+              options={[0, 1, 2, 3, 4].map((d) => ({ value: String(d), label: d === 0 ? 'None' : String(d) }))}
+            />
+          )}
+        </Field>
 
         <Field label="Where the number came from">
           {(id) => (

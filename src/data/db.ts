@@ -41,7 +41,7 @@ export interface Db {
   renameHousehold(id: string, name: string): Promise<void>
   setHouseholdCurrency(id: string, code: string): Promise<void>
   /** Meter numbers, municipal account and address — what the evidence pack needs to name. */
-  updateHousehold(id: string, patch: Partial<Pick<Household, 'water_meter_no' | 'electricity_meter_no' | 'municipal_account' | 'address'>>): Promise<void>
+  updateHousehold(id: string, patch: Partial<Pick<Household, 'water_meter_no' | 'electricity_meter_no' | 'municipal_account' | 'address' | 'water_meter_decimals' | 'electricity_meter_decimals'>>): Promise<void>
   /** Moves somebody out of this home and into an empty one of their own. */
   removeMember(userId: string): Promise<void>
   leaveHousehold(): Promise<void>

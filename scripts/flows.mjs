@@ -663,11 +663,26 @@ await step('meters: a new reading lands and changes the rate', async () => {
   await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: 'Log a reading' }).click()
   await page.waitForTimeout(600)
-  await page.getByLabel(/Reading \(kl\)/).fill('1014')
+  await page.getByLabel(/Every digit on the dial/).fill('10140000')
   await page.getByRole('button', { name: 'Log it' }).click()
   await page.waitForTimeout(900)
   const first = await page.locator('.divide-y > li').first().innerText()
-  if (!/1,014/.test(first)) throw new Error(`the new reading is not at the top: ${first}`)
+  if (!/1,014\.0000/.test(first)) throw new Error(`the new reading is not at the top: ${first}`)
+})
+
+await step('meters: the dial is typed straight across, not as a decimal', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Log a reading' }).click()
+  await page.waitForTimeout(600)
+  // Four black wheels, four red — exactly the Bakers' meter.
+  await page.getByLabel(/Every digit on the dial/).fill('10156205')
+  await page.waitForTimeout(400)
+  const sheet = page.locator('[role=dialog]')
+  const readAs = await sheet.innerText()
+  if (!/1,015\.6205 kl/.test(readAs)) throw new Error(`the split was wrong: ${readAs.replace(/\n+/g, ' | ').slice(0, 300)}`)
+  if (!/1,015 kl and 620\.5 L/.test(readAs)) throw new Error('it did not say the reading in plain words')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
 })
 
 await step('meters: prepaid shows a balance, a rate and a runway', async () => {

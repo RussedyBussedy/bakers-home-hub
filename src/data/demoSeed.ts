@@ -47,7 +47,8 @@ export function buildDemoState(): DemoState {
 
   const household: Household = {
     id: H, name: 'The Bakers', currency: 'ZAR',
-    water_meter_no: '24046929', electricity_meter_no: '14308043075', municipal_account: '', address: '', created_at: d(120),
+    water_meter_no: '24046929', electricity_meter_no: '14308043075', municipal_account: '', address: '',
+    water_meter_decimals: 4, electricity_meter_decimals: 0, created_at: d(120),
   }
   const profiles: Profile[] = [
     { id: R, household_id: H, display_name: 'Russel', color: '#B84D24', phone: '', created_at: d(120) },

@@ -708,7 +708,7 @@ export function useActions() {
     try { await db.deletePurchase(p.id); if (p.receipt_path) void db.remove([p.receipt_path]) } catch (e) { invalidate(keys.purchases); return fail(e, 'remove the top-up') }
   }, [setList, db, invalidate, fail])
 
-  const updateHomeDetails = useCallback(async (patch: Partial<Pick<Household, 'water_meter_no' | 'electricity_meter_no' | 'municipal_account' | 'address'>>) => {
+  const updateHomeDetails = useCallback(async (patch: Partial<Pick<Household, 'water_meter_no' | 'electricity_meter_no' | 'municipal_account' | 'address' | 'water_meter_decimals' | 'electricity_meter_decimals'>>) => {
     if (!household) throw new Error('Not signed in')
     try {
       await db.updateHousehold(household.id, patch)
