@@ -542,10 +542,21 @@ function parseJson(text: string): unknown {
 
 interface Supa { url: string; anon: string; service: string }
 
+/** The role claim of a JWT, without verifying it — verification is GoTrue's job; this only sorts a person from the anon key. */
+function roleOf(token: string): string {
+  try {
+    const payload = token.split('.')[1] ?? ''
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '='))
+    return String((JSON.parse(json) as { role?: unknown }).role ?? '')
+  } catch { return '' }
+}
+
 async function whoIs(sb: Supa, authorization: string | null): Promise<{ id: string }> {
   const token = authorization?.replace(/^Bearer\s+/i, '').trim()
-  if (!token || token === sb.anon) throw new Said('Sign in to ask.', 401)
-  const res = await timed(`${sb.url}/auth/v1/user`, { headers: { apikey: sb.anon, Authorization: `Bearer ${token}` } }, 10_000)
+  if (!token || token === sb.anon || roleOf(token) === 'anon') throw new Said('Sign in to ask.', 401)
+  // GoTrue identifies the person by the bearer token; the apikey only has to be one of the project's own,
+  // and the service key always is.
+  const res = await timed(`${sb.url}/auth/v1/user`, { headers: { apikey: sb.service, Authorization: `Bearer ${token}` } }, 10_000)
   if (!res.ok) throw new Said('Your sign-in has expired — sign out and back in.', 401)
   const user = await res.json()
   if (!user?.id) throw new Said('Your sign-in has expired — sign out and back in.', 401)
