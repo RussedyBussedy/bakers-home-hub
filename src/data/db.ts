@@ -1,7 +1,7 @@
 import type {
-  Achievement, BoardItem, Contact, Expense, Household, HouseholdBundle, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense,
+  Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseholdBundle, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense,
   Invite, InvitePreview, NewHouseTask, NewImage, NewMeterReading, NewNudge, NewProject, NewQuote, NewShoppingItem, NewSiteVisit, NewTask, NewUtilityPurchase,
-  Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent,
+  Nudge, Passage, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Unfurled, UtilityPurchase, XpEvent,
 } from './types'
 
 export type ChangeTable =
@@ -140,6 +140,16 @@ export interface Db {
   /** Reads a pasted product page and returns its title, price and picture. */
   unfurl(url: string): Promise<Unfurled>
   searchProducts(q: string): Promise<ProductHit[]>
+
+  // ---- the Word ----------------------------------------------------
+  /** Writes a pastor's letter for what someone has written, and keeps it — private to them. */
+  askTheWord(context: string, translation: Translation): Promise<Guidance>
+  listGuidance(): Promise<Guidance[]>
+  deleteGuidance(id: string): Promise<void>
+  /** Ticks (or unticks) one reading in a letter's plan. */
+  setReadingDone(id: string, index: number, done: boolean): Promise<Guidance>
+  /** A chapter or passage from the Hub's Bible, to read in the app. */
+  readPassage(reading: Pick<PlanReading, 'book_id' | 'chapter' | 'start' | 'end'>, translation: Translation): Promise<Passage>
 
   // ---- media -------------------------------------------------------
   /** Uploads a blob and returns the storage path to persist. */

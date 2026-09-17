@@ -446,6 +446,79 @@ export interface HouseholdBundle {
   profiles: Profile[]
 }
 
+// ---------------------------------------------------------------------------
+// The Word — a pastor's letter from the Scriptures, private to the person who asked.
+// ---------------------------------------------------------------------------
+export type Translation = 'BSB' | 'KJV'
+export const TRANSLATIONS: { value: Translation; label: string; long: string }[] = [
+  { value: 'BSB', label: 'Berean', long: 'Berean Standard Bible' },
+  { value: 'KJV', label: 'King James', long: 'King James Version' },
+]
+
+export interface VerseLine { verse: number; text: string }
+
+/** A passage quoted in the letter — the text is from the Hub's own index, never from the model. */
+export interface GuidancePassage {
+  reference: string
+  book_id: number
+  chapter: number
+  start: number
+  end: number
+  verses: VerseLine[]
+  /** Why this one, for them — in the pastor's words. */
+  why: string
+  /** Where it was found: "Nave's Topical Bible: Care › Remedy for", "nearest to what they wrote". */
+  note: string
+}
+
+/** One reading in the plan — a chapter (start and end null) or a short passage. */
+export interface PlanReading {
+  reference: string
+  book_id: number
+  book: string
+  chapter: number
+  start: number | null
+  end: number | null
+  focus: string
+}
+
+export type SafetyKind = 'none' | 'self-harm' | 'abuse' | 'danger' | 'other'
+
+export interface GuidanceBody {
+  greeting: string
+  passages: GuidancePassage[]
+  understanding: string
+  response: string[]
+  prayer: string
+  closing: string
+  plan: PlanReading[]
+  safety: { concern: boolean; kind: SafetyKind }
+}
+
+export interface Guidance {
+  id: string
+  user_id: string
+  created_at: string
+  /** What they wrote. */
+  context: string
+  translation: Translation
+  theme: string
+  response: GuidanceBody
+  /** Readings ticked off, by their index in the plan: {"0": "2026-09-17"}. */
+  plan_done: Record<string, string>
+  model: string
+}
+
+/** A chapter or passage fetched to read in the app. */
+export interface Passage {
+  book_id: number
+  book: string
+  chapter: number
+  start: number
+  end: number
+  verses: VerseLine[]
+}
+
 export type NewProject = Omit<Project, 'id' | 'household_id' | 'created_by' | 'created_at' | 'updated_at' | 'sort_order' | 'blocked_on' | 'blocked_note' | 'blocked_since'>
 export type NewContact = Omit<Contact, 'id' | 'household_id' | 'created_by' | 'created_at'>
 export type NewQuote = Omit<Quote, 'id' | 'created_by' | 'created_at'>

@@ -1,5 +1,48 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Guidance, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Passage, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
+
+/**
+ * The letter the demo writes, whatever is asked. King James, because it is out of copyright and its
+ * best-known verses are the ones people already carry — and because the live Hub's letters come
+ * from its own Bible index, which the demo doesn't have.
+ */
+const DEMO_LETTER: Guidance['response'] = {
+  greeting: 'Thank you for writing this down — that takes more courage than it looks. What you are carrying is heavy, and you have been carrying it quietly. I want to sit with you in it for a few minutes and let the Word speak before either of us tries to fix anything.',
+  passages: [
+    { reference: 'Matthew 11:28', book_id: 40, chapter: 11, start: 28, end: 28, verses: [{ verse: 28, text: 'Come unto me, all ye that labour and are heavy laden, and I will give you rest.' }], why: 'Jesus does not say "sort yourself out and then come". He says come now, tired, as you are. The rest He offers is not the problem disappearing; it is not having to carry it alone.', note: 'nearest to what they wrote' },
+    { reference: 'Psalm 34:18', book_id: 19, chapter: 34, start: 18, end: 18, verses: [{ verse: 18, text: 'The LORD is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit.' }], why: 'When things break, the instinct is to think God has stepped back. David says the opposite: the broken heart is exactly where He draws near.', note: "Nave's Topical Bible: Afflictions › Consolation in" },
+    { reference: 'Philippians 4:6–7', book_id: 50, chapter: 4, start: 6, end: 7, verses: [{ verse: 6, text: 'Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.' }, { verse: 7, text: 'And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus.' }], why: 'Paul wrote this from a prison cell, so it is not advice from an easy chair. Say the worry out loud to God, specifically, and thank Him for something while you do — the peace comes as a guard, not as an explanation.', note: 'cross-reference of Matthew 11:28' },
+  ],
+  understanding: 'Most of what you described is not a lack of faith; it is a lack of rest. You have been holding this alone and turning it over at night, and the mind does what it always does with a problem it cannot solve — it keeps going back to it.\n\nThe Scriptures do not promise you the thing will be resolved by Friday. They promise that God is near, that He hears, and that His peace can keep you steady while the matter is still open. That is a different kind of help from the one you were hoping for, and a better one.',
+  response: [
+    'Tonight, before you sleep, write the worry down on paper in one or two plain sentences, then pray those exact sentences to God. Naming it is half of handing it over.',
+    'Tell one person you trust what you told me — your spouse, a friend, someone at church. Burdens are meant to be carried by more than one pair of hands.',
+    'Choose one small, practical step you can take this week towards the matter itself, and do that one thing. Leave the rest of it in God’s hands for now.',
+    'If the weight of this is affecting your sleep or your health for more than a couple of weeks, see your doctor. That is wisdom, not weakness.',
+  ],
+  prayer: 'Lord Jesus, I come to You tired and carrying more than I can hold. You said You would give me rest, and I am asking for it now. Draw near to my broken places. Take the worry I keep picking up at night, and keep my heart and my mind in Your peace while I wait for You. Show me the one next step, and give me the courage to take it. Amen.',
+  closing: 'The Lord is near to you tonight — nearer than the thing you are afraid of. Rest in that.',
+  plan: [
+    { reference: 'Psalm 23', book_id: 19, book: 'Psalm', chapter: 23, start: null, end: null, focus: 'Resting when you cannot fix it: who is doing the leading here?' },
+    { reference: 'Matthew 11:25–30', book_id: 40, book: 'Matthew', chapter: 11, start: 25, end: 30, focus: 'What Jesus means by an easy yoke.' },
+    { reference: 'Philippians 4:4–13', book_id: 50, book: 'Philippians', chapter: 4, start: 4, end: 13, focus: 'Peace and contentment from a prison cell.' },
+    { reference: 'Isaiah 41:8–13', book_id: 23, book: 'Isaiah', chapter: 41, start: 8, end: 13, focus: '“Fear not, for I am with thee” — said to people in exile.' },
+    { reference: 'Psalm 34', book_id: 19, book: 'Psalm', chapter: 34, start: null, end: null, focus: 'A whole psalm from a man who had been very afraid.' },
+  ],
+  safety: { concern: false, kind: 'none' },
+}
+
+const PSALM_23: Passage = {
+  book_id: 19, book: 'Psalms', chapter: 23, start: 1, end: 6,
+  verses: [
+    { verse: 1, text: 'The LORD is my shepherd; I shall not want.' },
+    { verse: 2, text: 'He maketh me to lie down in green pastures: he leadeth me beside the still waters.' },
+    { verse: 3, text: 'He restoreth my soul: he leadeth me in the paths of righteousness for his name’s sake.' },
+    { verse: 4, text: 'Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me; thy rod and thy staff they comfort me.' },
+    { verse: 5, text: 'Thou preparest a table before me in the presence of mine enemies: thou anointest my head with oil; my cup runneth over.' },
+    { verse: 6, text: 'Surely goodness and mercy shall follow me all the days of my life: and I will dwell in the house of the LORD for ever.' },
+  ],
+}
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
@@ -557,6 +600,48 @@ export function createDemoDb(): Db {
         snippet: `Shop ${term} at ${shop.name}. Delivery countrywide, collect in store.`,
         favoured: shop.favoured,
       }))
+    },
+    async askTheWord(context, translation) {
+      // No model in demo mode: the same letter for everyone, after a pause long enough to show
+      // the waiting screen. The live Hub writes each one from its own Bible index.
+      await new Promise((r) => setTimeout(r, 2200))
+      const me = currentUser() ?? DEMO_USERS.russel
+      // The first sentence stands in for the theme the model would name.
+      const first = context.trim().split(/(?<=[.!?])\s/)[0]!.replace(/[.!?]+$/, '')
+      const g: Guidance = {
+        id: uid(), user_id: me, created_at: nowISO(), context: context.trim(), translation,
+        theme: first.length > 40 ? `${first.slice(0, 37).replace(/\s+\S*$/, '')}…` : first,
+        response: DEMO_LETTER, plan_done: {}, model: 'demo',
+      }
+      ;(state.guidance ??= []).unshift(g)
+      persist()
+      return g
+    },
+    async listGuidance() {
+      const me = currentUser()
+      return delay((state.guidance ?? []).filter((g) => g.user_id === me).sort((a, b) => b.created_at.localeCompare(a.created_at)))
+    },
+    async deleteGuidance(id) {
+      state.guidance = (state.guidance ?? []).filter((g) => g.id !== id)
+      persist()
+    },
+    async setReadingDone(id, index, done) {
+      const g = (state.guidance ?? []).find((x) => x.id === id)
+      if (!g) throw new Error('That letter is gone.')
+      const plan_done = { ...g.plan_done }
+      if (done) plan_done[String(index)] = nowISO().slice(0, 10)
+      else delete plan_done[String(index)]
+      g.plan_done = plan_done
+      persist()
+      return { ...g }
+    },
+    async readPassage(reading) {
+      await new Promise((r) => setTimeout(r, 350))
+      if (reading.book_id === 19 && reading.chapter === 23) return PSALM_23
+      return {
+        book_id: reading.book_id, book: '', chapter: reading.chapter, start: reading.start ?? 1, end: reading.end ?? 1,
+        verses: [{ verse: reading.start ?? 1, text: 'In the demo only Psalm 23 can be opened here. The live Hub reads every chapter from its own Bible.' }],
+      }
     },
     async upload(blob) {
       // Store as a data URL so it survives a refresh (within localStorage limits).
