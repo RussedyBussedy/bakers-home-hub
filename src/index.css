@@ -269,6 +269,13 @@
   font-variation-settings: 'opsz' 144, 'SOFT' 30, 'WONK' 0;
   letter-spacing: -0.02em;
 }
+/* The same serif at reading size — a letter, not a headline. Fraunces' small optical size opens
+   the counters and evens the strokes so a page of it is easy on the eyes. */
+@utility font-letter {
+  font-family: var(--font-display);
+  font-variation-settings: 'opsz' 14, 'SOFT' 40, 'WONK' 0;
+  letter-spacing: 0;
+}
 @utility tabular {
   font-variant-numeric: tabular-nums;
 }
