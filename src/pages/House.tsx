@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Gauge, ListChecks, ShoppingBasket } from 'lucide-react'
+import { BookOpen, Gauge, ListChecks, ShoppingBasket } from 'lucide-react'
 import { Page } from '../components/layout/AppShell'
 import { useHouse } from '../data/hooks'
 import { useAuth } from '../data/session'
@@ -11,12 +11,14 @@ import { cn, homeTitle } from '../lib/utils'
 import { ShoppingPanel } from '../components/house/ShoppingPanel'
 import { TodoPanel } from '../components/house/TodoPanel'
 import { MetersPanel } from '../components/house/MetersPanel'
+import { WordPanel } from '../components/house/WordPanel'
 
-type Tab = 'shopping' | 'todo' | 'meters'
+type Tab = 'shopping' | 'todo' | 'meters' | 'word'
 const TABS: { value: Tab; label: string; icon: typeof Gauge }[] = [
   { value: 'shopping', label: 'Shopping', icon: ShoppingBasket },
   { value: 'todo', label: 'To-do', icon: ListChecks },
   { value: 'meters', label: 'Meters', icon: Gauge },
+  { value: 'word', label: 'The Word', icon: BookOpen },
 ]
 const isTab = (v: string | null): v is Tab => TABS.some((t) => t.value === v)
 
@@ -26,6 +28,10 @@ const isTab = (v: string | null): v is Tab => TABS.some((t) => t.value === v)
  * Projects come and go; the shopping, the chores and the meters carry on
  * regardless. They share a page because they share a rhythm — things you glance
  * at on the way out of the door, not things you sit down to plan.
+ *
+ * The Word sits here too, though it is the opposite of a glance: it is the
+ * quiet corner of the house, where what is really going on can be written
+ * down and answered from the Scriptures — privately, for one person at a time.
  */
 export default function HousePage() {
   const data = useHouse()
@@ -56,7 +62,7 @@ export default function HousePage() {
     return [w, e].some((d) => d.state === 'due' || d.state === 'overdue')
   }, [data.readings])
 
-  const counts: Record<Tab, number> = { shopping: openShopping, todo: openTodo, meters: 0 }
+  const counts: Record<Tab, number> = { shopping: openShopping, todo: openTodo, meters: 0, word: 0 }
 
   if (data.loading) {
     return <Page title="The house"><div className="skeleton h-64 w-full rounded-3xl" /></Page>
@@ -68,7 +74,7 @@ export default function HousePage() {
       title="The house"
     >
       <p className="-mt-3 mb-5 text-[15px] text-ink-2">
-        Everything at {homeTitle(household?.name).replace(/ Hub$/, '')} that isn’t a project — what to buy, what needs doing, and what the meters say.
+        Everything at {homeTitle(household?.name).replace(/ Hub$/, '')} that isn’t a project — what to buy, what needs doing, what the meters say, and a word from the Scriptures when you need one.
       </p>
 
       <div className="sticky-top-safe z-20 -mx-4 bg-bg/85 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
@@ -78,10 +84,11 @@ export default function HousePage() {
             const count = counts[t.value]
             const flag = t.value === 'meters' && metersDue
             return (
-              <button key={t.value} role="tab" aria-selected={active} onClick={() => setTab(t.value)} className={cn('relative flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors sm:gap-2 sm:px-4', active ? 'text-ink' : 'text-ink-2 hover:text-ink')}>
+              <button key={t.value} role="tab" aria-selected={active} aria-label={count > 0 ? `${t.label}, ${count} open` : t.label} onClick={() => setTab(t.value)} className={cn('relative flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors sm:gap-2 sm:px-4', active ? 'text-ink' : 'text-ink-2 hover:text-ink')}>
                 {active && <motion.span layoutId="house-tab" className="absolute inset-0 rounded-full bg-surface shadow-sm ring-1 ring-line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                 <t.icon className="relative size-4" />
-                <span className="relative">{t.label}</span>
+                {/* Four pills no longer fit a narrow phone with every label showing: the ones not chosen keep just their icon there. */}
+                <span className={cn('relative', !active && 'hidden min-[430px]:inline')}>{t.label}</span>
                 {count > 0 && <span className={cn('relative rounded-full px-1.5 text-[11px] tabular', active ? 'bg-primary-soft text-primary-text' : 'bg-surface-3 text-ink-2')}>{count}</span>}
                 {flag && <span className="relative size-2 rounded-full bg-ochre" aria-label="A reading is due" />}
               </button>
@@ -100,6 +107,7 @@ export default function HousePage() {
         {tab === 'shopping' && <ShoppingPanel items={data.shopping} />}
         {tab === 'todo' && <TodoPanel tasks={data.houseTasks} />}
         {tab === 'meters' && <MetersPanel readings={data.readings} purchases={data.purchases} />}
+        {tab === 'word' && <WordPanel />}
       </motion.div>
     </Page>
   )
