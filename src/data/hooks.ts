@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useAuth, useDb } from './session'
 import type {
-  Achievement, BlockerKind, BoardItem, Contact, Expense, Household, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense, NewHouseTask, NewImage,
+  Achievement, BlockerKind, BoardItem, Contact, Expense, Guidance, Household, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense, NewHouseTask, NewImage,
   NewMeterReading, NewProject, NewQuote, NewShoppingItem, NewUtilityPurchase,
-  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Utility, UtilityPurchase, XpEvent, XpKind,
+  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Utility, UtilityPurchase, XpEvent, XpKind,
 } from './types'
 import { UTILITIES } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
@@ -33,6 +33,7 @@ export const keys = {
   houseTasks: ['house-tasks'] as QueryKey,
   readings: ['readings'] as QueryKey,
   purchases: ['purchases'] as QueryKey,
+  guidance: ['guidance'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -56,6 +57,12 @@ export function useShopping() { const { db } = useDb(); return useHouseholdQuery
 export function useHouseTasks() { const { db } = useDb(); return useHouseholdQuery(keys.houseTasks, () => db.listHouseTasks()) }
 export function useReadings() { const { db } = useDb(); return useHouseholdQuery(keys.readings, () => db.listReadings()) }
 export function usePurchases() { const { db } = useDb(); return useHouseholdQuery(keys.purchases, () => db.listPurchases()) }
+/** The letters written for me — private, so the key carries my id and never another person's cache. */
+export function useGuidance() {
+  const { db } = useDb()
+  const { userId } = useAuth()
+  return useHouseholdQuery([...keys.guidance, userId], () => db.listGuidance())
+}
 
 /** The shopping list, the chores and the meters — everything that belongs to the house itself. */
 export function useHouse() {
@@ -758,8 +765,34 @@ export function useActions() {
     } catch (e) { invalidate(keys.board(item.project_id)); return fail(e, 'remove the pin') }
   }, [setList, db, invalidate, fail])
 
+  // ---- the Word --------------------------------------------------------------
+  const guidanceKey = useCallback(() => [...keys.guidance, me?.id ?? null] as QueryKey, [me])
+  const askTheWord = useCallback(async (context: string, translation: Translation) => {
+    try {
+      const g = await db.askTheWord(context, translation)
+      setList<Guidance>(guidanceKey(), (old) => [g, ...old.filter((x) => x.id !== g.id)])
+      return g
+    } catch (e) { return fail(e, 'write the letter') }
+  }, [db, setList, guidanceKey, fail])
+
+  const deleteGuidance = useCallback(async (id: string) => {
+    setList<Guidance>(guidanceKey(), (old) => old.filter((g) => g.id !== id))
+    try { await db.deleteGuidance(id) } catch (e) { invalidate(guidanceKey()); return fail(e, 'delete the letter') }
+  }, [db, setList, guidanceKey, invalidate, fail])
+
+  const tickReading = useCallback(async (id: string, index: number, done: boolean) => {
+    setList<Guidance>(guidanceKey(), (old) => old.map((g) => {
+      if (g.id !== id) return g
+      const plan_done = { ...g.plan_done }
+      if (done) plan_done[String(index)] = todayISO(); else delete plan_done[String(index)]
+      return { ...g, plan_done }
+    }))
+    try { await db.setReadingDone(id, index, done) } catch (e) { invalidate(guidanceKey()); return fail(e, 'save the tick') }
+  }, [db, setList, guidanceKey, invalidate, fail])
+
   return {
     award, checkAchievements, invalidate, uploadFile,
+    askTheWord, deleteGuidance, tickReading,
     createProject, updateProject, deleteProject,
     addImage, updateImage, deleteImage,
     createContact, updateContact, deleteContact,

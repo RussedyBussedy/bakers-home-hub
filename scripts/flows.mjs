@@ -726,6 +726,79 @@ await step('the Hub says what the house needs', async () => {
   await page.waitForURL(/\/house/, { timeout: 5000 })
 })
 
+// ---------------------------------------------------------------------------
+// The Word: write it down, get a letter, walk the plan
+// ---------------------------------------------------------------------------
+await step('the Word: a letter comes back for what was written', async () => {
+  await page.setViewportSize({ width: 1280, height: 860 })
+  await page.goto(base + '/house?tab=word', { waitUntil: 'networkidle' })
+  const box = page.getByLabel('What’s on your heart?')
+  if (!(await box.count())) throw new Error('no place to write')
+  const ask = page.getByRole('button', { name: 'Ask for a word' })
+  if (!(await ask.isDisabled())) throw new Error('the button is live before anything is written')
+  await page.getByRole('button', { name: 'Anxious about money' }).click()
+  await box.fill('I’m anxious about money. The bond went up again and I lie awake doing sums that never come right.')
+  if (await ask.isDisabled()) throw new Error('the button stays disabled after writing')
+  await shot('20-word-composer')
+  await ask.click()
+  const waiting = page.getByRole('status')
+  if (!(await waiting.count())) throw new Error('no waiting screen')
+  await shot('21-word-waiting')
+  await page.getByText('From the Word').waitFor({ timeout: 15000 })
+  await page.waitForTimeout(600)
+  await shot('22-word-letter')
+  if (!(await page.getByText('Dear Russel,').count())) throw new Error('the letter is not addressed to Russel')
+  const passages = await page.locator('figure blockquote').count()
+  if (passages < 2) throw new Error(`only ${passages} passages quoted`)
+  if (!(await page.getByText('Walk with this').count())) throw new Error('no reading plan')
+  const history = page.getByText('Your letters').locator('xpath=..')
+  if (!(await history.getByRole('button').count())) throw new Error('the letter is not in the history')
+  if (!(await page.getByText(/Kay can’t see/).count())) throw new Error('the privacy note does not name the partner')
+})
+
+await step('the Word: a reading opens in place and can be ticked', async () => {
+  await page.getByRole('button', { name: /^Day 1/ }).click()
+  await page.getByText('The LORD is my shepherd').waitFor({ timeout: 5000 })
+  await shot('23-word-reading')
+  await page.getByRole('checkbox', { name: /^Day 1:/ }).click()
+  await page.waitForTimeout(500)
+  if (!(await page.getByText('1/5 readings').count())) throw new Error('the tick is not counted in the history')
+  // Back to the tab after a full reload: the letter and its tick must still be there.
+  await page.goto(base + '/house?tab=word', { waitUntil: 'networkidle' })
+  await page.getByText('Your letters').waitFor()
+  if (!(await page.getByText('1/5 readings').count())) throw new Error('the tick did not survive a refresh')
+  if (!(await page.getByText('From the Word').count())) throw new Error('the latest letter is not opened on return')
+})
+
+await step('the Word: a letter can be deleted, and writing again works', async () => {
+  await page.getByRole('button', { name: /Write again/ }).click()
+  await page.getByLabel('What’s on your heart?').waitFor()
+  await page.getByRole('button', { name: 'Back to the letter' }).click()
+  await page.getByText('From the Word').waitFor()
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await page.getByRole('button', { name: 'Delete' }).last().click()
+  await page.waitForTimeout(600)
+  if (!(await page.getByText('Nothing yet').count())) throw new Error('the letter is still in the history')
+  await page.getByLabel('What’s on your heart?').waitFor()
+  await shot('24-word-empty')
+})
+
+await step('the Word on a phone', async () => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(base + '/house?tab=word', { waitUntil: 'networkidle' })
+  await page.getByLabel('What’s on your heart?').fill('Someone I love has died and I cannot seem to pray. I go through the motions on Sunday and feel nothing.')
+  await page.getByRole('button', { name: 'Ask for a word' }).click()
+  await page.getByText('From the Word').waitFor({ timeout: 15000 })
+  await page.waitForTimeout(600)
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
+  if (wide) throw new Error('the letter overflows the phone sideways')
+  await page.screenshot({ path: 'qa-shots/flows/25-word-phone.png', fullPage: true })
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: 'qa-shots/flows/26-word-phone-dark.png', fullPage: true })
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
+})
+
 await step('sticky tabs pin clear of a phone\'s status bar', async () => {
   // No desktop browser has a notch, so stand one in and check the bar respects it.
   const INSET = 47

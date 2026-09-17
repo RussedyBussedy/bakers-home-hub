@@ -1,7 +1,13 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, FunctionRegion, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
 import { guessCurrencyCode, searchCountry } from '../lib/currency'
-import type { Achievement, BoardItem, Contact, Expense, Household, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
+import type { Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Passage, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
+
+/**
+ * The Word's function runs next to the database rather than next to the phone: it makes several
+ * short trips to Postgres for one long one to Gemini, so the region that matters is the database's.
+ */
+const WORD_REGION = FunctionRegion.EuWest1
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
@@ -388,6 +394,40 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       if (!data) throw new Error('Search sent nothing back.')
       if (data.error) throw new Error(data.error)
       return data.results ?? []
+    },
+
+    async askTheWord(context, translation) {
+      const { data, error } = await sb.functions.invoke<{ guidance?: Guidance; error?: string }>(
+        'guide',
+        { body: { action: 'guide', context, translation }, region: WORD_REGION },
+      )
+      if (error) throw await fnError('Word', error)
+      if (!data) throw new Error('The Word sent nothing back.')
+      if (data.error) throw new Error(data.error)
+      if (!data.guidance) throw new Error('The Word sent nothing back.')
+      return data.guidance
+    },
+    async listGuidance() {
+      return many<Guidance>(sb.from('bible_guidance').select('*').order('created_at', { ascending: false }).limit(100))
+    },
+    async deleteGuidance(id) {
+      await one(sb.from('bible_guidance').delete().eq('id', id))
+    },
+    async setReadingDone(id, index, done) {
+      const current = await one<Pick<Guidance, 'plan_done'>>(sb.from('bible_guidance').select('plan_done').eq('id', id).single())
+      const plan_done = { ...(current.plan_done ?? {}) }
+      if (done) plan_done[String(index)] = new Date().toISOString().slice(0, 10)
+      else delete plan_done[String(index)]
+      return one<Guidance>(sb.from('bible_guidance').update({ plan_done }).eq('id', id).select().single())
+    },
+    async readPassage(reading, translation) {
+      const { data, error } = await sb.functions.invoke<{ passage?: Passage; error?: string }>(
+        'guide',
+        { body: { action: 'passage', book: reading.book_id, chapter: reading.chapter, start: reading.start, end: reading.end, translation }, region: WORD_REGION },
+      )
+      if (error) throw await fnError('Word', error)
+      if (!data?.passage) throw new Error(data?.error || 'That passage could not be found.')
+      return data.passage
     },
     async upload(blob, path) {
       const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false })
