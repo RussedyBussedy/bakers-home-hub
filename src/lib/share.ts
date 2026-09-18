@@ -55,10 +55,16 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** Open an external link from a click handler — synchronous, so mobile browsers allow it. */
+/**
+ * Open an external link from a click handler — synchronous, so mobile browsers allow it. Asking for
+ * "noopener" up front makes window.open answer null even when the tab did open, which used to send
+ * this page to the link as well; so the opener is cut afterwards instead, and only a blocked popup
+ * falls back to leaving the page.
+ */
 export function openExternal(url: string) {
-  const w = window.open(url, '_blank', 'noopener')
-  if (!w) window.location.href = url
+  const w = window.open(url, '_blank')
+  if (w) { try { w.opener = null } catch { /* cross-origin: already detached */ } return }
+  window.location.href = url
 }
 
 /** Client-side navigation from code that lives outside the router (toasts, listeners). */
