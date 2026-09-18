@@ -688,14 +688,17 @@ function ReadingRow({ day, reading, translation, done, onTick }: { day: number; 
     <div className="rounded-2xl border border-line bg-surface">
       <div className="flex items-center gap-3 px-4 py-3">
         <Checkbox checked={done} onChange={(v) => onTick?.(v)} label={`Day ${day}: ${reading.reference}`} size="lg" className={cn(!onTick && 'opacity-50')} />
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="min-w-0 flex-1 text-left">
-          <p className="flex flex-wrap items-baseline gap-x-2 text-[15px]">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Day {day}</span>
-            <span className={cn('font-medium transition-colors', done ? 'text-ink-3 line-through' : 'text-ink')}>{reading.reference}</span>
-          </p>
-          {reading.focus && <p className="mt-0.5 text-[13px] leading-snug text-ink-2">{reading.focus}</p>}
+        {/* The arrow is part of the button: the whole row past the tick opens the reading, not just the words. */}
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="-my-3 -mr-4 flex min-w-0 flex-1 items-center gap-3 py-3 pr-4 text-left">
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-baseline gap-x-2 text-[15px]">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Day {day}</span>
+              <span className={cn('font-medium transition-colors', done ? 'text-ink-3 line-through' : 'text-ink')}>{reading.reference}</span>
+            </span>
+            {reading.focus && <span className="mt-0.5 block text-[13px] leading-snug text-ink-2">{reading.focus}</span>}
+          </span>
+          <ChevronDown className={cn('size-4 shrink-0 text-ink-3 transition-transform duration-200', open && 'rotate-180')} aria-hidden />
         </button>
-        <ChevronDown className={cn('size-4 shrink-0 text-ink-3 transition-transform duration-200', open && 'rotate-180')} aria-hidden />
       </div>
       <AnimatePresence initial={false}>
         {open && (
