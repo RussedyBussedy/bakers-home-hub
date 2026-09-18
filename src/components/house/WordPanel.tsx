@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpen, ChevronDown, ExternalLink, Eye, EyeOff, Feather, Fingerprint, KeyRound, Lock, LockOpen, MoreHorizontal, PenLine, Phone, Trash2 } from 'lucide-react'
-import { PinRefused, TRANSLATIONS, type Guidance, type GuidancePassage, type PlanReading, type SafetyKind, type Translation } from '../../data/types'
-import { useActions, useGuidance, useHiddenGuidance, usePinStatus } from '../../data/hooks'
+import { BookOpen, ChevronDown, Copy, ExternalLink, Eye, EyeOff, Feather, Fingerprint, KeyRound, Lock, LockOpen, MessageCircle, MoreHorizontal, PenLine, Phone, SendHorizontal, Share2, Trash2, X } from 'lucide-react'
+import { PinRefused, TRANSLATIONS, type Guidance, type GuidancePassage, type PlanReading, type SafetyKind, type Study, type StudyMention, type Translation } from '../../data/types'
+import { useActions, useGuidance, useHiddenGuidance, usePinStatus, useStudy } from '../../data/hooks'
 import { useAuth, useDb } from '../../data/session'
 import { useCalm, useUi } from '../../store/ui'
 import { biometricEnrolled, biometricName, biometricSupported, enrolBiometric, forgetBiometric, unlockWithBiometric, updateBiometricPin } from '../../lib/biometric'
+import { canWebShare, copyText, openExternal, webShare, whatsappLink } from '../../lib/share'
 import { cn, fmtDate } from '../../lib/utils'
 import { EmptyState, Pill, Reveal } from '../ui/Bits'
 import { Button } from '../ui/Button'
@@ -22,6 +23,7 @@ const MAX_CHARS = 2000
 const RELOCK_AFTER = 10 * 60_000
 /** …and sooner if the app is put away for longer than this. */
 const RELOCK_WHEN_AWAY = 60_000
+const MAX_QUESTION_CHARS = 500
 
 /** Where people usually start. Each one drops an opening line into the box to be finished in their own words. */
 const STARTERS: { label: string; line: string }[] = [
@@ -544,7 +546,7 @@ function Letter({ letter, pin, firstName, partnerName, onDeleted, onHide, onUnhi
           <Paragraphs text={r.greeting} />
 
           <Heading>From the Word</Heading>
-          {r.passages.map((p, i) => <PassageCard key={`${p.reference}-${i}`} passage={p} />)}
+          {r.passages.map((p, i) => <PassageCard key={`${p.reference}-${i}`} passage={p} translation={letter.translation} />)}
 
           {thin ? (
             <p className="mt-6 rounded-2xl bg-surface-2 px-5 py-4 font-sans text-[14px] leading-relaxed text-ink-2">
@@ -560,7 +562,8 @@ function Letter({ letter, pin, firstName, partnerName, onDeleted, onHide, onUnhi
                     {r.response.map((step, i) => (
                       <li key={i} className="flex gap-3.5">
                         <span className="mt-[3px] grid size-7 shrink-0 place-items-center rounded-full bg-sage-soft font-sans text-[13px] font-semibold text-sage-text tabular">{i + 1}</span>
-                        <span>{step}</span>
+                        <span className="min-w-0 flex-1">{step}</span>
+                        <ShareButton text={step} label={`Share step ${i + 1}`} className="mt-0.5" />
                       </li>
                     ))}
                   </ol>
@@ -569,7 +572,10 @@ function Letter({ letter, pin, firstName, partnerName, onDeleted, onHide, onUnhi
               {r.prayer && (
                 <>
                   <Heading>A prayer</Heading>
-                  <blockquote className="mt-3 rounded-2xl border-l-4 border-primary/60 bg-surface-2 px-5 py-4 italic"><Paragraphs text={r.prayer} tight /></blockquote>
+                  <blockquote className="relative mt-3 rounded-2xl border-l-4 border-primary/60 bg-surface-2 px-5 py-4 pr-12 italic">
+                    <Paragraphs text={r.prayer} tight />
+                    <ShareButton text={r.prayer} label="Share the prayer" className="absolute top-3 right-3" />
+                  </blockquote>
                 </>
               )}
               {r.closing && <div className="mt-6"><Paragraphs text={r.closing} /></div>}
@@ -588,6 +594,8 @@ function Letter({ letter, pin, firstName, partnerName, onDeleted, onHide, onUnhi
             </div>
           </section>
         )}
+
+        <StudySection letter={letter} pin={pin} canTouch={canTouch} />
 
         <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-5 py-3 text-[12px] leading-relaxed text-ink-3 sm:px-8">
           <span className="max-w-prose">
@@ -624,13 +632,21 @@ function noteLabel(note: string): string | null {
   return note
 }
 
-function PassageCard({ passage: p }: { passage: GuidancePassage }) {
+/** A verse the way it reads in a message: the words, then where they are from. */
+function verseText(p: GuidancePassage, translation: Translation): string {
+  return `“${p.verses.map((v) => v.text.trim()).join(' ')}”\n— ${p.reference} (${translation})`
+}
+
+function PassageCard({ passage: p, translation }: { passage: GuidancePassage; translation: Translation }) {
   const label = noteLabel(p.note)
   return (
     <figure className="mt-4 rounded-2xl border border-line bg-surface px-5 py-4">
-      <figcaption className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 font-sans">
-        <span className="text-[13px] font-semibold uppercase tracking-wider text-primary-text">{p.reference}</span>
-        {label && <span className="text-[11px] text-ink-3">{label}</span>}
+      <figcaption className="flex items-baseline justify-between gap-x-3 font-sans">
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-[13px] font-semibold uppercase tracking-wider text-primary-text">{p.reference}</span>
+          {label && <span className="text-[11px] text-ink-3">{label}</span>}
+        </span>
+        <ShareButton text={verseText(p, translation)} label={`Share ${p.reference}`} className="-mr-2 -mt-1 self-start" />
       </figcaption>
       <blockquote className="mt-2 leading-[1.7]">
         {p.verses.map((v) => (
@@ -642,6 +658,23 @@ function PassageCard({ passage: p }: { passage: GuidancePassage }) {
       </blockquote>
       {p.why && <p className="mt-3 font-sans text-[15px] leading-relaxed text-ink-2">{p.why}</p>}
     </figure>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Passing a verse or a word of advice on — WhatsApp first, since that is where it will go.
+// ---------------------------------------------------------------------------
+function ShareButton({ text, label, className }: { text: string; label: string; className?: string }) {
+  const toast = useUi((s) => s.toast)
+  const copy = async () => {
+    toast(await copyText(text) ? { title: 'Copied', description: 'Paste it wherever you like.', tone: 'success' } : { title: 'Could not copy', description: 'Your browser did not allow it.', tone: 'neutral' })
+  }
+  return (
+    <Menu trigger={<button type="button" className={cn('grid size-8 shrink-0 place-items-center rounded-full font-sans text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink', className)} aria-label={label}><Share2 className="size-4" /></button>}>
+      <MenuItem icon={<MessageCircle />} onSelect={() => openExternal(whatsappLink(null, text))}>Send on WhatsApp</MenuItem>
+      {canWebShare() && <MenuItem icon={<Share2 />} onSelect={() => void webShare({ text })}>Share…</MenuItem>}
+      <MenuItem icon={<Copy />} onSelect={() => void copy()}>Copy</MenuItem>
+    </Menu>
   )
 }
 
@@ -675,13 +708,16 @@ function ReadingRow({ day, reading, translation, done, onTick }: { day: number; 
   )
 }
 
+/** Anything with a place in the Bible can be opened: a reading in the plan, a reference mentioned in an answer. */
+type Readable = Pick<PlanReading, 'book_id' | 'book' | 'chapter' | 'start' | 'end' | 'reference'>
+
 /** BibleHub keeps every chapter of both translations online, under the book's name. */
-function bibleHubUrl(reading: PlanReading, translation: Translation): string {
+function bibleHubUrl(reading: Readable, translation: Translation): string {
   const slug = reading.book_id === 22 ? 'songs' : reading.book_id === 19 ? 'psalms' : reading.book.toLowerCase().replace(/\s+/g, '_')
   return `https://biblehub.com/${translation.toLowerCase()}/${slug}/${reading.chapter}.htm`
 }
 
-function PassageReader({ reading, translation }: { reading: PlanReading; translation: Translation }) {
+function PassageReader({ reading, translation }: { reading: Readable; translation: Translation }) {
   const { db } = useDb()
   const q = useQuery({
     queryKey: ['passage', db.mode, translation, reading.book_id, reading.chapter, reading.start, reading.end],
@@ -709,6 +745,191 @@ function PassageReader({ reading, translation }: { reading: PlanReading; transla
       <a href={bibleHubUrl(reading, translation)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-ink-3 hover:text-ink">
         Whole chapter on BibleHub <ExternalLink className="size-3" />
       </a>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Study — questions asked under the letter
+// ---------------------------------------------------------------------------
+function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string | null; canTouch: boolean }) {
+  const { askStudy, deleteStudy } = useActions()
+  const confirm = useConfirm()
+  const q = useStudy(letter, pin)
+  const thread = useMemo(() => q.data ?? [], [q.data])
+  const [text, setText] = useState('')
+  /** The question being answered right now, shown in its place until the answer lands. */
+  const [asking, setAsking] = useState<string | null>(null)
+  const box = useRef<HTMLTextAreaElement>(null)
+  const tail = useRef<HTMLDivElement>(null)
+  const justAsked = useRef(false)
+  // The letter's own starters until something has been asked; after that, where the last answer points.
+  const suggestions = thread.length === 0 ? (letter.response.questions ?? []) : (thread[thread.length - 1]!.answer.followups ?? [])
+
+  useEffect(() => {
+    if (!justAsked.current) return
+    justAsked.current = false
+    tail.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [thread.length])
+
+  const ask = async (question: string) => {
+    const clean = question.replace(/\s+/g, ' ').trim().slice(0, MAX_QUESTION_CHARS)
+    if (clean.length < 3 || asking) return
+    setAsking(clean)
+    setText('')
+    try {
+      await askStudy(letter, clean, pin ?? undefined)
+      justAsked.current = true
+    } catch {
+      setText(clean) // toasted; the question goes back in the box to try again
+    } finally { setAsking(null) }
+  }
+  const remove = async (s: Study) => {
+    const ok = await confirm({ title: 'Remove this question?', description: 'The question and its answer go; the letter stays.', confirmLabel: 'Remove', danger: true })
+    if (ok) void deleteStudy(letter, s, pin ?? undefined)
+  }
+  const submit = (e: FormEvent) => { e.preventDefault(); void ask(text) }
+
+  return (
+    <section className="border-t border-line px-5 py-5 sm:px-8 sm:py-6" aria-label="Study">
+      <h3 className="text-[20px] text-ink">Study</h3>
+      <p className="mt-1 text-[14px] text-ink-2">Ask about anything the letter raised — a verse, a person, a word, a place, what something meant then and now. The answers stay here with the letter.</p>
+
+      {!canTouch ? (
+        <p className="mt-3 text-[13px] text-ink-3">Unlock your hidden letters to read the study, or add to it.</p>
+      ) : q.isPending ? (
+        <div className="mt-4 space-y-2" aria-busy><div className="skeleton h-4 w-2/3 rounded-lg" /><div className="skeleton h-4 w-1/2 rounded-lg" /></div>
+      ) : q.isError ? (
+        <p className="mt-3 text-[13px] text-danger">{q.error instanceof Error ? q.error.message : 'The study could not be opened.'}</p>
+      ) : (
+        <>
+          {(thread.length > 0 || asking) && (
+            <div className="mt-4 space-y-3">
+              {thread.map((s) => <StudyTurn key={s.id} study={s} translation={letter.translation} onRemove={() => void remove(s)} />)}
+              {asking && (
+                <div className="rounded-2xl border border-line bg-surface" role="status" aria-live="polite">
+                  <p className="border-b border-line px-4 py-3 text-[15px] text-ink"><span className="text-ink-3">You asked: </span>{asking}</p>
+                  <div className="space-y-2 px-4 py-4" aria-busy><div className="skeleton h-4 w-11/12 rounded-lg" /><div className="skeleton h-4 w-full rounded-lg" /><div className="skeleton h-4 w-2/3 rounded-lg" /></div>
+                  <p className="px-4 pb-3 text-[13px] text-ink-3">Looking it up in the Scriptures…</p>
+                </div>
+              )}
+              <div ref={tail} />
+            </div>
+          )}
+          {suggestions.length > 0 && !asking && (
+            <div className="mt-4 flex flex-wrap gap-2" aria-label={thread.length === 0 ? 'Questions to start with' : 'Questions you might ask next'}>
+              {suggestions.map((sq) => (
+                <button key={sq} type="button" onClick={() => void ask(sq)} className="inline-flex max-w-full items-start gap-1.5 rounded-2xl border border-line bg-surface px-3.5 py-2 text-left text-[14px] leading-snug text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+                  <span className="whitespace-normal">{sq}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <form onSubmit={submit} className="mt-4">
+            <Textarea
+              ref={box}
+              value={text}
+              onChange={(e) => setText(e.target.value.slice(0, MAX_QUESTION_CHARS))}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(text) } }}
+              rows={2}
+              maxLength={MAX_QUESTION_CHARS}
+              placeholder="Ask about a verse, a person, a word…"
+              aria-label="Your question"
+              className="text-[15px]"
+              disabled={Boolean(asking)}
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-[12px] text-ink-3">{thread.length > 0 ? 'Follow-up questions remember what was asked before.' : 'Enter sends; Shift+Enter for a new line.'}</span>
+              <Button type="submit" size="sm" leading={<SendHorizontal className="size-4" />} disabled={text.trim().length < 3 || Boolean(asking)} loading={Boolean(asking)}>Ask</Button>
+            </div>
+          </form>
+        </>
+      )}
+    </section>
+  )
+}
+
+/** One question and its answer. References in the answer open in place, like the reading plan. */
+function StudyTurn({ study: s, translation, onRemove }: { study: Study; translation: Translation; onRemove: () => void }) {
+  const a = s.answer
+  const [open, setOpen] = useState<Readable | null>(null)
+  const toggle = (m: Readable) => setOpen((o) => (o && o.reference === m.reference ? null : m))
+  return (
+    <div className="rounded-2xl border border-line bg-surface">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+        <p className="text-[15px] text-ink"><span className="text-ink-3">You asked: </span>{s.question}</p>
+        <span className="flex shrink-0 items-center">
+          <ShareButton text={`${s.question}\n\n${a.text}`} label="Share this answer" />
+          <button type="button" onClick={onRemove} className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface-2 hover:text-danger" aria-label="Remove this question"><X className="size-4" /></button>
+        </span>
+      </div>
+      {a.safety.concern && <CareCard kind={a.safety.kind} className="mx-4 mt-4" />}
+      <div className="font-letter px-4 py-4 text-[17px] leading-[1.7] text-ink">
+        <AnswerText text={a.text} mentions={a.mentions ?? []} open={open} onOpen={toggle} />
+        {open && !(a.readings ?? []).some((r) => r.reference === open.reference) && (
+          <div className="mt-3 rounded-2xl border border-line bg-surface-2/50">
+            <p className="flex items-center justify-between px-4 pt-3 font-sans text-[13px] font-semibold uppercase tracking-wider text-primary-text">{open.reference}<button type="button" onClick={() => setOpen(null)} className="text-ink-3 hover:text-ink" aria-label="Close the passage"><X className="size-4" /></button></p>
+            <PassageReader reading={open} translation={translation} />
+          </div>
+        )}
+        {a.passages.map((p, i) => <PassageCard key={`${p.reference}-${i}`} passage={p} translation={translation} />)}
+        {(a.readings ?? []).length > 0 && (
+          <div className="mt-4 font-sans">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-primary-text">Worth reading in full</p>
+            <div className="mt-2 space-y-2">
+              {a.readings.map((r, i) => <ReadingToggle key={`${r.reference}-${i}`} reading={r} translation={translation} open={open?.reference === r.reference} onToggle={() => toggle(r)} />)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The answer's paragraphs, with every reference the function found turned into something to tap. */
+function AnswerText({ text, mentions, open, onOpen }: { text: string; mentions: StudyMention[]; open: { reference: string } | null; onOpen: (m: StudyMention) => void }) {
+  const byText = useMemo(() => new Map(mentions.map((m) => [m.text, m])), [mentions])
+  const rx = useMemo(() => (mentions.length ? new RegExp(`(${[...byText.keys()].sort((x, y) => y.length - x.length).map(escapeRx).join('|')})`, 'g') : null), [mentions.length, byText])
+  const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+  return (
+    <>
+      {paragraphs.map((p, i) => (
+        <p key={i} className={cn(i > 0 && 'mt-3')}>
+          {(rx ? p.split(rx) : [p]).map((piece, j) => {
+            const m = byText.get(piece)
+            if (!m) return <span key={j}>{piece}</span>
+            return (
+              <button key={j} type="button" onClick={() => onOpen(m)} aria-expanded={open?.reference === m.reference} className={cn('rounded-sm font-medium text-primary-text underline decoration-dotted underline-offset-4 hover:decoration-solid', open?.reference === m.reference && 'bg-primary-soft')}>
+                {piece}
+              </button>
+            )
+          })}
+        </p>
+      ))}
+    </>
+  )
+}
+
+function ReadingToggle({ reading, translation, open, onToggle }: { reading: PlanReading; translation: Translation; open: boolean; onToggle: () => void }) {
+  const calm = useCalm()
+  return (
+    <div className="rounded-2xl border border-line bg-surface">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-medium text-ink">{reading.reference}</span>
+          {reading.focus && <span className="mt-0.5 block text-[13px] leading-snug text-ink-2">{reading.focus}</span>}
+        </span>
+        <ChevronDown className={cn('size-4 shrink-0 text-ink-3 transition-transform duration-200', open && 'rotate-180')} aria-hidden />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key="body" initial={calm ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden">
+            <PassageReader reading={reading} translation={translation} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -753,10 +974,10 @@ const LINES: Record<Exclude<SafetyKind, 'none'>, { lead: string; lines: { label:
   },
 }
 
-function CareCard({ kind }: { kind: SafetyKind }) {
+function CareCard({ kind, className }: { kind: SafetyKind; className?: string }) {
   const care = LINES[kind === 'none' ? 'other' : kind]
   return (
-    <div className="mx-5 mt-5 rounded-2xl border border-ochre/50 bg-ochre-soft px-5 py-4 sm:mx-8" role="note">
+    <div className={cn('rounded-2xl border border-ochre/50 bg-ochre-soft px-5 py-4', className ?? 'mx-5 mt-5 sm:mx-8')} role="note">
       <p className="font-display text-[20px] text-ink">Please don’t carry this alone</p>
       <p className="mt-1 text-[14px] leading-relaxed text-ink-2">{care.lead}</p>
       <ul className="mt-3 grid gap-x-6 gap-y-2 text-[14px] sm:grid-cols-2">
