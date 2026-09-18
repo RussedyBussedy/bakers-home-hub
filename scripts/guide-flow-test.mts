@@ -47,6 +47,22 @@ const letter = {
   safety: { concern: false, kind: 'none' },
 }
 
+const LID = 'aaaaaaaa-0000-0000-0000-000000000001'
+const letterRow = {
+  id: LID, context: 'I am anxious about money and cannot sleep', translation: 'BSB', theme: 'Anxiety about money', hidden: false,
+  response: {
+    passages: [{ reference: 'Psalm 4:8', book_id: 19, chapter: 4, start: 8, end: 8, verses: [{ verse: 8, text: 'I will both lie down and sleep in peace.' }], why: 'Sleep is a gift.', note: 'nearest to what they wrote' }],
+    plan: [{ reference: 'Psalm 23', focus: 'Rest.' }],
+  },
+}
+const studyAnswer = {
+  answer: 'David wrote this psalm in the evening (Psalm 4:8), it seems, and Psalm 3 is its morning twin.',
+  passages: [{ id: 'c1', why: 'Where he says it.' }, { id: 'c2', why: 'Jesus on the same worry.' }],
+  readings: [{ reference: 'Psalm 3', focus: 'The morning before.' }, { reference: 'Psalm 151', focus: 'No such psalm.' }],
+  followups: ['Who was Absalom?', 'Why does he mention the harvest?'],
+  safety: { concern: false, kind: 'none' },
+}
+
 interface World {
   user?: { id: string } | null
   models: Record<string, number | { text: string } | 'blocked'>
@@ -54,10 +70,22 @@ interface World {
   saved: unknown[]
   calls: string[]
   profile?: string
+  hasPin?: boolean
+  /** The letter a study question is asked under; null when it does not exist. */
+  letterRow?: Record<string, unknown> | null
+  thread: unknown[]
+  /** What the PIN function answers for a hidden letter's thread. */
+  hiddenStudy?: Record<string, unknown>
+  questionsToday: number
+  /** What the model answers a study question with; the letter stub answers letters. */
+  study: Record<string, unknown> | 'blocked' | null
+  prompts: string[]
+  studyTable: boolean
+  hiddenAuth: string | null
 }
 let world: World
 function reset(over: Partial<World> = {}) {
-  world = { user: { id: 'user-1' }, models: { 'gemini-3.8-flash': { text: JSON.stringify(letter) } }, lettersToday: 0, saved: [], calls: [], profile: 'Russel Baker', ...over }
+  world = { user: { id: 'user-1' }, models: { 'gemini-3.8-flash': { text: JSON.stringify(letter) } }, lettersToday: 0, saved: [], calls: [], profile: 'Russel Baker', letterRow, thread: [], questionsToday: 0, study: studyAnswer, prompts: [], studyTable: true, hiddenAuth: null, ...over }
 }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } })
@@ -80,13 +108,28 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     if (path === 'rpc/bible_retrieve') { eq(typeof body.query_embedding, 'string', 'the embedding travels as text'); eq(body.p_translation, world.calls.some((c) => c.includes('KJV')) ? 'KJV' : body.p_translation, 'translation passed'); return json(retrieved) }
     if (path === 'rpc/bible_passage') return body.p_chapter === 151 ? json(null) : json({ book_id: body.p_book, book: 'Psalms', chapter: body.p_chapter, start: 1, end: 6, verses: [{ verse: 1, text: 'The LORD is my shepherd.' }] })
     if (path.startsWith('profiles?')) return json([{ display_name: world.profile }])
+    if (path.startsWith('bible_prefs?')) return json(world.hasPin ? [{ user_id: 'user-1' }] : [])
+    if (path.startsWith('bible_guidance?id=eq.')) return json(world.letterRow && path.includes(`id=eq.${world.letterRow.id}`) && path.includes('user_id=eq.user-1') ? [world.letterRow] : [])
     if (path.startsWith('bible_guidance?')) return json([], 206, { 'content-range': `0-0/${world.lettersToday}` })
     if (path === 'bible_guidance' && init?.method === 'POST') { const row = { id: 'row-1', created_at: '2026-09-17T10:00:00Z', plan_done: {}, ...body }; world.saved.push(row); return json([row], 201) }
+    if (path === 'rpc/bible_hidden_study') { world.hiddenAuth = headers.get('authorization'); return json(world.hiddenStudy ?? { ok: false, error: 'pin_not_set' }) }
+    if (!world.studyTable && (path.startsWith('bible_study') || path === 'bible_study')) return json({ message: 'relation "public.bible_study" does not exist' }, 404)
+    if (path.startsWith('bible_study?guidance_id=eq.')) return json(world.thread)
+    if (path.startsWith('bible_study?')) return json([], 206, { 'content-range': `0-0/${world.questionsToday}` })
+    if (path === 'bible_study' && init?.method === 'POST') { const row = { id: 'q-1', created_at: '2026-09-18T10:00:00Z', ...body }; world.saved.push(row); return json([row], 201) }
     return json({ message: 'no such path' }, 404)
   }
   if (url.includes('generativelanguage')) {
     if (url.includes(':embedContent')) return json({ embedding: { values: Array.from({ length: 768 }, (_, i) => Math.sin(i)) } })
     const model = url.match(/models\/([^:]+):generateContent/)?.[1] ?? ''
+    world.prompts.push(body?.contents?.[0]?.parts?.[0]?.text ?? '')
+    const forStudy = Boolean(body?.generationConfig?.responseSchema?.properties?.answer)
+    if (forStudy) {
+      if (world.models[model] === undefined) return json({ error: { message: 'not found' } }, 404)
+      if (world.study === null) return json({ error: { message: 'no' } }, 500)
+      if (world.study === 'blocked') return json({ promptFeedback: { blockReason: 'SAFETY' } })
+      return json({ candidates: [{ content: { parts: [{ text: JSON.stringify(world.study) }] } }] })
+    }
     const spec = world.models[model]
     if (spec === undefined) return json({ error: { message: 'not found' } }, 404)
     if (typeof spec === 'number') return json({ error: { message: 'no' } }, spec)
@@ -170,6 +213,95 @@ reset({ models: { 'gemini-3.8-flash': { text: JSON.stringify({ ...letter, safety
 r = await ask({ context: "I don't want to be here anymore, the debt is too much" })
 eq(r.body.guidance.response.safety, { concern: true, kind: 'self-harm' }, 'the screen raises the concern the model missed')
 
+// --- born hidden -----------------------------------------------------------------------
+reset({ hasPin: true })
+r = await ask({ context: 'I am anxious about money and cannot sleep', hidden: true })
+eq(r.body.guidance.hidden, true, 'a letter can be born hidden when there is a PIN to reach it with')
+reset({ hasPin: false })
+r = await ask({ context: 'I am anxious about money and cannot sleep', hidden: true })
+eq(r.body.error, 'Set a PIN for hidden letters first, then ask again.', 'but not without one')
+eq(world.saved.length, 0, 'and nothing is saved in that case')
+reset()
+r = await ask({ context: 'I am anxious about money and cannot sleep' })
+eq(r.body.guidance.hidden, false, 'an ordinary letter is not hidden')
+
+// --- what the person is told never names the service -------------------------------------
+reset({ models: {} })
+r = await ask({ context: 'I am anxious about money and cannot sleep' })
+eq(/gemini|model|ai\b/i.test(JSON.stringify(r.body.guidance.response)), false, 'a failed letter says nothing about a model')
+reset({ models: { 'gemini-3.8-flash': 401 } })
+r = await ask({ context: 'I am anxious about money and cannot sleep' })
+eq(r.body.guidance.model.startsWith('fallback:'), true, 'a refused key still gives the passages')
+eq(/gemini/i.test(r.body.guidance.model.replace(/^fallback: /, '')), false, 'and the reason recorded does not name the service either')
+
+// --- starter questions come with the letter ---------------------------------------------
+reset({ models: { 'gemini-3.8-flash': { text: JSON.stringify({ ...letter, questions: ['Who wrote Psalm 4?', 'What does "anxious" mean in Philippians 4:6?', 'Why birds?', 'A fourth'] }) } } })
+r = await ask({ context: 'I am anxious about money and cannot sleep' })
+eq(r.body.guidance.response.questions, ['Who wrote Psalm 4?', 'What does "anxious" mean in Philippians 4:6?', 'Why birds?'], 'three starter questions travel with the letter')
+
+// --- study: a question under a letter -----------------------------------------------------
+reset()
+r = await ask({ action: 'study', guidance_id: LID, question: 'Who wrote this psalm, and when?' })
+eq(r.body.error, undefined, 'a question under a visible letter is answered')
+const s = r.body.study
+eq([s.guidance_id, s.user_id, s.question], [LID, 'user-1', 'Who wrote this psalm, and when?'], 'and saved under the letter, for the person')
+eq(s.model, 'gemini-3.8-flash', 'by the same model')
+eq(s.answer.text, studyAnswer.answer, 'the answer text')
+eq(s.answer.passages.map((p: { reference: string }) => p.reference), ['Psalm 4:8', 'Matthew 6:25–26'], 'the letter\'s own passage leads the candidates; the rest come from the question')
+eq(s.answer.passages[0].verses[0].text, 'I will both lie down and sleep in peace.', 'with our verse text')
+eq(s.answer.readings.map((p: { reference: string }) => p.reference), ['Psalm 3'], 'readings checked against the canon')
+eq(s.answer.mentions.map((m: { text: string }) => m.text), ['Psalm 4:8', 'Psalm 3'], 'references in the text, ready to open')
+eq(s.answer.followups, ['Who was Absalom?', 'Why does he mention the harvest?'], 'and a couple of follow-ups')
+eq(world.calls.includes('POST /rest/v1/rpc/bible_hidden_study'), false, 'a visible letter\'s thread needs no PIN')
+eq(world.calls.some((c) => c.startsWith('GET /rest/v1/bible_study')), true, 'the thread so far is read')
+eq(world.prompts[0]?.includes('Theme: Anxiety about money') && world.prompts[0]?.includes('[c1] Psalm 4:8'), true, 'the model sees the letter and the candidates')
+eq(world.saved.length, 1, 'one row saved')
+
+reset({ thread: [{ question: 'Who was David?', answer: { text: 'A shepherd who became king.' } }] })
+r = await ask({ action: 'study', guidance_id: LID, question: 'And his father?' })
+eq(world.prompts[0]?.includes('They asked: Who was David?') && world.prompts[0]?.includes('You answered: A shepherd who became king.'), true, 'the thread so far goes to the model')
+eq(r.body.study.answer.text.length > 0, true, 'and the follow-up is answered')
+
+reset()
+eq((await ask({ action: 'study', guidance_id: LID, question: 'hi' })).body.error, 'Ask a little more.', 'too short a question')
+eq((await ask({ action: 'study', guidance_id: 'nope', question: 'Who was David?' })).body.error, 'Which letter is this about?', 'a bad letter id')
+reset({ letterRow: null })
+eq((await ask({ action: 'study', guidance_id: LID, question: 'Who was David?' })).body.error, 'That letter isn’t there any more.', 'a letter that is not theirs, or gone')
+reset({ questionsToday: 120 })
+r = await ask({ action: 'study', guidance_id: LID, question: 'Who was David?' })
+eq(typeof r.body.error, 'string', 'a day\'s worth of questions is enough')
+eq(world.calls.some((c) => c.includes('gemini:')), false, 'and the model is not troubled for it')
+reset({ studyTable: false })
+eq((await ask({ action: 'study', guidance_id: LID, question: 'Who was David?' })).body.error, 'The study section is not set up on this Hub yet (migration 013 has not been run).', 'before migration 013, it says so')
+
+// hidden letters: the PIN is checked as the person, through the database's own door
+reset({ letterRow: { ...letterRow, hidden: true } })
+r = await ask({ action: 'study', guidance_id: LID, question: 'Who was David?' })
+eq([r.body.error, r.body.pin], ['That letter is locked — unlock it first.', { ok: false, error: 'locked' }], 'a hidden letter without a PIN is not even tried')
+eq(world.calls.includes('POST /rest/v1/rpc/bible_hidden_study'), false, 'so no guess is spent')
+reset({ letterRow: { ...letterRow, hidden: true }, hiddenStudy: { ok: false, error: 'wrong_pin', attempts_left: 3 } })
+r = await ask({ action: 'study', guidance_id: LID, question: 'Who was David?', pin: '0000' })
+eq(r.body.pin, { ok: false, error: 'wrong_pin', attempts_left: 3 }, 'a wrong PIN comes back in the database\'s words')
+eq(world.hiddenAuth, 'Bearer good', 'asked with the person\'s own token, so the guess counts against them')
+eq(world.calls.some((c) => c.includes('gemini:')), false, 'and nothing is written')
+reset({ letterRow: { ...letterRow, hidden: true }, hiddenStudy: { ok: true, study: [{ question: 'Who was David?', answer: { text: 'A shepherd.' } }] } })
+r = await ask({ action: 'study', guidance_id: LID, question: 'And his father?', pin: '1234' })
+eq(r.body.error, undefined, 'the right PIN opens the hidden thread')
+eq(world.prompts[0]?.includes('They asked: Who was David?'), true, 'and its history goes to the model')
+eq(world.saved.length, 1, 'and the answer is saved')
+
+// when the model cannot answer a question
+reset({ study: 'blocked' })
+r = await ask({ action: 'study', guidance_id: LID, question: 'Who was David?' })
+eq([r.body.study.answer.passages.length, r.body.study.model.includes('passages only')], [3, true], 'a refused answer still carries the nearest passages')
+reset({ study: null })
+r = await ask({ action: 'study', guidance_id: LID, question: 'Who was David?' })
+eq(r.body.study.model.startsWith('fallback:'), true, 'a model that falls over: the fallback answer, marked as such')
+eq(/gemini|model|\bai\b/i.test(JSON.stringify(r.body.study.answer)), false, 'which names no service')
+reset({ study: { ...studyAnswer, safety: { concern: false, kind: 'none' } } })
+r = await ask({ action: 'study', guidance_id: LID, question: "Does God mind that I don't want to be here anymore?" })
+eq(r.body.study.answer.safety, { concern: true, kind: 'self-harm' }, 'the screen hears a question the same way it hears a letter')
+
 // --- reading a passage -----------------------------------------------------------------
 reset()
 r = await ask({ action: 'passage', book: 19, chapter: 23 })
@@ -183,7 +315,7 @@ eq(r.body.error, 'Which passage?', 'or not asked for properly')
 delete process.env.GEMINI_API_KEY
 reset()
 r = await ask({ context: 'I am anxious about money and cannot sleep' })
-eq(r.body.error, 'The Word is not switched on for this Hub yet — add the GEMINI_API_KEY secret.', 'without a key, it says what to do')
+eq(r.body.error, 'The Word is not switched on for this Hub yet.', 'without a key, it says so plainly (the secret\'s name goes to the logs, not the screen)')
 process.env.GEMINI_API_KEY = 'gemini-key'
 
 console.log(failed === 0 ? '\nAll good.' : `\n${failed} failed.`)

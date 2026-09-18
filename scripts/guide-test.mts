@@ -7,7 +7,7 @@
  * what someone wrote must always bring the helplines up whatever the model thought.
  */
 import { readFileSync } from 'node:fs'
-import { assemble, buildCandidates, clean, fallbackLetter, formatRef, parseReference, prettyPath, screen, themeOf, type CanonBook, type Retrieved } from '../supabase/functions/guide/index'
+import { assemble, assembleStudy, buildCandidates, clean, fallbackLetter, fallbackStudy, findMentions, formatRef, parseReference, prettyPath, questionsOf, screen, studyPrompt, themeOf, type CanonBook, type Retrieved } from '../supabase/functions/guide/index'
 
 const canon = JSON.parse(readFileSync(new URL('./fixtures/bible-canon.json', import.meta.url), 'utf8')) as CanonBook[]
 
@@ -111,6 +111,8 @@ eq(letter.response, ['Write the numbers down.', 'Tell Kay.'], 'numbering and bul
 eq(letter.plan.map((p) => p.reference), ['Psalm 23', 'Matthew 6:25–34', 'Philippians 4:4–9'], 'the plan keeps only real, distinct readings')
 eq(letter.plan[1], { book_id: 40, book: 'Matthew', chapter: 6, start: 25, end: 34, reference: 'Matthew 6:25–34', focus: 'Worry.' }, 'each reading knows where it is')
 eq(letter.safety, { concern: false, kind: 'none' }, 'no concern raised')
+eq(letter.questions, [], 'a letter written without starter questions has none')
+eq(questionsOf(['Who was **David**?', ' who was david? ', 'What does "meek" mean here?', 42, '', 'What happened next?'], 3), ['Who was David?', 'What does "meek" mean here?', 'What happened next?'], 'starter questions: cleaned, deduped, three at most')
 eq(themeOf({ theme: 'anxiety about money.' }, ''), 'Anxiety about money', 'the theme is tidied')
 eq(themeOf({}, 'I am anxious about money and cannot sleep'), 'I am anxious about money', 'or taken from the first words')
 
@@ -138,6 +140,38 @@ eq(fb.passages.length, 4, 'the fallback letter still carries the passages')
 eq(fb.passages.every((p) => p.why === ''), true, 'with no invented commentary')
 eq(fb.plan.length > 0, true, 'and something to read')
 eq(clean('  **Bold** and `code` #tag  \n\n\n\nnext '), 'Bold and code tag\n\nnext', 'clean() leaves plain text')
+
+// --- study: a question under the letter ----------------------------------------
+const mentions = findMentions('Boaz first appears in Ruth 2:1, and the whole of Ruth 2 is worth reading; compare 1 John 4:18 and Psalm 23. In 2 days, chapter 3 and John 3:0 say nothing, nor does Hezekiah 3:16. Ruth 2:1 again.', canon)
+eq(mentions.map((m) => m.text), ['Ruth 2:1', 'Ruth 2', '1 John 4:18', 'Psalm 23'], 'references mentioned in passing are found once each; false alarms are left alone')
+eq(mentions[2], { book_id: 62, book: '1 John', chapter: 4, start: 18, end: 18, reference: '1 John 4:18', text: '1 John 4:18' }, 'each one knows where it is')
+eq(findMentions('Philippians 4:6-7 and Matt. 6:25–34.', canon).map((m) => m.reference), ['Philippians 4:6–7', 'Matthew 6:25–34'], 'ranges and abbreviations too')
+
+const own = [{ book_id: 8, chapter: 2, start: 1, end: 3, reference: 'Ruth 2:1–3', verses: [{ verse: 1, text: 'Now Naomi had a relative' }, { verse: 2, text: 'And Ruth the Moabitess said' }, { verse: 3, text: 'So she went out' }], note: 'quoted in the letter', score: 1 }]
+const scands = buildCandidates(retrieved, canon, own)
+eq(scands[0]!.reference, 'Ruth 2:1–3', 'the letter\'s own passages lead the candidates when a question is asked under it')
+eq(scands[0]!.id, 'c1', 'and are numbered with the rest')
+eq(scands.length, cands.length + 1, 'alongside what the question itself brought up')
+
+const study = assembleStudy({
+  answer: 'Boaz was a landowner of Bethlehem (Ruth 2:1).\n\n\n\nHe becomes the *kinsman-redeemer*.',
+  passages: [{ id: 'C1', why: 'Where he first appears.' }, { id: 'c99', why: 'nope' }, { id: 'c1', why: 'again' }],
+  readings: [{ reference: 'Ruth 2', focus: 'The whole day in the field.' }, { reference: 'Ruth 9', focus: 'no such chapter' }, { reference: 'Ruth 2', focus: 'twice' }],
+  followups: ['What is a kinsman-redeemer?', 'Why did Naomi send Ruth to the threshing floor?', 'Third', 'Fourth'],
+  safety: { concern: false, kind: 'none' },
+}, scands, canon, screen('who was Boaz?'))
+eq(study.text, 'Boaz was a landowner of Bethlehem (Ruth 2:1).\n\nHe becomes the kinsman-redeemer.', 'the answer is plain text with its paragraphs')
+eq(study.passages.map((p) => p.reference), ['Ruth 2:1–3'], 'quoted passages come only from the candidates, once each')
+eq(study.passages[0]!.verses[1]!.text, 'And Ruth the Moabitess said', 'with our verse text')
+eq(study.readings.map((r) => r.reference), ['Ruth 2'], 'readings that do not exist are dropped, repeats kept once')
+eq(study.mentions.map((m) => m.text), ['Ruth 2:1'], 'the reference in the text can be opened')
+eq(study.followups.length, 3, 'three follow-ups at most')
+eq(study.safety, { concern: false, kind: 'none' }, 'no concern')
+eq(assembleStudy({ answer: 'x', passages: [], readings: [], followups: [], safety: { concern: false, kind: 'none' } }, scands, canon, screen("I don't want to be here anymore")).safety, { concern: true, kind: 'self-harm' }, 'the screen still wins on a question')
+const sfb = fallbackStudy(scands, canon, screen('who was Boaz?'))
+eq([sfb.passages.length, sfb.passages.every((p) => p.why === ''), sfb.followups], [3, true, []], 'the fallback answer carries the nearest passages and nothing made up')
+const sp = studyPrompt('Russel', { theme: 'Grief for a father', context: 'My dad died', passages: [{ reference: 'Psalm 23', why: 'Comfort.' }], plan: [{ reference: 'Psalm 23', focus: 'Rest.' }] }, [{ question: 'Who was David?', answer: 'A shepherd.' }], 'Why did he write it?', scands, 'BSB')
+eq([sp.includes('Theme: Grief for a father'), sp.includes('They asked: Who was David?'), sp.includes('Why did he write it?'), sp.includes('[c1] Ruth 2:1–3')], [true, true, true, true], 'the model sees the letter, the thread and the candidates')
 
 console.log(failed === 0 ? '\nAll good.' : `\n${failed} failed.`)
 if (failed > 0) process.exit(1)
