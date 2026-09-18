@@ -1,21 +1,27 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpen, ChevronDown, ExternalLink, Feather, PenLine, Phone, Trash2 } from 'lucide-react'
-import { TRANSLATIONS, type Guidance, type GuidancePassage, type PlanReading, type SafetyKind, type Translation } from '../../data/types'
-import { useActions, useGuidance } from '../../data/hooks'
+import { BookOpen, ChevronDown, ExternalLink, Eye, EyeOff, Feather, Fingerprint, KeyRound, Lock, LockOpen, MoreHorizontal, PenLine, Phone, Trash2 } from 'lucide-react'
+import { PinRefused, TRANSLATIONS, type Guidance, type GuidancePassage, type PlanReading, type SafetyKind, type Translation } from '../../data/types'
+import { useActions, useGuidance, useHiddenGuidance, usePinStatus } from '../../data/hooks'
 import { useAuth, useDb } from '../../data/session'
-import { useCalm } from '../../store/ui'
+import { useCalm, useUi } from '../../store/ui'
+import { biometricEnrolled, biometricName, biometricSupported, enrolBiometric, forgetBiometric, unlockWithBiometric, updateBiometricPin } from '../../lib/biometric'
 import { cn, fmtDate } from '../../lib/utils'
-import { EmptyState, Reveal } from '../ui/Bits'
+import { EmptyState, Pill, Reveal } from '../ui/Bits'
 import { Button } from '../ui/Button'
 import { Checkbox } from '../ui/Checkbox'
-import { Chip, Segmented, Textarea } from '../ui/Field'
-import { useConfirm } from '../ui/Sheet'
+import { Chip, Input, Segmented, Textarea } from '../ui/Field'
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../ui/Menu'
+import { Sheet, useConfirm } from '../ui/Sheet'
 
 const TRANSLATION_KEY = 'hub-word-translation'
 const MIN_WORDS = 8
 const MAX_CHARS = 2000
+/** Hidden letters lock themselves again after this long, however busy the screen has been. */
+const RELOCK_AFTER = 10 * 60_000
+/** …and sooner if the app is put away for longer than this. */
+const RELOCK_WHEN_AWAY = 60_000
 
 /** Where people usually start. Each one drops an opening line into the box to be finished in their own words. */
 const STARTERS: { label: string; line: string }[] = [
@@ -39,29 +45,91 @@ const STAGES: { at: number; text: string }[] = [
 
 /**
  * The Word: write down what is going on and get a pastor's letter back, built only on Scripture
- * from the Hub's own Bible. Letters are kept per person and shown to nobody else in the house.
+ * from the Hub's own Bible. Letters are kept per person and shown to nobody else in the house —
+ * and the ones marked hidden are kept behind a PIN as well, for the over-the-shoulder case.
  */
 export function WordPanel() {
   const { data: letters, isPending } = useGuidance()
-  const { askTheWord } = useActions()
-  const { me, partner } = useAuth()
+  const { data: pinStatus } = usePinStatus()
+  const { askTheWord, hideGuidance, lockHidden } = useActions()
+  const { me, partner, userId } = useAuth()
+  const toast = useUi((s) => s.toast)
   const [selected, setSelected] = useState<string | null>(null)
   const [writing, setWriting] = useState(false)
   const [busy, setBusy] = useState(false)
+  /** The letter just written, kept in hand even when it went straight behind the PIN. */
+  const [fresh, setFresh] = useState<Guidance | null>(null)
+
+  // The PIN lives here, in memory, and nowhere else — for as long as the letters are unlocked.
+  const [pin, setPinInHand] = useState<string | null>(null)
+  const hidden = useHiddenGuidance(pin)
+  const [sheet, setSheet] = useState<'none' | 'unlock' | 'set-pin' | 'change-pin'>('none')
+  const [afterPin, setAfterPin] = useState<((pin: string) => void) | null>(null)
+
+  const currentHidden = useRef(false)
+  const lock = useCallback(() => {
+    setPinInHand(null)
+    lockHidden()
+    if (currentHidden.current) setSelected(null)
+  }, [lockHidden])
+
+  // Locking is automatic: after ten minutes, after a minute away, and always on leaving the tab.
+  useEffect(() => {
+    if (!pin) return
+    const t = setTimeout(lock, RELOCK_AFTER)
+    let away = 0
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') away = Date.now()
+      else if (away && Date.now() - away > RELOCK_WHEN_AWAY) lock()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { clearTimeout(t); document.removeEventListener('visibilitychange', onVisibility) }
+  }, [pin, lock])
+  useEffect(() => () => lockHidden(), [lockHidden])
 
   const list = useMemo(() => letters ?? [], [letters])
+  const hiddenList = useMemo(() => hidden.data ?? [], [hidden.data])
   // Coming back opens the latest letter — the reading plan is what people return for.
-  const current = useMemo(() => list.find((g) => g.id === selected) ?? list[0] ?? null, [list, selected])
+  const current = useMemo(
+    () => list.find((g) => g.id === selected) ?? hiddenList.find((g) => g.id === selected) ?? (fresh && fresh.id === selected ? fresh : null) ?? list[0] ?? null,
+    [list, hiddenList, fresh, selected],
+  )
+  useEffect(() => { currentHidden.current = Boolean(current?.hidden) }, [current])
   // The composer shows when there is nothing to read yet, or when asked for; otherwise the letter does.
   const composing = writing || (!current && !busy)
+  const hasPin = pinStatus?.has_pin ?? false
+  const hiddenCount = pinStatus?.hidden_count ?? 0
 
-  const ask = async (context: string, translation: Translation) => {
+  const ask = async (context: string, translation: Translation, keepHidden: boolean) => {
     setBusy(true)
     try {
-      const g = await askTheWord(context, translation)
+      const g = await askTheWord(context, translation, keepHidden)
+      setFresh(g)
       setSelected(g.id)
       setWriting(false)
     } catch { /* toasted by useActions */ } finally { setBusy(false) }
+  }
+
+  /** Runs `then` with a PIN in hand — straight away if there is one, otherwise after setting one. */
+  const withPin = (then: (pin: string) => void) => {
+    if (hasPin) then(pin ?? '')
+    else { setAfterPin(() => then); setSheet('set-pin') }
+  }
+
+  const hide = (g: Guidance) => withPin(async () => {
+    try {
+      await hideGuidance(g)
+      if (current?.id === g.id) setSelected(null)
+      toast({ title: 'Hidden', description: pin ? 'It has moved to your hidden letters.' : 'It is behind your PIN now — unlock to see it.', tone: 'neutral' })
+    } catch { /* toasted */ }
+  })
+
+  const unlock = async () => {
+    if (userId && biometricEnrolled(userId)) {
+      const got = await unlockWithBiometric(userId)
+      if (got) { setPinInHand(got); return }
+    }
+    setSheet('unlock')
   }
 
   return (
@@ -70,14 +138,17 @@ export function WordPanel() {
         {busy ? (
           <Waiting />
         ) : composing ? (
-          <Composer onAsk={ask} onCancel={current ? () => setWriting(false) : undefined} />
+          <Composer onAsk={ask} onCancel={current ? () => setWriting(false) : undefined} hasPin={hasPin} onNeedPin={() => { setAfterPin(null); setSheet('set-pin') }} />
         ) : current ? (
           <>
             <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-sm text-ink-2">{current.id === list[0]?.id ? 'Your latest letter' : `A letter from ${fmtDate(current.created_at, 'd MMMM')}`}</p>
+              <p className="flex items-center gap-2 text-sm text-ink-2">
+                {current.hidden && <Pill tone="plum" size="sm"><EyeOff className="size-3" /> Hidden</Pill>}
+                {current.id === list[0]?.id ? 'Your latest letter' : `A letter from ${fmtDate(current.created_at, 'd MMMM')}`}
+              </p>
               <Button variant="secondary" size="sm" leading={<PenLine className="size-4" />} onClick={() => setWriting(true)}>Write again</Button>
             </div>
-            <Letter key={current.id} letter={current} firstName={firstNameOf(me?.display_name)} partnerName={partner?.display_name} onDeleted={() => setSelected(null)} />
+            <Letter key={current.id} letter={current} pin={pin} firstName={firstNameOf(me?.display_name)} partnerName={partner?.display_name} onDeleted={() => setSelected(null)} onHide={() => hide(current)} onUnhidden={(g) => setSelected(g.id)} />
           </>
         ) : null}
       </div>
@@ -89,26 +160,65 @@ export function WordPanel() {
         ) : list.length === 0 ? (
           <EmptyState compact icon={<BookOpen />} title="Nothing yet" description="The letters written for you are kept here, and nowhere else." />
         ) : (
-          <div className="max-h-[60vh] divide-y divide-line overflow-y-auto">
-            {list.map((g) => {
-              const active = g.id === current?.id && !composing
-              const done = Object.keys(g.plan_done ?? {}).length
-              return (
-                <button key={g.id} type="button" onClick={() => { setSelected(g.id); setWriting(false) }} className={cn('block w-full px-4 py-3 text-left transition-colors hover:bg-surface-2', active && 'bg-surface-2')}>
-                  <p className={cn('truncate text-[15px]', active ? 'font-medium text-ink' : 'text-ink')}>{g.theme || 'A letter'}</p>
-                  <p className="mt-0.5 text-xs text-ink-3">
-                    {fmtDate(g.created_at, 'EEE d MMM')}
-                    {g.response.plan.length > 0 && ` · ${done}/${g.response.plan.length} readings`}
-                  </p>
-                </button>
-              )
-            })}
+          <div className="max-h-[50vh] divide-y divide-line overflow-y-auto">
+            {list.map((g) => <HistoryRow key={g.id} letter={g} active={g.id === current?.id && !composing} onOpen={() => { setSelected(g.id); setWriting(false) }} />)}
           </div>
         )}
+
+        {/* Hidden letters: a closed door with a count on it, or the open list with a way to shut it. */}
+        {pin ? (
+          <div className="border-t border-line">
+            <div className="flex items-center gap-2 px-4 py-2.5">
+              <LockOpen className="size-3.5 text-plum-text" aria-hidden />
+              <p className="flex-1 text-[12px] font-semibold uppercase tracking-wider text-plum-text">Hidden{hiddenList.length ? ` · ${hiddenList.length}` : ''}</p>
+              <HiddenMenu userId={userId} onChangePin={() => setSheet('change-pin')} pinInHand={pin} onForgot={lock} />
+              <Button variant="ghost" size="sm" leading={<Lock className="size-4" />} onClick={lock} aria-label="Lock hidden letters">Lock</Button>
+            </div>
+            {hidden.isPending ? (
+              <div className="space-y-2 px-4 pb-4"><div className="skeleton h-5 w-2/3 rounded-lg" /></div>
+            ) : hidden.isError ? (
+              <div className="px-4 pb-4">
+                <p className="text-[13px] text-danger">{hidden.error instanceof Error ? hidden.error.message : 'The PIN was refused.'}</p>
+                <Button variant="secondary" size="sm" className="mt-2" onClick={() => { lock(); setSheet('unlock') }}>Type the PIN</Button>
+              </div>
+            ) : hiddenList.length === 0 ? (
+              <p className="px-4 pb-4 text-[13px] text-ink-3">Nothing hidden. “Hide” on a letter puts it here.</p>
+            ) : (
+              <div className="max-h-[40vh] divide-y divide-line overflow-y-auto border-t border-line">
+                {hiddenList.map((g) => <HistoryRow key={g.id} letter={g} active={g.id === current?.id && !composing} onOpen={() => { setSelected(g.id); setWriting(false) }} />)}
+              </div>
+            )}
+          </div>
+        ) : hasPin || hiddenCount > 0 ? (
+          <button type="button" onClick={() => void unlock()} className="flex w-full items-center gap-2.5 border-t border-line px-4 py-3 text-left transition-colors hover:bg-surface-2" aria-label="Unlock hidden letters">
+            <Lock className="size-4 text-ink-3" aria-hidden />
+            <span className="flex-1 text-[14px] text-ink">{hiddenCount === 0 ? 'Nothing hidden yet' : `${hiddenCount} hidden`}</span>
+            <span className="text-[13px] font-medium text-primary-text">Unlock</span>
+          </button>
+        ) : null}
+
         <p className="border-t border-line px-4 py-3 text-[13px] leading-relaxed text-ink-3">
           These are yours alone — {partner ? `${partner.display_name} can’t see them` : 'nobody else in the house can see them'}, and you can delete any of them.
+          {!hasPin && ' “Hide” on a letter puts it behind a PIN as well, for when someone is looking at your screen.'}
         </p>
       </aside>
+
+      <PinSheet
+        open={sheet === 'set-pin' || sheet === 'change-pin'}
+        change={sheet === 'change-pin'}
+        onClose={() => { setSheet('none'); setAfterPin(null) }}
+        onSet={(newPin) => {
+          setSheet('none')
+          // Changing the PIN while unlocked keeps the new one in hand; setting one for the first time
+          // leaves things locked — what gets hidden now is meant to be out of sight.
+          if (pin) setPinInHand(newPin)
+          if (userId) updateBiometricPin(userId, newPin)
+          const then = afterPin
+          setAfterPin(null)
+          then?.(newPin)
+        }}
+      />
+      <UnlockSheet open={sheet === 'unlock'} onClose={() => setSheet('none')} onUnlocked={(p) => { setSheet('none'); setPinInHand(p); if (userId) updateBiometricPin(userId, p) }} lockedUntil={pinStatus?.locked_until ?? null} />
     </div>
   )
 }
@@ -117,11 +227,187 @@ function firstNameOf(name: string | null | undefined): string {
   return (name ?? '').trim().split(/\s+/)[0] ?? ''
 }
 
+function HistoryRow({ letter: g, active, onOpen }: { letter: Guidance; active: boolean; onOpen: () => void }) {
+  const done = Object.keys(g.plan_done ?? {}).length
+  return (
+    <button type="button" onClick={onOpen} className={cn('block w-full px-4 py-3 text-left transition-colors hover:bg-surface-2', active && 'bg-surface-2')}>
+      <p className={cn('flex items-center gap-1.5 truncate text-[15px] text-ink', active && 'font-medium')}>
+        {g.hidden && <EyeOff className="size-3.5 shrink-0 text-plum-text" aria-label="Hidden" />}
+        <span className="truncate">{g.theme || 'A letter'}</span>
+      </p>
+      <p className="mt-0.5 text-xs text-ink-3">
+        {fmtDate(g.created_at, 'EEE d MMM')}
+        {g.response.plan.length > 0 && ` · ${done}/${g.response.plan.length} readings`}
+      </p>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The PIN and the door
+// ---------------------------------------------------------------------------
+function HiddenMenu({ userId, pinInHand, onChangePin, onForgot }: { userId: string | null; pinInHand: string; onChangePin: () => void; onForgot: () => void }) {
+  const { forgetPin } = useActions()
+  const { me } = useAuth()
+  const confirm = useConfirm()
+  const toast = useUi((s) => s.toast)
+  const [bio, setBio] = useState<{ supported: boolean; enrolled: boolean }>({ supported: false, enrolled: false })
+  useEffect(() => {
+    let alive = true
+    void biometricSupported().then((supported) => { if (alive) setBio({ supported, enrolled: userId ? biometricEnrolled(userId) : false }) })
+    return () => { alive = false }
+  }, [userId])
+
+  const toggleBio = async () => {
+    if (!userId) return
+    if (bio.enrolled) {
+      forgetBiometric(userId)
+      setBio((b) => ({ ...b, enrolled: false }))
+      toast({ title: `${biometricName()} switched off here`, description: 'The PIN still works.', tone: 'neutral' })
+      return
+    }
+    try {
+      await enrolBiometric(userId, me?.display_name ?? '', pinInHand)
+      setBio((b) => ({ ...b, enrolled: true }))
+      toast({ title: `${biometricName()} switched on`, description: 'On this device it will unlock your hidden letters instead of the PIN.', tone: 'success' })
+    } catch {
+      toast({ title: 'Not set up', description: `The device didn’t finish the ${biometricName()} prompt. Nothing changed.`, tone: 'neutral' })
+    }
+  }
+
+  const forget = async () => {
+    const ok = await confirm({ title: 'Forget the PIN?', description: 'There is no way back to a hidden letter without it, so every hidden letter is deleted along with the PIN. Bring back the ones you want to keep first.', confirmLabel: 'Forget PIN and delete', danger: true })
+    if (!ok) return
+    if (userId) forgetBiometric(userId)
+    await forgetPin()
+    onForgot()
+  }
+
+  return (
+    <Menu trigger={<button type="button" className="grid size-8 place-items-center rounded-full text-ink-3 hover:bg-surface-2 hover:text-ink" aria-label="Hidden letters settings"><MoreHorizontal className="size-4" /></button>}>
+      <MenuLabel>Hidden letters</MenuLabel>
+      <MenuItem icon={<KeyRound />} onSelect={onChangePin}>Change PIN</MenuItem>
+      {bio.supported && <MenuItem icon={<Fingerprint />} onSelect={() => void toggleBio()}>{bio.enrolled ? `Stop using ${biometricName()} here` : `Use ${biometricName()} on this device`}</MenuItem>}
+      <MenuSeparator />
+      <MenuItem danger icon={<Trash2 />} onSelect={() => void forget()}>Forget PIN (deletes hidden letters)</MenuItem>
+    </Menu>
+  )
+}
+
+const PIN_HINT = 'Four to eight digits. The database checks it, so hidden letters really are out of reach without it — and there is no reset: forgetting it deletes them.'
+
+function PinSheet({ open, change, onClose, onSet }: { open: boolean; change: boolean; onClose: () => void; onSet: (pin: string) => void }) {
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }} title={change ? 'Change your PIN' : 'Set a PIN for hidden letters'} description={PIN_HINT} size="sm" centered>
+      {/* The form lives inside the sheet, so closing it is what clears the fields. */}
+      <PinForm change={change} onClose={onClose} onSet={onSet} />
+    </Sheet>
+  )
+}
+
+function PinForm({ change, onClose, onSet }: { change: boolean; onClose: () => void; onSet: (pin: string) => void }) {
+  const { setPin } = useActions()
+  const [old, setOld] = useState('')
+  const [a, setA] = useState('')
+  const [b, setB] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const valid = /^[0-9]{4,8}$/.test(a)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!valid) { setError('A PIN is 4 to 8 digits.'); return }
+    if (a !== b) { setError('The two PINs don’t match.'); return }
+    setBusy(true); setError(null)
+    try {
+      await setPin(a, change ? old : undefined)
+      onSet(a)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not set the PIN.')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3 pt-2" data-testid="pin-form">
+      {change && <PinInput label="Current PIN" value={old} onChange={setOld} autoFocus />}
+      <PinInput label={change ? 'New PIN' : 'PIN'} value={a} onChange={setA} autoFocus={!change} />
+      <PinInput label="Again, to be sure" value={b} onChange={setB} />
+      {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button type="submit" loading={busy} disabled={!valid || b.length === 0 || (change && old.length < 4)}>{change ? 'Change PIN' : 'Set PIN'}</Button>
+      </div>
+    </form>
+  )
+}
+
+function PinInput({ label, value, onChange, autoFocus }: { label: string; value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
+  return (
+    <label className="block">
+      <span className="text-[13px] font-medium text-ink-2">{label}</span>
+      <Input type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="off" maxLength={8} value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))} className="mt-1.5 tabular tracking-[0.3em]" aria-label={label} autoFocus={autoFocus} />
+    </label>
+  )
+}
+
+function UnlockSheet({ open, onClose, onUnlocked, lockedUntil }: { open: boolean; onClose: () => void; onUnlocked: (pin: string) => void; lockedUntil: string | null }) {
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }} title="Hidden letters" description="Type your PIN to open them for a few minutes." size="sm" centered>
+      <UnlockForm onClose={onClose} onUnlocked={onUnlocked} lockedUntil={lockedUntil} />
+    </Sheet>
+  )
+}
+
+function UnlockForm({ onClose, onUnlocked, lockedUntil }: { onClose: () => void; onUnlocked: (pin: string) => void; lockedUntil: string | null }) {
+  const { db } = useDb()
+  const { userId } = useAuth()
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState<string | null>(() => (lockedUntil && new Date(lockedUntil) > new Date() ? new PinRefused('pin_locked', null, lockedUntil).message : null))
+  const [busy, setBusy] = useState(false)
+  const enrolled = userId ? biometricEnrolled(userId) : false
+
+  // The PIN is tried against the database by fetching the hidden letters; the panel's query does the
+  // same fetch again a moment later from its own cache key, which is cheap and keeps one source of truth.
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (pin.length < 4) return
+    setBusy(true); setError(null)
+    try {
+      await db.listHiddenGuidance(pin)
+      onUnlocked(pin)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That isn’t it.')
+    } finally { setBusy(false) }
+  }
+
+  const tryBiometric = async () => {
+    if (!userId) return
+    const got = await unlockWithBiometric(userId)
+    if (got) onUnlocked(got)
+    else setError(`${biometricName()} didn’t go through — type the PIN instead.`)
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3 pt-2" data-testid="unlock-form">
+      <PinInput label="PIN" value={pin} onChange={setPin} autoFocus />
+      {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        {enrolled ? <Button variant="ghost" size="sm" leading={<Fingerprint className="size-4" />} onClick={() => void tryBiometric()}>Try {biometricName()}</Button> : <span />}
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={busy} disabled={pin.length < 4} leading={<LockOpen className="size-4" />}>Unlock</Button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Writing it down
 // ---------------------------------------------------------------------------
-function Composer({ onAsk, onCancel }: { onAsk: (context: string, translation: Translation) => Promise<void>; onCancel?: () => void }) {
+function Composer({ onAsk, onCancel, hasPin, onNeedPin }: { onAsk: (context: string, translation: Translation, hidden: boolean) => Promise<void>; onCancel?: () => void; hasPin: boolean; onNeedPin: () => void }) {
   const [text, setText] = useState('')
+  const [keepHidden, setKeepHidden] = useState(false)
   const [translation, setTranslation] = useState<Translation>(() => {
     try { return localStorage.getItem(TRANSLATION_KEY) === 'KJV' ? 'KJV' : 'BSB' } catch { return 'BSB' }
   })
@@ -137,10 +423,15 @@ function Composer({ onAsk, onCancel }: { onAsk: (context: string, translation: T
     setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')}\n${line}` : line))
     requestAnimationFrame(() => { box.current?.focus(); const n = box.current?.value.length ?? 0; box.current?.setSelectionRange(n, n) })
   }
+  // Ticking it before there is a PIN asks for one; the tick then takes effect the moment one exists.
+  const toggleHidden = (v: boolean) => {
+    setKeepHidden(v)
+    if (v && !hasPin) onNeedPin()
+  }
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (!ready) return
-    void onAsk(text.trim(), translation)
+    void onAsk(text.trim(), translation, keepHidden && hasPin)
   }
 
   return (
@@ -170,7 +461,14 @@ function Composer({ onAsk, onCancel }: { onAsk: (context: string, translation: T
             <Button type="submit" leading={<Feather className="size-4" />} disabled={!ready} title={ready ? undefined : `A few more words — at least ${MIN_WORDS}`}>Ask for a word</Button>
           </div>
         </div>
-        <p className="mt-3 text-[13px] text-ink-3">Nobody else in the house can read what you write here or the letter that comes back.</p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3">
+          {/* A div, not a button: the Checkbox is a button of its own and buttons don't nest. */}
+          <div onClick={() => toggleHidden(!(keepHidden && hasPin))} className="flex cursor-pointer items-center gap-2.5 text-left text-[13px] text-ink-2">
+            <Checkbox checked={keepHidden && hasPin} onChange={toggleHidden} label="Keep this one hidden" />
+            <span><EyeOff className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />Keep this one hidden{hasPin ? '' : ' (sets up a PIN first)'}</span>
+          </div>
+          <p className="text-[13px] text-ink-3">Nobody else in the house can read what you write here.</p>
+        </div>
       </form>
     </Reveal>
   )
@@ -197,7 +495,7 @@ function Waiting() {
           {STAGES[stage]!.text}
         </motion.p>
       </AnimatePresence>
-      <p className="mt-2 max-w-sm text-sm text-ink-2">Only passages from the Bible itself are used — nothing is quoted from memory.</p>
+      <p className="mt-2 max-w-sm text-sm text-ink-2">Every passage comes from the Bible itself, word for word.</p>
     </div>
   )
 }
@@ -205,19 +503,25 @@ function Waiting() {
 // ---------------------------------------------------------------------------
 // The letter
 // ---------------------------------------------------------------------------
-function Letter({ letter, firstName, partnerName, onDeleted }: { letter: Guidance; firstName: string; partnerName?: string; onDeleted: () => void }) {
-  const { deleteGuidance, tickReading } = useActions()
+function Letter({ letter, pin, firstName, partnerName, onDeleted, onHide, onUnhidden }: { letter: Guidance; pin: string | null; firstName: string; partnerName?: string; onDeleted: () => void; onHide: () => void; onUnhidden: (g: Guidance) => void }) {
+  const { deleteGuidance, tickReading, unhideGuidance } = useActions()
   const confirm = useConfirm()
   const r = letter.response
   const long = TRANSLATIONS.find((t) => t.value === letter.translation)?.long ?? letter.translation
   const thin = !r.understanding && r.response.length === 0
   const [showContext, setShowContext] = useState(letter.context.length <= 240)
+  // A hidden letter can only be worked on with the PIN in hand; without it, it is read-only.
+  const canTouch = !letter.hidden || Boolean(pin)
 
   const remove = async () => {
     const ok = await confirm({ title: 'Delete this letter?', description: 'It goes for good. Nobody else could see it anyway.', confirmLabel: 'Delete', danger: true })
     if (!ok) return
     onDeleted()
-    void deleteGuidance(letter.id)
+    void deleteGuidance(letter, pin ?? undefined)
+  }
+  const unhide = async () => {
+    if (!pin) return
+    try { onUnhidden(await unhideGuidance(letter, pin)) } catch { /* toasted */ }
   }
 
   return (
@@ -279,7 +583,7 @@ function Letter({ letter, firstName, partnerName, onDeleted }: { letter: Guidanc
             <p className="mt-1 text-[14px] text-ink-2">A reading a day for the coming week, chosen for what you wrote. Tap one to read it here; tick it when you have.</p>
             <div className="mt-4 space-y-2">
               {r.plan.map((reading, i) => (
-                <ReadingRow key={`${reading.reference}-${i}`} day={i + 1} reading={reading} translation={letter.translation} done={Boolean(letter.plan_done?.[String(i)])} onTick={(v) => void tickReading(letter.id, i, v)} />
+                <ReadingRow key={`${reading.reference}-${i}`} day={i + 1} reading={reading} translation={letter.translation} done={Boolean(letter.plan_done?.[String(i)])} onTick={canTouch ? (v) => void tickReading(letter, i, v, pin ?? undefined) : undefined} />
               ))}
             </div>
           </section>
@@ -287,10 +591,15 @@ function Letter({ letter, firstName, partnerName, onDeleted }: { letter: Guidanc
 
         <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-5 py-3 text-[12px] leading-relaxed text-ink-3 sm:px-8">
           <span className="max-w-prose">
-            Scripture from the {long}. The letter is written with the help of Gemini around those passages — weigh it as you would any counsel, and take anything heavy to your own pastor.
+            Scripture from the {long}. Weigh the letter as you would any counsel, and take anything heavy to your own pastor.
             {' '}Private to you{partnerName ? ` — ${partnerName} can’t see it` : ''}.
           </span>
-          <Button variant="ghost" size="sm" leading={<Trash2 className="size-4" />} onClick={remove} className="text-ink-3 hover:text-danger">Delete</Button>
+          <span className="flex items-center gap-1">
+            {letter.hidden
+              ? <Button variant="ghost" size="sm" leading={<Eye className="size-4" />} onClick={() => void unhide()} disabled={!canTouch} className="text-ink-3 hover:text-ink">Unhide</Button>
+              : <Button variant="ghost" size="sm" leading={<EyeOff className="size-4" />} onClick={onHide} className="text-ink-3 hover:text-ink">Hide</Button>}
+            <Button variant="ghost" size="sm" leading={<Trash2 className="size-4" />} onClick={remove} disabled={!canTouch} className="text-ink-3 hover:text-danger">Delete</Button>
+          </span>
         </footer>
       </article>
     </Reveal>
@@ -339,13 +648,13 @@ function PassageCard({ passage: p }: { passage: GuidancePassage }) {
 // ---------------------------------------------------------------------------
 // The reading plan
 // ---------------------------------------------------------------------------
-function ReadingRow({ day, reading, translation, done, onTick }: { day: number; reading: PlanReading; translation: Translation; done: boolean; onTick: (v: boolean) => void }) {
+function ReadingRow({ day, reading, translation, done, onTick }: { day: number; reading: PlanReading; translation: Translation; done: boolean; onTick?: (v: boolean) => void }) {
   const [open, setOpen] = useState(false)
   const calm = useCalm()
   return (
     <div className="rounded-2xl border border-line bg-surface">
       <div className="flex items-center gap-3 px-4 py-3">
-        <Checkbox checked={done} onChange={onTick} label={`Day ${day}: ${reading.reference}`} size="lg" />
+        <Checkbox checked={done} onChange={(v) => onTick?.(v)} label={`Day ${day}: ${reading.reference}`} size="lg" className={cn(!onTick && 'opacity-50')} />
         <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="min-w-0 flex-1 text-left">
           <p className="flex flex-wrap items-baseline gap-x-2 text-[15px]">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Day {day}</span>
