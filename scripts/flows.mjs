@@ -696,6 +696,52 @@ await step('meters: prepaid shows a balance, a rate and a runway', async () => {
   await shot('13-meters-electricity')
 })
 
+await step('meters: a pasted payment SMS fills the top-up in', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: /Electricity/ }).click()
+  await page.waitForTimeout(700)
+  await page.getByRole('button', { name: 'Top-up', exact: true }).click()
+  await page.waitForTimeout(600)
+  const sheet = page.locator('[role=dialog]')
+  // A fee month, exactly as the bank sends it.
+  await sheet.getByLabel('Payment SMS').fill(
+    'FNB :-) Prepaid Electricity purchase of R3 000.00 from cheque acc..1234.\n'
+    + 'Meter: 14308043075\nElec Amt: R2 904.54\nService Fee: R95.46\nVat Amt: R391.30\n'
+    + 'Units: 774.1 kWh\nToken: 1234 5678 9012 3456 7890')
+  await page.waitForTimeout(500)
+  const paid = await sheet.getByLabel('Paid').inputValue()
+  if (paid !== '3000') throw new Error(`the service fee was dropped: paid reads ${paid}`)
+  const units = await sheet.getByLabel(/Units received/).inputValue()
+  if (units !== '774.1') throw new Error(`units read ${units}`)
+  const token = await sheet.getByLabel('Token').inputValue()
+  if (token !== '1234 5678 9012 3456 7890') throw new Error(`token read ${token}`)
+  const body = await sheet.innerText()
+  if (!/read from the message/i.test(body)) throw new Error('it never said what it read')
+  if (!/service fee/i.test(body)) throw new Error('the fee was not called out')
+  if (!/3\.8[0-9]/.test(body)) throw new Error('no rand-per-unit off the pasted figures')
+  await shot('13b-topup-sms')
+  await page.getByRole('button', { name: 'Log it' }).click()
+  await page.waitForTimeout(900)
+  const after = await page.locator('main').innerText()
+  if (!/774\.1/.test(after)) throw new Error('the pasted top-up never landed in the list')
+})
+
+await step('meters: a message that is not a top-up is not guessed at', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.getByRole('tab', { name: /Electricity/ }).click()
+  await page.waitForTimeout(700)
+  await page.getByRole('button', { name: 'Top-up', exact: true }).click()
+  await page.waitForTimeout(600)
+  const sheet = page.locator('[role=dialog]')
+  await sheet.getByLabel('Payment SMS').fill('Morning! Running about 20 minutes late, see you at 7.')
+  await page.waitForTimeout(400)
+  const paid = await sheet.getByLabel('Paid').inputValue()
+  if (paid !== '') throw new Error(`it invented an amount: ${paid}`)
+  if (!/nothing in that reads like a top-up/i.test(await sheet.innerText())) throw new Error('it did not say it found nothing')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+})
+
 await step('the evidence pack carries the readings', async () => {
   await page.goto(base + '/house/report/water', { waitUntil: 'networkidle' })
   await page.waitForTimeout(900)

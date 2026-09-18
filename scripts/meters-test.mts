@@ -9,7 +9,7 @@
  */
 import { addDays, format, subDays } from 'date-fns'
 import type { MeterReading, UtilityPurchase } from '../src/data/types'
-import { blendedRate, dialInWords, meterPeriods, parseDial, prepaidOutlook, readingDue, readingLabel, recentPerDay } from '../src/lib/meters'
+import { blendedRate, dialInWords, meterPeriods, parseDial, parseTopUpSms, prepaidOutlook, readingDue, readingLabel, recentPerDay } from '../src/lib/meters'
 
 let failed = 0
 function eq(got: unknown, want: unknown, label: string) {
@@ -194,6 +194,108 @@ eq(prepaidOutlook([], [], 'electricity', NOW), null, 'forecast: no readings, no 
   eq(parseDial('958205', 3)!.value, 958.205, 'dial: three red wheels')
   eq(parseDial('1012000', 3)!.value, 1012, 'dial: red wheels all at zero')
   eq(readingLabel(1012, 'water', 3), '1,012.000 kl', 'dial: trailing zeros are shown, not trimmed')
+}
+
+// --- reading the payment SMS ------------------------------------------------
+{
+  // The shape that started this: a fee month. R2 904.54 of electricity plus the
+  // R95.46 service fee is the R3 000 that left the bank — and pricing 774.1 kWh
+  // at R2 904.54 would make a fee month look like the cheapest of the year.
+  const sms = [
+    'FNB :-) Prepaid Electricity purchase of R3 000.00 from cheque acc..1234 on 03/09/2026.',
+    'Meter: 14308043075',
+    'Elec Amt: R2 904.54',
+    'Service Fee: R95.46',
+    'Vat Amt: R391.30',
+    'Units: 774.1 kWh',
+    'Token: 1234 5678 9012 3456 7890',
+  ].join('\n')
+  const r = parseTopUpSms(sms, NOW)!
+  eq(r.amount, 3000, 'sms: electricity plus the service fee is what was paid')
+  eq(r.elec, 2904.54, 'sms: the electricity portion on its own')
+  eq(r.serviceFee, 95.46, 'sms: the service fee')
+  eq(r.vat, 391.3, 'sms: VAT, which is already inside the total')
+  eq(r.stated, 3000, 'sms: the total the message states itself')
+  eq(r.units, 774.1, 'sms: units')
+  eq(r.token, '1234 5678 9012 3456 7890', 'sms: the token, regrouped in fours')
+  eq(r.meter, '14308043075', 'sms: the meter number')
+  eq(r.boughtOn, '2026-09-03', 'sms: the date, read the South African way round')
+  eq(r.found, 4, 'sms: all four fields that matter')
+}
+
+{
+  // Adding the two halves in floating point gives 2999.9999999999995, which
+  // would be stored, charted and printed on a dispute document as R2 999.9999…
+  const r = parseTopUpSms('Elec Amt R2904.54 Service Fee R95.46', NOW)!
+  eq(r.amount, 3000, 'sms: the two halves add to a round rand, not to 2999.9999…')
+}
+
+{
+  // The small purchase from the same corpus: the fee is a fifth of it.
+  const r = parseTopUpSms('Elec Amt: R404.54 Service Fee: R95.46 Units: 96.4kWh Token 0987-6543-2109-8765-4321 Meter 14308043075', NOW)!
+  eq(r.amount, 500, 'sms: a small top-up in a fee month')
+  eq(r.units, 96.4, 'sms: units written against kWh with no space')
+  eq(r.token, '0987 6543 2109 8765 4321', 'sms: a hyphen-grouped token is regrouped')
+  near(r.amount! / r.units!, 5.19, 'sms: which prices at R5.19 a unit, not R4.20', 0.01)
+}
+
+{
+  // A month with no service fee at all.
+  const r = parseTopUpSms('Elec Amt: R500.00 Units: 128.9 kWh Token: 11112222333344445555', NOW)!
+  eq(r.amount, 500, 'sms: no fee, so the electricity amount is the whole of it')
+  eq(r.serviceFee, null, 'sms: no fee to report')
+  eq(r.token, '1111 2222 3333 4444 5555', 'sms: an ungrouped twenty-digit token')
+  eq(r.meter, '', 'sms: no meter named')
+  eq(r.found, 3, 'sms: three of the four')
+}
+
+{
+  // Only a total, no breakdown — still worth filling the form in.
+  const r = parseTopUpSms('Prepaid electricity purchase of R250.00 successful. 64.2 kWh. Token 1111 2222 3333 4444 5555', NOW)!
+  eq(r.amount, 250, 'sms: a stated total stands in when there is no breakdown')
+  eq(r.units, 64.2, 'sms: kWh found without a Units label')
+}
+
+{
+  // What the bank's formatting throws at it.
+  eq(parseTopUpSms('Elec Amt R95,46', NOW)!.amount, 95.46, 'sms: a decimal comma')
+  eq(parseTopUpSms('Elec Amt R2,904.54', NOW)!.amount, 2904.54, 'sms: a thousands comma')
+  eq(parseTopUpSms('Elec Amt: R404.54.', NOW)!.amount, 404.54, 'sms: a full stop ending the sentence')
+  eq(parseTopUpSms('ELEC AMT R404.54 UNITS 96.4 KWH', NOW)!.units, 96.4, 'sms: shouted')
+  eq(parseTopUpSms('elec amt r404.54', NOW)!.amount, 404.54, 'sms: whispered')
+}
+
+{
+  // Nothing electrical about it.
+  eq(parseTopUpSms('Morning! Are we still on for 7? Running about 20 minutes late.', NOW), null, 'sms: an ordinary message is not a top-up')
+  eq(parseTopUpSms('', NOW), null, 'sms: nothing pasted')
+  eq(parseTopUpSms('   \n  ', NOW), null, 'sms: whitespace')
+  // "minutes" contains "unit", and an unanchored label would have read 20 kWh off it.
+  eq(parseTopUpSms('Token 1111 2222 3333 4444 5555 in 20 minutes', NOW)!.units, null, 'sms: "minutes" is not a units label')
+}
+
+{
+  // A token grouped with hyphens must never be read as a date.
+  const r = parseTopUpSms('Token: 1234-5678-9012-3456-7890 Elec Amt R100.00', NOW)!
+  eq(r.boughtOn, null, 'sms: no date in the message, so none is invented')
+  eq(r.token, '1234 5678 9012 3456 7890', 'sms: the token survives')
+}
+
+{
+  // Dates in the ways a bank writes them.
+  eq(parseTopUpSms('Elec Amt R100.00 on 03/09/2026', NOW)!.boughtOn, '2026-09-03', 'sms: dd/mm/yyyy')
+  eq(parseTopUpSms('Elec Amt R100.00 on 2026-09-03', NOW)!.boughtOn, '2026-09-03', 'sms: an ISO date')
+  eq(parseTopUpSms('Elec Amt R100.00 on 3 Sep', NOW)!.boughtOn, '2026-09-03', 'sms: a bare day and month take this year')
+  eq(parseTopUpSms('Elec Amt R100.00 on Sep 3 2026', NOW)!.boughtOn, '2026-09-03', 'sms: month first')
+  eq(parseTopUpSms('Elec Amt R100.00 on 03/09/2031', NOW)!.boughtOn, null, 'sms: a date in the future is not a purchase date')
+  eq(parseTopUpSms('Elec Amt R100.00 on 45/09/2026', NOW)!.boughtOn, null, 'sms: the forty-fifth of September is a reference number')
+}
+
+{
+  // The meter in the message is what makes a mismatch catchable.
+  eq(parseTopUpSms('Meter no. 14308043075 Elec Amt R100.00', NOW)!.meter, '14308043075', 'sms: "Meter no."')
+  eq(parseTopUpSms('Meter#14308043075 Elec Amt R100.00', NOW)!.meter, '14308043075', 'sms: "Meter#"')
+  eq(parseTopUpSms('Meter 1430 8043 075 Elec Amt R100.00', NOW)!.meter, '14308043075', 'sms: a meter written in groups')
 }
 
 console.log(failed ? `\n${failed} failed` : '\nAll good.')

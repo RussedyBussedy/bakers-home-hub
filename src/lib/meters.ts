@@ -280,3 +280,146 @@ export function usedLabel(used: number, utility: Utility): string {
   const n = used >= 100 ? Math.round(used) : Math.round(used * 10) / 10
   return `${n.toLocaleString()} ${unit}`
 }
+
+// ---------------------------------------------------------------------------
+// Reading the bank's SMS
+// ---------------------------------------------------------------------------
+
+/** What a prepaid-electricity payment message turned out to say. */
+export interface TopUpSms {
+  /** What actually left the bank: the electricity amount plus the service fee. */
+  amount: number | null
+  /** Units bought, in kWh. */
+  units: number | null
+  /** The 20-digit credit token, regrouped in fours. */
+  token: string
+  /** The meter the token was issued against. */
+  meter: string
+  /** The electricity portion on its own. */
+  elec: number | null
+  /** The monthly service fee, when the message shows one. */
+  serviceFee: number | null
+  /** VAT — already inside the amount, shown but never added to it. */
+  vat: number | null
+  /** A total the message stated itself, if it stated one. */
+  stated: number | null
+  /** The date the message names, as yyyy-mm-dd, if it names one. */
+  boughtOn: string | null
+  /** How many of the four fields that matter came back. */
+  found: number
+}
+
+/** A number as a bank writes it: 2 904.54, 2,904.54, 95,46. */
+const SMS_NUM = String.raw`\d[\d\s ,]*(?:\.\d+)?`
+
+function smsNumber(raw: string | undefined | null): number | null {
+  if (!raw) return null
+  let s = String(raw).replace(/[\s ]/g, '')
+  // A comma is a thousands separator here unless it is plainly the decimal one.
+  if (s.includes('.')) s = s.replace(/,/g, '')
+  else if (/,\d{1,2}$/.test(s)) s = s.replace(/,(?=\d{1,2}$)/, '.')
+  else s = s.replace(/,/g, '')
+  const n = Number(s)
+  return isFinite(n) ? n : null
+}
+
+/** The number that follows a label, wherever in the message the label sits. */
+function smsField(text: string, label: string): number | null {
+  // Up to a dozen non-digits of "…: R" between the label and its number, so
+  // "Elec Amt: R404.54", "Service Fee - R95.46" and "Vat Amt R65.22" all read.
+  return smsNumber(new RegExp(`${label}[^\\d]{0,12}(${SMS_NUM})`, 'i').exec(text)?.[1])
+}
+
+const SMS_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+/**
+ * A date the message names, but only one that could plausibly be a purchase:
+ * within the last three years and not in the future. South African order, so
+ * 09/12 is the ninth of December.
+ */
+function smsDate(text: string, now: Date): string | null {
+  const make = (y: number, m: number, d: number): string | null => {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null
+    const year = y < 100 ? 2000 + y : y
+    const dt = new Date(Date.UTC(year, m - 1, d))
+    if (dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null
+    const ahead = differenceInCalendarDays(dt, now)
+    if (ahead > 1 || ahead < -1095) return null
+    return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  let m = /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/.exec(text)
+  if (m) { const v = make(+m[1]!, +m[2]!, +m[3]!); if (v) return v }
+
+  m = /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/.exec(text)
+  if (m) { const v = make(+m[3]!, +m[2]!, +m[1]!); if (v) return v }
+
+  const mon = `(${SMS_MONTHS.join('|')})[a-z]*\\.?`
+  m = new RegExp(`\\b(\\d{1,2})\\s*${mon}\\s*(\\d{2,4})?`, 'i').exec(text)
+  if (m) { const v = make(m[3] ? +m[3] : now.getUTCFullYear(), SMS_MONTHS.indexOf(m[2]!.toLowerCase()) + 1, +m[1]!); if (v) return v }
+
+  m = new RegExp(`\\b${mon}\\s*(\\d{1,2})\\b[,]?\\s*(\\d{4})?`, 'i').exec(text)
+  if (m) { const v = make(m[3] ? +m[3] : now.getUTCFullYear(), SMS_MONTHS.indexOf(m[1]!.toLowerCase()) + 1, +m[2]!); if (v) return v }
+
+  return null
+}
+
+/**
+ * Reads a prepaid-electricity payment SMS.
+ *
+ * The message is the only honest record of a top-up — it carries the token, the
+ * units and, crucially, the split between the electricity and the monthly
+ * service fee. That split matters: on a fee month "Elec Amt" is not what left
+ * the bank. R2 904.54 of electricity plus a R95.46 fee is a R3 000 payment, and
+ * pricing the units at R2 904.54 would quietly flatter the rand-per-unit of
+ * every fee month. VAT is already inside that total and is never added to it.
+ *
+ * Nothing here assumes a layout: every field is found by its own label, in any
+ * order, so a change of wording loses one field rather than the whole message.
+ */
+export function parseTopUpSms(text: string, now = new Date()): TopUpSms | null {
+  const body = String(text ?? '')
+  if (!body.trim()) return null
+
+  const elec = smsField(body, String.raw`\bElec(?:tricity)?\s*(?:Amt|Amount)\b`)
+  const serviceFee = smsField(body, String.raw`\b(?:Service|Svc|Monthly)\s*(?:Fee|Charge)\b`)
+  const vat = smsField(body, String.raw`\b(?:Vat|V\.A\.T\.?)\s*(?:Amt|Amount)?\b`)
+
+  const stated =
+    smsField(body, String.raw`\b(?:Amount\s*Paid|Amt\s*Paid|Total(?:\s*Amount)?|You\s*Paid)\b`) ??
+    smsNumber(new RegExp(String.raw`(?:purchase|purchased|bought|payment)\w*\s*(?:of|for)?\s*[:\s]*R\s*(${SMS_NUM})`, 'i').exec(body)?.[1]) ??
+    smsNumber(new RegExp(String.raw`R\s*(${SMS_NUM})\s*(?:of\s*)?(?:prepaid|electricity|purchase)`, 'i').exec(body)?.[1])
+
+  // The parts are definitional; a stated total is kept separately so a mismatch
+  // can be shown rather than silently resolved.
+  const amount = elec !== null
+    ? Math.round((elec + (serviceFee ?? 0)) * 100) / 100
+    : stated
+
+  const units =
+    smsNumber(new RegExp(String.raw`(${SMS_NUM})\s*k\.?\s*w\.?\s*h`, 'i').exec(body)?.[1]) ??
+    smsField(body, String.raw`\bUnits?\b`)
+
+  // An STS token is always twenty digits, however the message groups them.
+  const tokenHit =
+    /(?:token|credit)\b[^\d]{0,16}((?:\d[\s-]?){20})(?!\d)/i.exec(body) ??
+    /\b((?:\d{4}[\s-]){4}\d{4})\b/.exec(body) ??
+    /\b((?:\d{5}[\s-]){3}\d{5})\b/.exec(body) ??
+    /\b(\d{20})\b/.exec(body)
+  const tokenDigits = (tokenHit?.[1] ?? '').replace(/\D/g, '')
+  const token = tokenDigits.length === 20 ? tokenDigits.replace(/(\d{4})(?=\d)/g, '$1 ') : ''
+
+  const meterHit =
+    /meter\s*(?:no\.?|number|nr\.?|#)?[^\d\n]{0,8}(\d{6,20})\b/i.exec(body) ??
+    /meter\s*(?:no\.?|number|nr\.?|#)?[^\d\n]{0,8}(\d[\d\s-]{4,22})/i.exec(body)
+  const meter = (meterHit?.[1] ?? '').replace(/\D/g, '').slice(0, 20)
+
+  // Hunt the date in what is left once the token is out of the way, so a
+  // hyphen-grouped token can never be read as the ninth of December.
+  const boughtOn = smsDate(tokenHit ? body.replace(tokenHit[1]!, ' ') : body, now)
+
+  const found = [amount !== null, units !== null, !!token, !!meter].filter(Boolean).length
+  if (!found) return null
+
+  return { amount, units, token, meter, elec, serviceFee, vat, stated, boughtOn, found }
+}
