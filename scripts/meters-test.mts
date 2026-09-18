@@ -9,7 +9,7 @@
  */
 import { addDays, format, subDays } from 'date-fns'
 import type { MeterReading, UtilityPurchase } from '../src/data/types'
-import { blendedRate, dialInWords, meterPeriods, parseDial, parseTopUpSms, prepaidOutlook, readingDue, readingLabel, recentPerDay } from '../src/lib/meters'
+import { blendedRate, clockTime, dialInWords, meterPeriods, parseDial, parseTopUpSms, prepaidOutlook, readingDue, readingLabel, recentPerDay, roundDays } from '../src/lib/meters'
 
 let failed = 0
 function eq(got: unknown, want: unknown, label: string) {
@@ -28,15 +28,15 @@ const day = (before: number) => format(subDays(NOW, before), 'yyyy-MM-dd')
 
 let seq = 0
 const water = (reading: number, daysAgo: number): MeterReading => ({
-  id: `w${++seq}`, household_id: 'h', utility: 'water', reading, read_on: day(daysAgo),
+  id: `w${++seq}`, household_id: 'h', utility: 'water', reading, read_on: day(daysAgo), read_time: null,
   photo_path: null, source: 'self', notes: '', created_by: 'u', created_at: `${day(daysAgo)}T08:00:00Z`,
 })
 const elec = (reading: number, daysAgo: number): MeterReading => ({
-  id: `e${++seq}`, household_id: 'h', utility: 'electricity', reading, read_on: day(daysAgo),
+  id: `e${++seq}`, household_id: 'h', utility: 'electricity', reading, read_on: day(daysAgo), read_time: null,
   photo_path: null, source: 'self', notes: '', created_by: 'u', created_at: `${day(daysAgo)}T18:00:00Z`,
 })
 const buy = (amount: number, units: number, daysAgo: number): UtilityPurchase => ({
-  id: `p${++seq}`, household_id: 'h', utility: 'electricity', bought_on: day(daysAgo), amount, units,
+  id: `p${++seq}`, household_id: 'h', utility: 'electricity', bought_on: day(daysAgo), bought_time: null, amount, units,
   token: '', notes: '', receipt_path: null, created_by: 'u', created_at: `${day(daysAgo)}T18:00:00Z`,
 })
 
@@ -296,6 +296,102 @@ eq(prepaidOutlook([], [], 'electricity', NOW), null, 'forecast: no readings, no 
   eq(parseTopUpSms('Meter no. 14308043075 Elec Amt R100.00', NOW)!.meter, '14308043075', 'sms: "Meter no."')
   eq(parseTopUpSms('Meter#14308043075 Elec Amt R100.00', NOW)!.meter, '14308043075', 'sms: "Meter#"')
   eq(parseTopUpSms('Meter 1430 8043 075 Elec Amt R100.00', NOW)!.meter, '14308043075', 'sms: a meter written in groups')
+}
+
+// --- the clock, where the calendar can't tell two events apart ---------------
+{
+  // The case that asked for this. 600 kWh on the meter at seven in the morning,
+  // a R3 000 token loaded at six that evening, 700 kWh ten days later.
+  // Used = 600 + 200 − 700 = 100. Read the dates alone and the token looks as
+  // though it were already in the morning's reading, and the period reads −100.
+  const morning = { ...elec(600, 20), read_time: '07:00' }
+  const later = { ...elec(700, 10), read_time: '18:30' }
+  const evening = { ...buy(700, 200, 20), bought_time: '18:00' }
+  const p = meterPeriods([morning, later], [evening], 'electricity')[0]!
+  near(p.toppedUp, 200, 'clock: a token loaded after the morning reading counts in the period')
+  near(p.used, 100, 'clock: so the period is consumption, not a negative number')
+  eq(p.suspect, false, 'clock: and nothing is flagged')
+}
+
+{
+  // The other way round: read the dial at seven in the evening, having loaded
+  // the token at six. Those units are already on the meter, so counting them
+  // again would double the period.
+  const before = { ...buy(700, 200, 20), bought_time: '18:00' }
+  const after = { ...elec(800, 20), read_time: '19:00' }
+  const next = { ...elec(700, 10), read_time: '19:00' }
+  const p = meterPeriods([after, next], [before], 'electricity')[0]!
+  near(p.toppedUp, 0, 'clock: a token already in the opening reading is not counted again')
+  near(p.used, 100, 'clock: leaving the honest hundred')
+}
+
+{
+  // Old records carry no clock, and must behave exactly as they did before it
+  // existed: a token bought on the day of a reading is taken to be in it.
+  const rs = [elec(600, 20), elec(500, 10)]
+  near(meterPeriods(rs, [buy(700, 200, 20)], 'electricity')[0]!.used, 100, 'clock: without times, the old same-day rule still holds')
+  near(meterPeriods(rs, [buy(700, 200, 10)], 'electricity')[0]!.used, 300, 'clock: and a token on the closing day still counts')
+}
+
+{
+  // A clock on one end only is not enough to measure a gap by, so the calendar
+  // still decides — no half-days conjured out of one known time.
+  const rs = [{ ...water(900, 20), read_time: '06:00' }, water(910, 10)]
+  eq(meterPeriods(rs, [], 'water')[0]!.days, 10, 'clock: one time known, calendar days stand')
+}
+
+{
+  // Both ends timed: seven in the morning to seven in the evening is half a day,
+  // and 500 L over it is a thousand a day, not five hundred.
+  const rs = [{ ...water(900, 10), read_time: '07:00' }, { ...water(900.5, 10), read_time: '19:00' }]
+  const p = meterPeriods(rs, [], 'water')[0]!
+  near(p.days, 0.5, 'clock: twelve hours is half a day')
+  near(p.perDay, 1000, 'clock: and the daily rate says so')
+  eq(roundDays(p.days), 0.5, 'clock: written as half a day, not 0.4999')
+}
+
+{
+  // Two readings minutes apart are a double-check, not a period. Dividing by
+  // that gap would invent a rate of hundreds of thousands of litres a day.
+  const rs = [{ ...water(900, 10), read_time: '07:00' }, { ...water(900.01, 10), read_time: '07:20' }]
+  eq(meterPeriods(rs, [], 'water').length, 0, 'clock: twenty minutes is not a consumption period')
+}
+
+{
+  // Readings logged out of order on the same day sort by the clock.
+  const rs = [{ ...water(910, 10), read_time: '18:00' }, { ...water(900, 10), read_time: '06:00' }]
+  const p = meterPeriods([...rs, { ...water(920, 5), read_time: '06:00' }], [], 'water')
+  eq(p[0]!.from.reading, 900, 'clock: the morning reading opens the day')
+  eq(p[0]!.to.reading, 910, 'clock: the evening one closes it')
+}
+
+{
+  // The forecast has to see a token bought after the reading, whatever the date.
+  const rs = [{ ...elec(600, 15), read_time: '19:00' }, { ...elec(300, 5), read_time: '08:00' }]
+  const ps = [buy(1200, 300, 20), { ...buy(3000, 774, 5), bought_time: '20:00' }]
+  const o = prepaidOutlook(rs, ps, 'electricity', NOW)!
+  near(o.estimatedNow!, 924, 'clock: a token bought the evening of the morning reading is added back', 40)
+}
+
+{
+  eq(clockTime('7:05'), '07:05', 'clock: a single-digit hour is padded')
+  eq(clockTime('18:30:00'), '18:30', 'clock: seconds are dropped')
+  eq(clockTime(''), null, 'clock: nothing noted')
+  eq(clockTime(null), null, 'clock: null')
+  eq(clockTime('25:00'), null, 'clock: there is no twenty-fifth hour')
+  eq(clockTime('half four'), null, 'clock: words are not a time')
+  eq(roundDays(14.0416666), 14, 'clock: an hour of slop does not become a tenth of a day')
+  eq(roundDays(0.5), 0.5, 'clock: but a half-day stays a half-day')
+}
+
+{
+  // The bank usually stamps the message, and that stamp is the honest moment.
+  const r = parseTopUpSms('FNB :-) Prepaid Electricity R500.00 on 03/09/2026 at 17:42. Elec Amt R404.54 Service Fee R95.46 Units 96.4kWh Token 1111 2222 3333 4444 5555', NOW)!
+  eq(r.boughtOn, '2026-09-03', 'sms: the date')
+  eq(r.boughtAt, '17:42', 'sms: and the clock with it')
+  eq(parseTopUpSms('Elec Amt R404.54 Units 96.4kWh', NOW)!.boughtAt, null, 'sms: no clock in the message')
+  // A token grouped in fours must not be mistaken for a time either.
+  eq(parseTopUpSms('Token: 1234-5678-9012-3456-7890 Elec Amt R100.00', NOW)!.boughtAt, null, 'sms: a token is not a clock')
 }
 
 console.log(failed ? `\n${failed} failed` : '\nAll good.')

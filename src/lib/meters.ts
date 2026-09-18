@@ -23,17 +23,54 @@ export interface MeterPeriod {
   suspect: boolean
 }
 
+/**
+ * A reading with no noted time is taken as the end of its day, and a top-up as
+ * the start of its. That pairing is deliberate: it reproduces, exactly, the
+ * rule everything logged before the clock existed was worked out under — a
+ * token bought on the day of a reading is already in that reading.
+ */
+const READING_FALLBACK = '23:59'
+const PURCHASE_FALLBACK = '00:00'
+const DAY_MS = 86_400_000
+
+/** A clock time as HH:MM, or null if there isn't one. */
+export function clockTime(t: string | null | undefined): string | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? '').trim())
+  if (!m) return null
+  const h = Number(m[1]), min = Number(m[2])
+  if (!(h >= 0 && h < 24 && min >= 0 && min < 60)) return null
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+}
+
+/** A point in time records can be ordered by — sortable as a plain string. */
+export function momentOf(date: string, time: string | null | undefined, fallback: string): string {
+  return `${date}T${clockTime(time) ?? fallback}`
+}
+
+export const readingMoment = (r: MeterReading): string => momentOf(r.read_on, r.read_time, READING_FALLBACK)
+export const purchaseMoment = (p: UtilityPurchase): string => momentOf(p.bought_on, p.bought_time, PURCHASE_FALLBACK)
+
+/** The same moment as an actual date, for measuring the gap between two of them. */
+function momentAt(date: string, time: string | null | undefined, fallback: string): Date | null {
+  const d = toDate(date)
+  if (!d) return null
+  const [h, m] = (clockTime(time) ?? fallback).split(':').map(Number)
+  const out = new Date(d)
+  out.setHours(h ?? 0, m ?? 0, 0, 0)
+  return out
+}
+
 /** Readings for one meter, oldest first. */
 export function readingsFor(readings: MeterReading[], utility: Utility): MeterReading[] {
   return readings
     .filter((r) => r.utility === utility)
-    .sort((a, b) => a.read_on.localeCompare(b.read_on) || a.created_at.localeCompare(b.created_at))
+    .sort((a, b) => readingMoment(a).localeCompare(readingMoment(b)) || a.created_at.localeCompare(b.created_at))
 }
 
 export function purchasesFor(purchases: UtilityPurchase[], utility: Utility): UtilityPurchase[] {
   return purchases
     .filter((p) => p.utility === utility)
-    .sort((a, b) => a.bought_on.localeCompare(b.bought_on) || a.created_at.localeCompare(b.created_at))
+    .sort((a, b) => purchaseMoment(a).localeCompare(purchaseMoment(b)) || a.created_at.localeCompare(b.created_at))
 }
 
 /**
@@ -54,14 +91,25 @@ export function meterPeriods(readings: MeterReading[], purchases: UtilityPurchas
   for (let i = 1; i < rs.length; i++) {
     const from = rs[i - 1]!
     const to = rs[i]!
-    const a = toDate(from.read_on)
-    const b = toDate(to.read_on)
+    const a = momentAt(from.read_on, from.read_time, READING_FALLBACK)
+    const b = momentAt(to.read_on, to.read_time, READING_FALLBACK)
     if (!a || !b) continue
-    const days = differenceInCalendarDays(b, a)
-    if (days <= 0) continue
 
+    // With a clock on both ends the gap is measured to the minute: a dial read
+    // at seven in the morning and again at seven in the evening is half a day,
+    // and a rate worked out as if it were a whole one would be half the truth.
+    const timed = !!clockTime(from.read_time) && !!clockTime(to.read_time)
+    const days = timed ? (b.getTime() - a.getTime()) / DAY_MS : differenceInCalendarDays(b, a)
+    // Under six hours is not a consumption period — dividing by it invents a rate.
+    if (!(days >= (timed ? 0.25 : 1))) continue
+
+    // Whether a token counts in this period is a question about order, not about
+    // dates: it belongs here if it went in after the opening reading and at or
+    // before the closing one.
+    const fm = readingMoment(from)
+    const tm = readingMoment(to)
     const toppedUp = meta.direction === 'falling'
-      ? ps.filter((p) => p.bought_on > from.read_on && p.bought_on <= to.read_on).reduce((s, p) => s + Number(p.units || 0), 0)
+      ? ps.filter((p) => { const m = purchaseMoment(p); return m > fm && m <= tm }).reduce((s, p) => s + Number(p.units || 0), 0)
       : 0
 
     const rawUsed = meta.direction === 'rising'
@@ -171,13 +219,16 @@ export function prepaidOutlook(
 ): PrepaidOutlook | null {
   const last = latestReading(readings, utility)
   if (!last) return null
-  const d = toDate(last.read_on)
+  const d = momentAt(last.read_on, last.read_time, READING_FALLBACK)
   if (!d) return null
   const perDay = recentPerDay(meterPeriods(readings, purchases, utility))
   const rate = blendedRate(purchases, utility)
-  const sinceDays = Math.max(0, differenceInCalendarDays(now, d))
+  const sinceDays = Math.max(0, clockTime(last.read_time)
+    ? (now.getTime() - d.getTime()) / DAY_MS
+    : differenceInCalendarDays(now, d))
+  const lm = readingMoment(last)
   const boughtSince = purchasesFor(purchases, utility)
-    .filter((p) => p.bought_on > last.read_on)
+    .filter((p) => purchaseMoment(p) > lm)
     .reduce((s, p) => s + Number(p.units || 0), 0)
 
   const estimatedNow = perDay === null ? null : Math.max(0, Number(last.reading) + boughtSince - perDay * sinceDays)
@@ -274,6 +325,15 @@ export function dialInWords(r: DialReading, utility: Utility): string {
   return `${whole} and ${n.toLocaleString()} ${meta.usageUnit}`
 }
 
+/**
+ * A period length as it should be written: exact enough to be honest about a
+ * half-day gap, but never "14.041666 days" because two readings were taken an
+ * hour apart in the evening.
+ */
+export function roundDays(days: number): number {
+  return Math.round(Number(days) * 10) / 10
+}
+
 /** Litres or kWh, written the way a person would say them. */
 export function usedLabel(used: number, utility: Utility): string {
   const unit = UTILITIES[utility].usageUnit
@@ -305,6 +365,8 @@ export interface TopUpSms {
   stated: number | null
   /** The date the message names, as yyyy-mm-dd, if it names one. */
   boughtOn: string | null
+  /** The clock time the message names, as HH:MM, if it names one. */
+  boughtAt: string | null
   /** How many of the four fields that matter came back. */
   found: number
 }
@@ -414,12 +476,15 @@ export function parseTopUpSms(text: string, now = new Date()): TopUpSms | null {
     /meter\s*(?:no\.?|number|nr\.?|#)?[^\d\n]{0,8}(\d[\d\s-]{4,22})/i.exec(body)
   const meter = (meterHit?.[1] ?? '').replace(/\D/g, '').slice(0, 20)
 
-  // Hunt the date in what is left once the token is out of the way, so a
-  // hyphen-grouped token can never be read as the ninth of December.
-  const boughtOn = smsDate(tokenHit ? body.replace(tokenHit[1]!, ' ') : body, now)
+  // Hunt the date and the clock in what is left once the token is out of the
+  // way, so a hyphen-grouped token can never be read as the ninth of December.
+  const rest = tokenHit ? body.replace(tokenHit[1]!, ' ') : body
+  const boughtOn = smsDate(rest, now)
+  const clock = /\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\b/.exec(rest)
+  const boughtAt = clock ? `${clock[1]!.padStart(2, '0')}:${clock[2]}` : null
 
   const found = [amount !== null, units !== null, !!token, !!meter].filter(Boolean).length
   if (!found) return null
 
-  return { amount, units, token, meter, elec, serviceFee, vat, stated, boughtOn, found }
+  return { amount, units, token, meter, elec, serviceFee, vat, stated, boughtOn, boughtAt, found }
 }

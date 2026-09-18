@@ -4,9 +4,9 @@ import { READING_SOURCES, UTILITIES, type MeterReading, type ReadingSource, type
 import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { dialInWords, latestReading, parseDial, readingsFor, usedLabel } from '../../lib/meters'
-import { cn, fmtDate, todayISO } from '../../lib/utils'
+import { cn, fmtDate, nowTime, todayISO } from '../../lib/utils'
 import { Button } from '../ui/Button'
-import { DateInput, Field, Input, Segmented, Select, Textarea } from '../ui/Field'
+import { DateInput, Field, Input, Segmented, Select, Textarea, TimeInput } from '../ui/Field'
 import { Sheet } from '../ui/Sheet'
 
 /**
@@ -31,6 +31,7 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
 
   const [value, setValue] = useState('')
   const [when, setWhen] = useState(todayISO())
+  const [at, setAt] = useState(nowTime())
   const [source, setSource] = useState<ReadingSource>('self')
   const [notes, setNotes] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -44,6 +45,9 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
     // Show it back the way it was read off the dial, red wheels and all.
     setValue(edit ? Number(edit.reading).toFixed(decimals) : '')
     setWhen(edit?.read_on ?? todayISO())
+    // Now, by default: it costs nothing to record and it is what settles the
+    // order of a reading and a token bought the same afternoon.
+    setAt(edit ? (edit.read_time ?? '') : nowTime())
     setSource(edit?.source ?? 'self')
     setNotes(edit?.notes ?? '')
     setFile(null); setPreview(null)
@@ -77,8 +81,9 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
     if (!dial || !isFinite(n)) return
     setBusy(true)
     try {
-      if (edit) await updateReading(edit.id, { reading: n, read_on: when, source, notes: notes.trim(), file })
-      else await logReading({ utility, reading: n, read_on: when, source, notes: notes.trim(), file, photo_path: null })
+      const time = at.trim() || null
+      if (edit) await updateReading(edit.id, { reading: n, read_on: when, read_time: time, source, notes: notes.trim(), file })
+      else await logReading({ utility, reading: n, read_on: when, read_time: time, source, notes: notes.trim(), file, photo_path: null })
       onOpenChange(false)
     } catch { /* toast */ } finally { setBusy(false) }
   }
@@ -124,15 +129,21 @@ export function ReadingSheet({ open, onOpenChange, utility, readings, edit }: {
           <p className="mt-1.5 text-xs text-ink-3">The picture is what makes the record worth anything in a dispute.</p>
         </div>
 
+        <Field label="Every digit on the dial" required hint={decimals > 0 ? `Black wheels then the ${decimals} red ones — straight across, no full stop.` : 'The number on the meter.'}>
+        {(id) => (
+          <Input id={id} value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ''))} inputMode="numeric" placeholder={decimals > 0 ? '1046' + '6205'.slice(0, decimals) : '742'} autoFocus />
+        )}
+        </Field>
+
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Every digit on the dial" required hint={decimals > 0 ? `Black wheels then the ${decimals} red ones — straight across, no full stop.` : 'The number on the meter.'}>
-          {(id) => (
-            <Input id={id} value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d.]/g, ''))} inputMode="numeric" placeholder={decimals > 0 ? '1046' + '6205'.slice(0, decimals) : '742'} autoFocus />
-          )}
-          </Field>
           <Field label="Read on" required>
           {(id) => (
             <DateInput id={id} value={when} onChange={(e) => setWhen(e.target.value)} max={todayISO()} />
+          )}
+          </Field>
+          <Field label="At" hint={utility === 'electricity' ? 'Settles whether a token went in before or after.' : 'Optional.'}>
+          {(id) => (
+            <TimeInput id={id} value={at} onChange={(e) => setAt(e.target.value)} />
           )}
           </Field>
         </div>

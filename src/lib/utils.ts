@@ -158,3 +158,8 @@ export function homeTitle(name: string | null | undefined): string {
   if (!n) return 'Home Hub'
   return /\b(hub|home|house|place)$/i.test(n) ? n : `${n} Hub`
 }
+
+/** The wall clock right now, as an <input type="time"> wants it. */
+export function nowTime(): string {
+  return format(new Date(), 'HH:mm')
+}

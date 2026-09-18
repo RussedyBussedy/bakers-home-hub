@@ -4,9 +4,9 @@ import { type UtilityPurchase, type Utility } from '../../data/types'
 import { useActions } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import { blendedRate, parseTopUpSms, type TopUpSms } from '../../lib/meters'
-import { money, todayISO } from '../../lib/utils'
+import { money, nowTime, todayISO } from '../../lib/utils'
 import { Button } from '../ui/Button'
-import { DateInput, Field, Input, Textarea } from '../ui/Field'
+import { DateInput, Field, Input, Textarea, TimeInput } from '../ui/Field'
 import { Sheet } from '../ui/Sheet'
 
 /**
@@ -32,6 +32,7 @@ export function TopUpSheet({ open, onOpenChange, utility = 'electricity', purcha
   const [amount, setAmount] = useState('')
   const [units, setUnits] = useState('')
   const [when, setWhen] = useState(todayISO())
+  const [at, setAt] = useState(nowTime())
   const [token, setToken] = useState('')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
@@ -45,6 +46,9 @@ export function TopUpSheet({ open, onOpenChange, utility = 'electricity', purcha
     setAmount(edit ? String(edit.amount) : '')
     setUnits(edit ? String(edit.units) : '')
     setWhen(edit?.bought_on ?? todayISO())
+    // Now, unless the message says otherwise — it is what tells a token loaded
+    // this evening apart from the reading taken this morning.
+    setAt(edit ? (edit.bought_time ?? '') : nowTime())
     setToken(edit?.token ?? '')
     setNotes(edit?.notes ?? '')
     setSms(''); setRead(null); setClipFailed(false)
@@ -60,6 +64,7 @@ export function TopUpSheet({ open, onOpenChange, utility = 'electricity', purcha
     if (r.units !== null) setUnits(String(r.units))
     if (r.token) setToken(r.token)
     if (r.boughtOn) setWhen(r.boughtOn)
+    if (r.boughtAt) setAt(r.boughtAt)
     if (r.serviceFee) {
       // Worth writing down: it is why this token bought fewer units per rand.
       const line = `Service fee ${money(r.serviceFee, { cents: true })} came off this one.`
@@ -94,7 +99,7 @@ export function TopUpSheet({ open, onOpenChange, utility = 'electricity', purcha
     if (!(a > 0)) return
     setBusy(true)
     try {
-      const payload = { bought_on: when, amount: a, units: u || 0, token: token.trim(), notes: notes.trim() }
+      const payload = { bought_on: when, bought_time: at.trim() || null, amount: a, units: u || 0, token: token.trim(), notes: notes.trim() }
       if (edit) await updatePurchase(edit.id, payload)
       else await logPurchase({ ...payload, utility, receipt_path: null })
       onOpenChange(false)
@@ -154,6 +159,7 @@ export function TopUpSheet({ open, onOpenChange, utility = 'electricity', purcha
                 )}
                 {read.token && <>Token ending {read.token.slice(-4)}. </>}
                 {!read.boughtOn && <>No date in the message, so it’s dated today — change it below if that’s wrong.</>}
+                {read.boughtOn && read.boughtAt && <>Bought at {read.boughtAt}.</>}
               </p>
               {totalOdd && (
                 <p className="mt-2 flex gap-1.5 border-t border-line pt-2 text-[13px] text-danger">
@@ -202,11 +208,18 @@ export function TopUpSheet({ open, onOpenChange, utility = 'electricity', purcha
           </div>
         )}
 
-        <Field label="Bought on" required>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Bought on" required>
           {(id) => (
             <DateInput id={id} value={when} onChange={(e) => setWhen(e.target.value)} max={todayISO()} />
           )}
           </Field>
+          <Field label="At" hint="Settles it against the day's reading.">
+          {(id) => (
+            <TimeInput id={id} value={at} onChange={(e) => setAt(e.target.value)} />
+          )}
+          </Field>
+        </div>
 
         <Field label="Token" hint="Optional — handy if the meter ever refuses one.">
           {(id) => (

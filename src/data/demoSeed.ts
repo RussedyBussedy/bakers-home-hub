@@ -313,27 +313,27 @@ export function buildDemoState(): DemoState {
 
   // Water climbs; a leak in the middle of the record is what a dispute looks like.
   const readings: MeterReading[] = [
-    { id: 'w1', household_id: H, utility: 'water', reading: 842, read_on: day(-118), photo_path: meterFace(842), source: 'self', notes: 'First reading after moving in.', created_by: R, created_at: d(118, 8) },
-    { id: 'w2', household_id: H, utility: 'water', reading: 871, read_on: day(-90), photo_path: meterFace(871), source: 'self', notes: '', created_by: R, created_at: d(90, 8) },
-    { id: 'w3', household_id: H, utility: 'water', reading: 908, read_on: day(-59), photo_path: meterFace(908), source: 'self', notes: 'Higher than it should be — nothing obviously running.', created_by: R, created_at: d(59, 8) },
-    { id: 'w4', household_id: H, utility: 'water', reading: 958, read_on: day(-30), photo_path: meterFace(958), source: 'self', notes: 'Meter ticks over with every tap closed.', created_by: R, created_at: d(30, 8) },
-    { id: 'w5', household_id: H, utility: 'water', reading: 1012, read_on: day(-2), photo_path: meterFace(1012), source: 'self', notes: 'Isolating valve closed — watching it from here.', created_by: R, created_at: d(2, 8) },
+    { id: 'w1', household_id: H, utility: 'water', read_time: '08:05', reading: 842, read_on: day(-118), photo_path: meterFace(842), source: 'self', notes: 'First reading after moving in.', created_by: R, created_at: d(118, 8) },
+    { id: 'w2', household_id: H, utility: 'water', read_time: '08:10', reading: 871, read_on: day(-90), photo_path: meterFace(871), source: 'self', notes: '', created_by: R, created_at: d(90, 8) },
+    { id: 'w3', household_id: H, utility: 'water', read_time: '07:55', reading: 908, read_on: day(-59), photo_path: meterFace(908), source: 'self', notes: 'Higher than it should be — nothing obviously running.', created_by: R, created_at: d(59, 8) },
+    { id: 'w4', household_id: H, utility: 'water', read_time: '08:05', reading: 958, read_on: day(-30), photo_path: meterFace(958), source: 'self', notes: 'Meter ticks over with every tap closed.', created_by: R, created_at: d(30, 8) },
+    { id: 'w5', household_id: H, utility: 'water', read_time: '08:00', reading: 1012, read_on: day(-2), photo_path: meterFace(1012), source: 'self', notes: 'Isolating valve closed — watching it from here.', created_by: R, created_at: d(2, 8) },
   ]
 
   // Prepaid electricity: the balance falls between top-ups and jumps when one lands.
   const elec: MeterReading[] = [
-    { id: 'e1', household_id: H, utility: 'electricity', reading: 612, read_on: day(-46), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(46, 19) },
-    { id: 'e2', household_id: H, utility: 'electricity', reading: 431, read_on: day(-31), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(31, 19) },
-    { id: 'e3', household_id: H, utility: 'electricity', reading: 268, read_on: day(-17), photo_path: null, source: 'self', notes: '', created_by: K, created_at: d(17, 20) },
-    { id: 'e4', household_id: H, utility: 'electricity', reading: 856, read_on: day(-9), photo_path: null, source: 'self', notes: 'After the R3 000 top-up.', created_by: R, created_at: d(9, 18) },
-    { id: 'e5', household_id: H, utility: 'electricity', reading: 742, read_on: day(-1), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(1, 18) },
+    { id: 'e1', household_id: H, utility: 'electricity', read_time: '19:00', reading: 612, read_on: day(-46), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(46, 19) },
+    { id: 'e2', household_id: H, utility: 'electricity', read_time: '19:00', reading: 431, read_on: day(-31), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(31, 19) },
+    { id: 'e3', household_id: H, utility: 'electricity', read_time: '20:10', reading: 268, read_on: day(-17), photo_path: null, source: 'self', notes: '', created_by: K, created_at: d(17, 20) },
+    { id: 'e4', household_id: H, utility: 'electricity', read_time: '18:00', reading: 856, read_on: day(-9), photo_path: null, source: 'self', notes: 'After the R3 000 top-up.', created_by: R, created_at: d(9, 18) },
+    { id: 'e5', household_id: H, utility: 'electricity', read_time: '18:00', reading: 742, read_on: day(-1), photo_path: null, source: 'self', notes: '', created_by: R, created_at: d(1, 18) },
   ]
 
   const purchases: UtilityPurchase[] = [
-    { id: 'up1', household_id: H, utility: 'electricity', bought_on: day(-60), amount: 500, units: 128.9, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(60, 18) },
-    { id: 'up2', household_id: H, utility: 'electricity', bought_on: day(-38), amount: 500, units: 96.4, token: '', notes: 'First top-up of the month — service fee came off this one.', receipt_path: null, created_by: R, created_at: d(38, 18) },
-    { id: 'up3', household_id: H, utility: 'electricity', bought_on: day(-24), amount: 500, units: 129, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(24, 18) },
-    { id: 'up4', household_id: H, utility: 'electricity', bought_on: day(-10), amount: 3000, units: 774.1, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(10, 18) },
+    { id: 'up1', household_id: H, utility: 'electricity', bought_time: '18:00', bought_on: day(-60), amount: 500, units: 128.9, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(60, 18) },
+    { id: 'up2', household_id: H, utility: 'electricity', bought_time: '18:00', bought_on: day(-38), amount: 500, units: 96.4, token: '', notes: 'First top-up of the month — service fee came off this one.', receipt_path: null, created_by: R, created_at: d(38, 18) },
+    { id: 'up3', household_id: H, utility: 'electricity', bought_time: '18:00', bought_on: day(-24), amount: 500, units: 129, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(24, 18) },
+    { id: 'up4', household_id: H, utility: 'electricity', bought_time: '17:40', bought_on: day(-10), amount: 3000, units: 774.1, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(10, 18) },
   ]
 
   return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges, visits, shopping, houseTasks, readings: [...readings, ...elec], purchases }

@@ -4,7 +4,7 @@ import { ArrowLeft, Loader2, Printer } from 'lucide-react'
 import { UTILITIES, type MeterReading, type Utility } from '../data/types'
 import { useHouse } from '../data/hooks'
 import { useAuth, useDb } from '../data/session'
-import { meterPeriods, perDayLabel, readingLabel, readingsFor, usedLabel } from '../lib/meters'
+import { clockTime, meterPeriods, perDayLabel, readingLabel, readingsFor, roundDays, usedLabel } from '../lib/meters'
 import { fmtDate, homeTitle, pluralise } from '../lib/utils'
 import { Button } from '../components/ui/Button'
 import './meterReport.css'
@@ -152,10 +152,10 @@ export default function MeterReportPage() {
                     return (
                       <tr key={r.id}>
                         <td className="num muted">{i + 1}</td>
-                        <td>{fmtDate(r.read_on, 'd MMM yyyy')}</td>
+                        <td>{fmtDate(r.read_on, 'd MMM yyyy')}{clockTime(r.read_time) && <span className="muted"> {clockTime(r.read_time)}</span>}</td>
                         <td className="num strong">{dial(Number(r.reading))}</td>
                         <td className="num">{p && !p.suspect ? Math.round(p.used).toLocaleString() : '—'}</td>
-                        <td className="num muted">{p ? p.days : '—'}</td>
+                        <td className="num muted">{p ? roundDays(p.days) : '—'}</td>
                         <td className="num strong">{p && !p.suspect ? Math.round(p.perDay).toLocaleString() : '—'}</td>
                         <td className="muted">{r.source === 'self' ? 'Read at meter' : r.source === 'council' ? 'Council statement' : 'Estimated'}</td>
                         <td className="muted">{r.photo_path ? `Plate ${withPhotos.findIndex((w) => w.id === r.id) + 1}` : '—'}</td>
@@ -258,7 +258,7 @@ function ConsumptionChart({ periods, utility }: { periods: ReturnType<typeof met
               <rect x={x} y={y} width={barW} height={Math.max(1, bh)} fill={hot ? '#9c3b2a' : '#5b7f9c'} rx={2} />
               <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={9.5} fill="#3c3835">{Math.round(p.perDay).toLocaleString()}</text>
               <text x={x + barW / 2} y={h - padB + 14} textAnchor="middle" fontSize={9.5} fill="#6b6560">{fmtDate(p.to.read_on, 'd MMM')}</text>
-              <text x={x + barW / 2} y={h - padB + 26} textAnchor="middle" fontSize={8.5} fill="#948d86">{p.days}d</text>
+              <text x={x + barW / 2} y={h - padB + 26} textAnchor="middle" fontSize={8.5} fill="#948d86">{roundDays(p.days)}d</text>
             </g>
           )
         })}

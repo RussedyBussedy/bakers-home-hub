@@ -76,6 +76,11 @@ export const DateInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLIn
   return <input ref={ref} type="date" className={cn(base, 'min-w-0 [&::-webkit-calendar-picker-indicator]:opacity-60', className)} {...rest} />
 })
 
+/** The clock beside the date, for when the order of two things on one day matters. */
+export const TimeInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function TimeInput({ className, ...rest }, ref) {
+  return <input ref={ref} type="time" className={cn(base, 'min-w-0 tabular [&::-webkit-calendar-picker-indicator]:opacity-60', className)} {...rest} />
+})
+
 export function Segmented<T extends string>({
   value, onChange, options, className, size = 'md',
 }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; className?: string; size?: 'sm' | 'md' }) {

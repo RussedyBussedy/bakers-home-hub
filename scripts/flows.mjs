@@ -696,6 +696,22 @@ await step('meters: prepaid shows a balance, a rate and a runway', async () => {
   await shot('13-meters-electricity')
 })
 
+await step('meters: a reading carries the clock, not just the date', async () => {
+  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Log a reading' }).click()
+  await page.waitForTimeout(600)
+  const sheet = page.locator('[role=dialog]')
+  const now = await sheet.getByLabel('At', { exact: true }).inputValue()
+  if (!/^\d{2}:\d{2}$/.test(now)) throw new Error(`the time did not default to now: "${now}"`)
+  await sheet.getByLabel(/Every digit on the dial/).fill('10170000')
+  await sheet.getByLabel('At', { exact: true }).fill('06:30')
+  await page.getByRole('button', { name: 'Log it' }).click()
+  await page.waitForTimeout(900)
+  // Another reading may already sit later in the day, so find this one by its dial.
+  const row = await page.locator('.divide-y > li', { hasText: '1,017.0000' }).first().innerText()
+  if (!/at 06:30/.test(row)) throw new Error(`the clock never made it onto the record: ${row.replace(/\n+/g, ' | ')}`)
+})
+
 await step('meters: a pasted payment SMS fills the top-up in', async () => {
   await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
   await page.getByRole('tab', { name: /Electricity/ }).click()

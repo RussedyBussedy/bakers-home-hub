@@ -7,6 +7,7 @@ import { useActions, useMediaUrl } from '../../data/hooks'
 import { useAuth } from '../../data/session'
 import {
   blendedRate, meterPeriods, perDayLabel, prepaidOutlook, purchaseRate, purchasesFor, readingDue, readingLabel, readingsFor, usedLabel,
+  clockTime, roundDays,
 } from '../../lib/meters'
 import { cn, fmtDate, money, pluralise } from '../../lib/utils'
 import { EmptyState, Pill, Reveal, Stat } from '../ui/Bits'
@@ -86,7 +87,7 @@ export function MetersPanel({ readings, purchases }: { readings: MeterReading[];
         </Stat>
         <Stat
           label="Using now"
-          hint={lastPeriod ? `over the ${pluralise(lastPeriod.days, 'day')} to ${fmtDate(lastPeriod.to.read_on, 'd MMM')}` : 'Two readings needed'}
+          hint={lastPeriod ? `over the ${pluralise(roundDays(lastPeriod.days), 'day')} to ${fmtDate(lastPeriod.to.read_on, 'd MMM')}` : 'Two readings needed'}
         >
           <span className="tabular">{lastPeriod ? perDayLabel(lastPeriod.perDay, utility) : '—'}</span>
         </Stat>
@@ -160,7 +161,7 @@ export function MetersPanel({ readings, purchases }: { readings: MeterReading[];
                     <div className="rounded-xl border border-line bg-surface px-3 py-2 text-[13px] shadow-md">
                       <p className="text-[11px] uppercase tracking-wider text-ink-3">{d.full}</p>
                       <p className="font-semibold tabular text-ink">{perDayLabel(d.perDay, utility)}</p>
-                      <p className="text-ink-2">{usedLabel(d.used, utility)} over {pluralise(d.days, 'day')}</p>
+                      <p className="text-ink-2">{usedLabel(d.used, utility)} over {pluralise(roundDays(d.days), 'day')}</p>
                     </div>
                   )
                 }} />
@@ -224,7 +225,7 @@ export function MetersPanel({ readings, purchases }: { readings: MeterReading[];
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-ochre-soft text-ochre-text"><Zap className="size-4" /></span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[15px] text-ink"><span className="tabular">{money(p.amount)}</span> → <span className="tabular">{Number(p.units).toLocaleString()} kWh</span></p>
-                      <p className="mt-0.5 text-xs text-ink-3">{fmtDate(p.bought_on, 'EEE d MMM yyyy')}{p.notes ? ` · ${p.notes}` : ''}</p>
+                      <p className="mt-0.5 text-xs text-ink-3">{fmtDate(p.bought_on, 'EEE d MMM yyyy')}{clockTime(p.bought_time) ? ` at ${clockTime(p.bought_time)}` : ''}{p.notes ? ` · ${p.notes}` : ''}</p>
                     </div>
                     {r !== null && <Pill size="sm" tone={dearer ? 'ochre' : 'neutral'}>{money(r, { cents: true })}/kWh</Pill>}
                     <Menu trigger={<IconButton label="More" size="icon-sm"><MoreHorizontal className="size-4" /></IconButton>}>
@@ -308,7 +309,7 @@ function ReadingRow({ reading: r, utility, perDay, used, suspect, decimals, inde
           {r.source !== 'self' && <Pill size="sm" tone={r.source === 'estimate' ? 'ochre' : 'neutral'} className="ml-2">{r.source === 'council' ? 'Council' : 'Estimated'}</Pill>}
         </p>
         <p className="mt-0.5 text-xs text-ink-3">
-          {fmtDate(r.read_on, 'EEE d MMM yyyy')}
+          {fmtDate(r.read_on, 'EEE d MMM yyyy')}{clockTime(r.read_time) ? ` at ${clockTime(r.read_time)}` : ''}
           {by ? ` · ${by.display_name}` : ''}
           {!r.photo_path && <span className="text-ochre-text"> · no photo</span>}
         </p>

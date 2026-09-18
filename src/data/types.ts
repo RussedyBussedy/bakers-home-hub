@@ -382,6 +382,8 @@ export interface MeterReading {
   /** Water: kilolitres on the dial. Electricity: kWh left on the prepaid meter. */
   reading: number
   read_on: string
+  /** Wall-clock time the dial was read, when it was noted. Null means end-of-day. */
+  read_time: string | null
   photo_path: string | null
   source: ReadingSource
   notes: string
@@ -395,6 +397,8 @@ export interface UtilityPurchase {
   household_id: string
   utility: Utility
   bought_on: string
+  /** Wall-clock time the token was bought, when it was noted. Null means start-of-day. */
+  bought_time: string | null
   amount: number
   units: number
   token: string
