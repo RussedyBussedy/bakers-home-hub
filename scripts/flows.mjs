@@ -770,6 +770,65 @@ await step('the Word: a reading opens in place and can be ticked', async () => {
   if (!(await page.getByText('From the Word').count())) throw new Error('the latest letter is not opened on return')
 })
 
+await step('the Word: study — a starter question is answered, a reference opens in place, follow-ups take over', async () => {
+  const starters = page.getByLabel('Questions to start with').getByRole('button')
+  if ((await starters.count()) !== 3) throw new Error(`${await starters.count()} starter questions under the letter`)
+  await starters.first().click()
+  await page.getByText(/Looking it up/).waitFor()
+  await page.getByText(/David wrote Psalm 34/).waitFor({ timeout: 10000 })
+  await page.waitForTimeout(400)
+  await shot('23b-word-study')
+  if (!(await page.getByText(/You asked:/).count())) throw new Error('the question is not shown with its answer')
+  if (!(await page.locator('figure blockquote').filter({ hasText: 'I sought the LORD' }).count())) throw new Error('the answer does not quote its passage')
+  // A reference mentioned in the answer opens the passage right there.
+  await page.getByRole('button', { name: 'Psalm 34', exact: true }).click()
+  await page.getByText(/In the demo only Psalm 23/).waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: 'Close the passage' }).click()
+  // Follow-ups replace the starters once something has been asked.
+  if (await page.getByLabel('Questions to start with').count()) throw new Error('the starters are still offered after a question')
+  const followups = page.getByLabel('Questions you might ask next').getByRole('button')
+  if ((await followups.count()) !== 2) throw new Error(`${await followups.count()} follow-up questions`)
+  // A question of my own; Enter sends it.
+  await page.getByLabel('Your question').fill('Who was Saul, and why was David running from him?')
+  await page.keyboard.press('Enter')
+  await page.getByText(/Who was Saul/).waitFor()
+  await page.getByText(/David wrote Psalm 34/).nth(1).waitFor({ timeout: 10000 })
+  if ((await page.getByText(/You asked:/).count()) !== 2) throw new Error('the second question is not in the thread')
+  // The thread survives a reload…
+  await page.goto(base + '/house?tab=word', { waitUntil: 'networkidle' })
+  await page.getByText('From the Word').waitFor()
+  await page.getByText(/Who was Saul/).waitFor({ timeout: 5000 })
+  // …and a question can be removed.
+  await page.getByRole('button', { name: 'Remove this question' }).last().click()
+  await page.getByRole('button', { name: 'Remove', exact: true }).last().click()
+  await page.waitForTimeout(500)
+  if ((await page.getByText(/You asked:/).count()) !== 1) throw new Error('the question was not removed')
+})
+
+await step('the Word: a verse goes to WhatsApp as a message, and a step can be copied', async () => {
+  // WhatsApp itself is not reachable from here; answering for it keeps the URL it was opened with.
+  await context.route('https://wa.me/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>wa.me</title>' }))
+  await page.getByRole('button', { name: 'Share Matthew 11:28' }).click()
+  const popup = context.waitForEvent('page', { timeout: 5000 })
+  await page.getByRole('menuitem', { name: 'Send on WhatsApp' }).click()
+  const p2 = await popup
+  await p2.waitForURL(/wa\.me/, { timeout: 5000 }).catch(() => {})
+  const url = p2.url()
+  await p2.close()
+  await context.unroute('https://wa.me/**')
+  if (!url.startsWith('https://wa.me/?text=')) throw new Error('WhatsApp did not open: ' + url)
+  const text = decodeURIComponent(url.slice('https://wa.me/?text='.length))
+  if (!text.includes('Come unto me') || !/— Matthew 11:28 \((BSB|KJV)\)$/.test(text)) throw new Error('the message is not the verse: ' + text)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.getByRole('button', { name: 'Share step 1' }).click()
+  await page.getByRole('menuitem', { name: 'Copy' }).click()
+  await page.getByText('Copied').waitFor({ timeout: 3000 })
+  const clip = await page.evaluate(() => navigator.clipboard.readText())
+  if (!clip.startsWith('Tonight, before you sleep')) throw new Error('the clipboard does not hold the step: ' + clip.slice(0, 40))
+  if (!(await page.getByRole('button', { name: 'Share the prayer' }).count())) throw new Error('the prayer has no share button')
+  if (!(await page.getByRole('button', { name: 'Share this answer' }).count())) throw new Error('the study answer has no share button')
+})
+
 await step('the Word: a letter can be deleted, and writing again works', async () => {
   await page.getByRole('button', { name: /Write again/ }).click()
   await page.getByLabel('What’s on your heart?').waitFor()
@@ -828,6 +887,9 @@ await step('the Word: a wrong PIN is refused, the right one opens it, Lock shuts
   await page.getByRole('button', { name: /Someone I love has died/ }).click()
   await page.getByText('From the Word').waitFor()
   if (!(await page.getByRole('button', { name: 'Unhide' }).count())) throw new Error('an open hidden letter should offer Unhide')
+  // The study under a hidden letter works with the PIN in hand, and is nowhere once it is locked.
+  await page.getByLabel('Questions to start with').getByRole('button').first().click()
+  await page.getByText(/David wrote Psalm 34/).waitFor({ timeout: 10000 })
   await shot('28-word-unlocked')
   await page.getByRole('button', { name: 'Lock hidden letters' }).click()
   await page.getByRole('button', { name: 'Unlock hidden letters' }).waitFor()
