@@ -760,6 +760,12 @@ await step('the Word: a reading opens in place and can be ticked', async () => {
   await page.getByRole('button', { name: /^Day 1/ }).click()
   await page.getByText('The LORD is my shepherd').waitFor({ timeout: 5000 })
   await shot('23-word-reading')
+  // The arrow at the far right of a row opens it too (it once sat outside the button and did nothing).
+  const day2 = page.getByRole('button', { name: /^Day 2/ })
+  const box = await day2.boundingBox()
+  await day2.click({ position: { x: box.width - 12, y: box.height / 2 } })
+  await page.getByText(/In the demo only Psalm 23/).waitFor({ timeout: 5000 })
+  await day2.click({ position: { x: box.width - 12, y: box.height / 2 } })
   await page.getByRole('checkbox', { name: /^Day 1:/ }).click()
   await page.waitForTimeout(500)
   if (!(await page.getByText('1/5 readings').count())) throw new Error('the tick is not counted in the history')
