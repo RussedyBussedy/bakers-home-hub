@@ -4,7 +4,7 @@ import { useAuth, useDb } from './session'
 import type {
   Achievement, BlockerKind, BoardItem, Contact, Expense, Guidance, Household, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense, NewHouseTask, NewImage,
   NewMeterReading, NewProject, NewQuote, NewShoppingItem, NewUtilityPurchase,
-  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, PinStatus, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Utility, UtilityPurchase, XpEvent, XpKind,
+  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, PinStatus, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, Translation, Utility, UtilityPurchase, XpEvent, XpKind,
 } from './types'
 import { UTILITIES } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
@@ -36,6 +36,9 @@ export const keys = {
   guidance: ['guidance'] as QueryKey,
   guidanceHidden: ['guidance-hidden'] as QueryKey,
   pinStatus: ['pin-status'] as QueryKey,
+  /** A letter's study thread; hidden letters' threads live under their own prefix so locking can drop them all. */
+  study: ['study'] as QueryKey,
+  studyHidden: ['study-hidden'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -87,6 +90,24 @@ export function useHiddenGuidance(pin: string | null) {
     staleTime: Infinity,
     gcTime: 0,
     refetchOnWindowFocus: false,
+  })
+}
+/**
+ * The questions asked under one letter. A hidden letter's thread needs the PIN and, like the hidden
+ * letters themselves, leaves the cache the moment the PIN does.
+ */
+export function useStudy(letter: Pick<Guidance, 'id' | 'hidden'> | null, pin: string | null) {
+  const { db } = useDb()
+  const { userId } = useAuth()
+  const hidden = Boolean(letter?.hidden)
+  return useQuery<Study[]>({
+    queryKey: [...(hidden ? keys.studyHidden : keys.study), userId, letter?.id ?? null, db.mode],
+    queryFn: () => db.listStudy(letter!.id, hidden ? pin! : undefined),
+    enabled: Boolean(userId && letter && (!hidden || pin)),
+    retry: hidden ? false : 1,
+    staleTime: hidden ? Infinity : 60_000,
+    gcTime: hidden ? 0 : undefined,
+    refetchOnWindowFocus: !hidden,
   })
 }
 
@@ -842,19 +863,21 @@ export function useActions() {
     try {
       await db.hideGuidance(g.id)
       if (qc.getQueryData<Guidance[]>(k(hiddenKey()))) setList<Guidance>(hiddenKey(), (old) => [{ ...g, hidden: true }, ...old.filter((x) => x.id !== g.id)])
+      qc.removeQueries({ queryKey: [...keys.study, me?.id ?? null, g.id] })
       bumpHidden(1)
     } catch (e) { invalidate(guidanceKey()); return fail(e, 'hide the letter') }
-  }, [db, qc, k, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail])
+  }, [db, qc, k, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail, me])
 
   const unhideGuidance = useCallback(async (g: Guidance, pin: string) => {
     setList<Guidance>(hiddenKey(), (old) => old.filter((x) => x.id !== g.id))
     try {
       const back = await db.unhideGuidance(g.id, pin)
       setList<Guidance>(guidanceKey(), (old) => [back, ...old.filter((x) => x.id !== back.id)].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      qc.removeQueries({ queryKey: [...keys.studyHidden, me?.id ?? null, g.id] })
       bumpHidden(-1)
       return back
     } catch (e) { invalidate(hiddenKey()); return fail(e, 'bring the letter back') }
-  }, [db, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail])
+  }, [db, qc, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail, me])
 
   const setPin = useCallback(async (pin: string, oldPin?: string) => {
     await db.setPin(pin, oldPin)   // a refusal is shown by the sheet, in its own words
@@ -865,17 +888,37 @@ export function useActions() {
     try {
       const gone = await db.forgetPin()
       qc.removeQueries({ queryKey: k(hiddenKey()) })
+      qc.removeQueries({ queryKey: [...keys.studyHidden, me?.id ?? null] })
       invalidate(pinKey())
       toast({ title: 'PIN forgotten', description: gone ? `${gone} hidden letter${gone === 1 ? '' : 's'} went with it.` : 'There were no hidden letters.', tone: 'neutral' })
     } catch (e) { return fail(e, 'forget the PIN') }
-  }, [db, qc, k, hiddenKey, invalidate, pinKey, toast, fail])
+  }, [db, qc, k, hiddenKey, invalidate, pinKey, toast, fail, me])
 
-  /** Locking is forgetting: the hidden letters leave memory with the PIN. */
-  const lockHidden = useCallback(() => { qc.removeQueries({ queryKey: k(hiddenKey()) }) }, [qc, k, hiddenKey])
+  /** Locking is forgetting: the hidden letters, and their study threads, leave memory with the PIN. */
+  const lockHidden = useCallback(() => {
+    qc.removeQueries({ queryKey: k(hiddenKey()) })
+    qc.removeQueries({ queryKey: [...keys.studyHidden, me?.id ?? null] })
+  }, [qc, k, hiddenKey, me])
+
+  // ---- study: questions under a letter ---------------------------------------
+  const studyKey = useCallback((letter: Pick<Guidance, 'id' | 'hidden'>) => [...(letter.hidden ? keys.studyHidden : keys.study), me?.id ?? null, letter.id] as QueryKey, [me])
+
+  const askStudy = useCallback(async (letter: Guidance, question: string, pin?: string) => {
+    try {
+      const s = await db.askStudy(letter.id, question, letter.hidden ? pin : undefined)
+      setList<Study>(studyKey(letter), (old) => [...old.filter((x) => x.id !== s.id), s])
+      return s
+    } catch (e) { return fail(e, 'answer the question') }
+  }, [db, setList, studyKey, fail])
+
+  const deleteStudy = useCallback(async (letter: Guidance, s: Study, pin?: string) => {
+    setList<Study>(studyKey(letter), (old) => old.filter((x) => x.id !== s.id))
+    try { await db.deleteStudy(s.id, letter.hidden ? pin : undefined) } catch (e) { invalidate(studyKey(letter)); return fail(e, 'remove the question') }
+  }, [db, setList, studyKey, invalidate, fail])
 
   return {
     award, checkAchievements, invalidate, uploadFile,
-    askTheWord, deleteGuidance, tickReading, hideGuidance, unhideGuidance, setPin, forgetPin, lockHidden,
+    askTheWord, deleteGuidance, tickReading, hideGuidance, unhideGuidance, setPin, forgetPin, lockHidden, askStudy, deleteStudy,
     createProject, updateProject, deleteProject,
     addImage, updateImage, deleteImage,
     createContact, updateContact, deleteContact,

@@ -1,6 +1,6 @@
 import { addDays, format, subDays } from 'date-fns'
 import type {
-  Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseTask, Invite, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, UtilityPurchase, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseTask, Invite, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, UtilityPurchase, XpEvent,
 } from './types'
 import { SCENES, materialSwatch, meterFace, roomScene } from '../lib/demoImages'
 
@@ -29,6 +29,7 @@ export interface DemoState {
   readings?: MeterReading[]
   purchases?: UtilityPurchase[]
   guidance?: Guidance[]
+  study?: Study[]
 }
 
 const d = (daysAgo: number, hour = 10) => {

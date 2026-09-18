@@ -1,5 +1,5 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
+import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Study, type StudyAnswer, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
 import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
@@ -31,6 +31,28 @@ const DEMO_LETTER: Guidance['response'] = {
     { reference: 'Isaiah 41:8–13', book_id: 23, book: 'Isaiah', chapter: 41, start: 8, end: 13, focus: '“Fear not, for I am with thee” — said to people in exile.' },
     { reference: 'Psalm 34', book_id: 19, book: 'Psalm', chapter: 34, start: null, end: null, focus: 'A whole psalm from a man who had been very afraid.' },
   ],
+  safety: { concern: false, kind: 'none' },
+  questions: [
+    'Who wrote Psalm 34, and what had just happened to him?',
+    'What does "heavy laden" mean in Matthew 11:28?',
+    'Why does Paul say "with thanksgiving" in Philippians 4:6?',
+  ],
+}
+
+/** The one answer the demo gives, whatever is asked — the live Hub writes each from its index. */
+const DEMO_ANSWER: StudyAnswer = {
+  text: 'David wrote Psalm 34 just after one of the lowest moments of his life. Running from Saul, he had fled to Gath — Goliath’s home town — and was recognised there, so he saved his skin by pretending to be mad, scrabbling at the gate and letting spit run down his beard (1 Samuel 21:10-15). Then he escaped to a cave.\n\nThat is where this psalm comes from: not from a throne, but from a cave, by a man who had just humiliated himself to stay alive. Which is why it can say what it says about the broken-hearted with such authority. He is not describing a theory; he is describing Wednesday.\n\nIt is also an acrostic — each line begins with the next letter of the Hebrew alphabet — a way of saying "the whole of it, from A to Z". His fear and God’s nearness, laid out in order, so that it could be remembered and taught.',
+  passages: [
+    { reference: 'Psalm 34:4–6', book_id: 19, chapter: 34, start: 4, end: 6, verses: [{ verse: 4, text: 'I sought the LORD, and he heard me, and delivered me from all my fears.' }, { verse: 5, text: 'They looked unto him, and were lightened: and their faces were not ashamed.' }, { verse: 6, text: 'This poor man cried, and the LORD heard him, and saved him out of all his troubles.' }], why: '"This poor man" is David talking about himself, fresh from the gate at Gath. The shame he expected did not come; what came was an answer.', note: 'nearest to what they asked' },
+  ],
+  readings: [
+    { reference: '1 Samuel 21:10–15', book_id: 9, book: '1 Samuel', chapter: 21, start: 10, end: 15, focus: 'The story behind the psalm: Gath and the feigned madness; the cave comes in the next chapter.' },
+  ],
+  mentions: [
+    { text: 'Psalm 34', reference: 'Psalm 34', book_id: 19, book: 'Psalm', chapter: 34, start: null, end: null },
+    { text: '1 Samuel 21:10-15', reference: '1 Samuel 21:10–15', book_id: 9, book: '1 Samuel', chapter: 21, start: 10, end: 15 },
+  ],
+  followups: ['Who gathered to David in the cave of Adullam?', 'What is an acrostic psalm, and are there others?'],
   safety: { concern: false, kind: 'none' },
 }
 
@@ -645,6 +667,7 @@ export function createDemoDb(): Db {
       if (!g) throw new PinRefused('not_found')
       if (g.hidden) checkPin(pin)
       state.guidance = (state.guidance ?? []).filter((x) => x.id !== id)
+      state.study = (state.study ?? []).filter((s) => s.guidance_id !== id)
       persist()
     },
     async setReadingDone(id, index, done, pin) {
@@ -675,7 +698,9 @@ export function createDemoDb(): Db {
     async forgetPin() {
       const me = currentUser() ?? ''
       const before = (state.guidance ?? []).length
-      state.guidance = (state.guidance ?? []).filter((g) => !(g.user_id === me && g.hidden))
+      const gone = new Set((state.guidance ?? []).filter((g) => g.user_id === me && g.hidden).map((g) => g.id))
+      state.guidance = (state.guidance ?? []).filter((g) => !gone.has(g.id))
+      state.study = (state.study ?? []).filter((s) => !gone.has(s.guidance_id))
       persist()
       const all = pins(); delete all[me]; savePins(all)
       return before - (state.guidance ?? []).length
@@ -700,6 +725,33 @@ export function createDemoDb(): Db {
       checkPin(pin)
       const me = currentUser()
       return (state.guidance ?? []).filter((g) => g.user_id === me && g.hidden).sort((a, b) => b.created_at.localeCompare(a.created_at))
+    },
+
+    async askStudy(guidanceId, question, pin) {
+      await new Promise((r) => setTimeout(r, 1600))
+      const me = currentUser() ?? DEMO_USERS.russel
+      const g = (state.guidance ?? []).find((x) => x.id === guidanceId && x.user_id === me)
+      if (!g) throw new PinRefused('not_found')
+      if (g.hidden) checkPin(pin)
+      const s: Study = { id: uid(), guidance_id: guidanceId, user_id: me, created_at: nowISO(), question: question.trim(), answer: DEMO_ANSWER, model: 'demo' }
+      ;(state.study ??= []).push(s)
+      persist()
+      return s
+    },
+    async listStudy(guidanceId, pin) {
+      const me = currentUser()
+      const g = (state.guidance ?? []).find((x) => x.id === guidanceId && x.user_id === me)
+      if (!g) return delay([])
+      if (g.hidden) checkPin(pin)
+      return delay((state.study ?? []).filter((s) => s.guidance_id === guidanceId).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+    },
+    async deleteStudy(id, pin) {
+      const s = (state.study ?? []).find((x) => x.id === id)
+      if (!s) throw new PinRefused('not_found')
+      const g = (state.guidance ?? []).find((x) => x.id === s.guidance_id)
+      if (g?.hidden) checkPin(pin)
+      state.study = (state.study ?? []).filter((x) => x.id !== id)
+      persist()
     },
     async readPassage(reading) {
       await new Promise((r) => setTimeout(r, 350))

@@ -1,7 +1,7 @@
 import type {
   Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseholdBundle, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense,
   Invite, InvitePreview, NewHouseTask, NewImage, NewMeterReading, NewNudge, NewProject, NewQuote, NewShoppingItem, NewSiteVisit, NewTask, NewUtilityPurchase,
-  Nudge, Passage, PinStatus, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Unfurled, UtilityPurchase, XpEvent,
+  Nudge, Passage, PinStatus, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, Translation, Unfurled, UtilityPurchase, XpEvent,
 } from './types'
 
 export type ChangeTable =
@@ -165,6 +165,14 @@ export interface Db {
   unhideGuidance(id: string, pin: string): Promise<Guidance>
   /** The hidden letters, for the right PIN. Throws PinRefused. */
   listHiddenGuidance(pin: string): Promise<Guidance[]>
+
+  // ---- study: questions under a letter -----------------------------
+  /** Asks a question about a letter and keeps the answer with it. A hidden letter needs the PIN. */
+  askStudy(guidanceId: string, question: string, pin?: string): Promise<Study>
+  /** The thread under a letter, oldest first. A hidden letter needs the PIN. */
+  listStudy(guidanceId: string, pin?: string): Promise<Study[]>
+  /** Removes one question and its answer. A hidden letter needs the PIN. */
+  deleteStudy(id: string, pin?: string): Promise<void>
 
   // ---- media -------------------------------------------------------
   /** Uploads a blob and returns the storage path to persist. */

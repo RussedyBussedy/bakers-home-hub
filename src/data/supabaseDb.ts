@@ -1,7 +1,7 @@
 import { createClient, FunctionRegion, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
 import { guessCurrencyCode, searchCountry } from '../lib/currency'
-import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type Household, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type PinError, type PinStatus, type Presence, type ProductHit, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
+import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type Household, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type PinError, type PinStatus, type Presence, type ProductHit, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Study, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
 
 /**
  * The Word's function runs next to the database rather than next to the phone: it makes several
@@ -457,6 +457,28 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
     },
     async listHiddenGuidance(pin) {
       return (await pinCall<{ letters: Guidance[] }>(sb, 'bible_hidden_letters', { p_pin: pin })).letters ?? []
+    },
+
+    async askStudy(guidanceId, question, pin) {
+      const { data, error } = await sb.functions.invoke<{ study?: Study; error?: string; pin?: { error?: PinError; attempts_left?: number; locked_until?: string } }>(
+        'guide',
+        { body: { action: 'study', guidance_id: guidanceId, question, ...(pin != null ? { pin } : {}) }, region: WORD_REGION },
+      )
+      if (error) throw await fnError('Word', error)
+      if (!data) throw new Error('The Word sent nothing back.')
+      // A hidden letter's PIN was refused on the way: the database's own answer comes through, tries left and all.
+      if (data.pin) throw new PinRefused(data.pin.error === 'wrong_pin' || data.pin.error === 'pin_locked' || data.pin.error === 'pin_not_set' ? data.pin.error : 'not_found', data.pin.attempts_left ?? null, data.pin.locked_until ?? null)
+      if (data.error) throw new Error(data.error)
+      if (!data.study) throw new Error('The Word sent nothing back.')
+      return data.study
+    },
+    async listStudy(guidanceId, pin) {
+      if (pin != null) return (await pinCall<{ study: Study[] }>(sb, 'bible_hidden_study', { p_id: guidanceId, p_pin: pin })).study ?? []
+      return many<Study>(sb.from('bible_study').select('*').eq('guidance_id', guidanceId).order('created_at', { ascending: true }).limit(200))
+    },
+    async deleteStudy(id, pin) {
+      if (pin != null) { await pinCall(sb, 'bible_hidden_study_delete', { p_id: id, p_pin: pin }); return }
+      await one(sb.from('bible_study').delete().eq('id', id))
     },
     async readPassage(reading, translation) {
       const { data, error } = await sb.functions.invoke<{ passage?: Passage; error?: string }>(
