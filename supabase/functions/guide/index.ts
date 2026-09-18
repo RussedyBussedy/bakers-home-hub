@@ -17,6 +17,18 @@
 //       plan is checked against the canon (book, chapter, verse counts).
 //       Anything that fails the check is dropped, never shown.
 //    4. The letter is saved to public.bible_guidance, private to the person.
+//       With `hidden: true` in the request it is born hidden — behind the
+//       PIN of migration 012 — provided a PIN exists to reach it with.
+//
+//  Study (action "study"): a question asked under a letter — about a verse
+//  it quoted, a person, a word, anything. The same pipeline answers it:
+//  the question is embedded and retrieved, the letter's own passages join
+//  the candidates, the letter and the thread so far give the model its
+//  context, and the answer may quote only from the candidates. References
+//  mentioned in the answer's text are checked against the canon so the app
+//  can open them. Saved to public.bible_study (migration 013); a hidden
+//  letter's thread needs the PIN, which is checked as the person, through
+//  the same database function the app uses.
 //
 //  Deploy from the dashboard: Edge Functions -> Deploy a new function ->
 //  name it "guide" -> paste this file -> Deploy. Then add the secret
@@ -45,8 +57,17 @@ const K_TOPICS = 6
 const MAX_CANDIDATES = 18
 const MAX_VERSES_PER_PASSAGE = 4
 const MAX_CONTEXT_CHARS = 2000
+const MAX_QUESTION_CHARS = 500
 const LETTERS_PER_DAY = 40
+const QUESTIONS_PER_DAY = 120
+/** How much of the thread so far the model gets to see when answering the next question. */
+const THREAD_TAIL = 4
 const TIMEOUT = 55_000
+
+/** What the person is told when something behind the letter fails. Nothing here names a service or a model. */
+const TRY_AGAIN = 'The letter could not be written just now — try again in a moment.'
+const BUSY = 'The Word is busy right now — try again in a moment.'
+const KEY_REFUSED = 'The Word’s key was refused — the Hub’s settings need a look.'
 
 export type Translation = 'BSB' | 'KJV'
 
@@ -181,12 +202,19 @@ export function prettyPath(path: string, heading: string): string {
  * that both came back are joined ("Matthew 6:25–27"), a passage never runs past four verses, the
  * same verses are never listed twice, and a single verse already inside a longer passage is dropped
  * in its favour. Nearest verses rank by similarity, topic verses by their topic's, cross-references
- * below both — so the model's list starts with what fits best.
+ * below both — so the model's list starts with what fits best. `extra` passages (a letter's own,
+ * when a question is asked under it) go in at the top and take part in the same dedupe.
  */
-export function buildCandidates(r: Retrieved, canon: CanonBook[]): Candidate[] {
+export function buildCandidates(r: Retrieved, canon: CanonBook[], extra: Omit<Candidate, 'id'>[] = []): Candidate[] {
   const books = new Map(canon.map((b) => [b.id, b]))
   const name = (bookId: number) => books.get(bookId) ?? { id: bookId, name: `Book ${bookId}` }
   const raw: Omit<Candidate, 'id'>[] = []
+  for (const c of extra) {
+    const vs = (c.verses ?? []).filter((l) => l.text && l.text.trim()).slice(0, MAX_VERSES_PER_PASSAGE)
+    if (!vs.length) continue
+    const start = vs[0].verse, end = vs[vs.length - 1].verse
+    raw.push({ ...c, verses: vs, start, end, reference: formatRef(name(c.book_id), c.chapter, start, end) })
+  }
   const push = (bookId: number, chapter: number, lines: VerseLine[], note: string, score: number) => {
     const vs = lines.filter((l) => l.text && l.text.trim()).slice(0, MAX_VERSES_PER_PASSAGE)
     if (!vs.length) return
@@ -292,6 +320,7 @@ Rules about Scripture (strict):
 - In "why", speak to them about that passage in one to three sentences: what it says, and what it means for the thing they wrote.
 - The "plan" is a short reading plan for the coming days — five to seven readings, each a whole chapter or a short passage that takes about ten minutes to read, chosen for THEIR situation. These may come from anywhere in the Bible (not only the candidates), written as exact references such as "Psalm 23", "Philippians 4:4-9" or "1 John 4:7-21", each with a one-line focus for the day.
 - "theme" is two to four words naming the matter, as a heading in a diary would ("Anxiety about money", "Grief for a father", "A marriage under strain").
+- "questions" are three questions they might want to ask you next about this letter — a person it names ("Who was Boaz, and why does that matter here?"), a word or phrase in a passage, the story around it, what something meant then and now. Short, specific, in their voice, each about a different passage or person in the letter.
 
 If what they wrote suggests they may be in danger, being harmed, or thinking about ending their life: set safety.concern to true with the kind, speak to that first with great tenderness, urge them to tell someone today and to phone for help, and still give them Scripture. Do not lecture, and do not withhold the letter.
 
@@ -316,6 +345,7 @@ export const SCHEMA = {
       description: 'Five to seven readings for the coming days.',
       items: { type: 'OBJECT', properties: { reference: { type: 'STRING', description: 'An exact reference: "Psalm 23" or "Philippians 4:4-9".' }, focus: { type: 'STRING', description: 'One line on what to look for that day.' } }, required: ['reference', 'focus'] },
     },
+    questions: { type: 'ARRAY', description: 'Three questions they might ask next about this letter — a person, a word, the story behind a passage.', items: { type: 'STRING' } },
     theme: { type: 'STRING' },
     safety: {
       type: 'OBJECT',
@@ -323,8 +353,8 @@ export const SCHEMA = {
       required: ['concern', 'kind'],
     },
   },
-  required: ['greeting', 'passages', 'understanding', 'response', 'prayer', 'closing', 'plan', 'theme', 'safety'],
-  propertyOrdering: ['greeting', 'passages', 'understanding', 'response', 'prayer', 'closing', 'plan', 'theme', 'safety'],
+  required: ['greeting', 'passages', 'understanding', 'response', 'prayer', 'closing', 'plan', 'questions', 'theme', 'safety'],
+  propertyOrdering: ['greeting', 'passages', 'understanding', 'response', 'prayer', 'closing', 'plan', 'questions', 'theme', 'safety'],
 }
 
 export function userPrompt(name: string, context: string, cands: Candidate[], translation: Translation): string {
@@ -354,6 +384,8 @@ export interface GuidanceBody {
   prayer: string
   closing: string
   plan: PlanReading[]
+  /** Three questions to start the study under the letter with. */
+  questions: string[]
   safety: Safety
 }
 
@@ -406,11 +438,6 @@ export function assemble(raw: unknown, cands: Candidate[], canon: CanonBook[], s
   }
 
   const response = (Array.isArray(o.response) ? o.response : []).map((s) => clean(s, 600)).filter(Boolean).slice(0, 6)
-  const modelSafety = (o.safety && typeof o.safety === 'object' ? o.safety : {}) as { concern?: unknown; kind?: unknown }
-  const kinds: SafetyKind[] = ['none', 'self-harm', 'abuse', 'danger', 'other']
-  const modelKind = kinds.includes(modelSafety.kind as SafetyKind) ? (modelSafety.kind as SafetyKind) : 'none'
-  const concern = screened.concern || modelSafety.concern === true
-  const safety: Safety = { concern, kind: screened.concern ? screened.kind : concern ? (modelKind === 'none' ? 'other' : modelKind) : 'none' }
 
   return {
     greeting: clean(o.greeting, 1500),
@@ -420,8 +447,33 @@ export function assemble(raw: unknown, cands: Candidate[], canon: CanonBook[], s
     prayer: clean(o.prayer, 1500),
     closing: clean(o.closing, 600),
     plan,
-    safety,
+    questions: questionsOf(o.questions, 3),
+    safety: safetyOf(o.safety, screened),
   }
+}
+
+/** Short, plain questions — for the starters under a letter and the follow-ups under an answer. */
+export function questionsOf(raw: unknown, max: number): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const q of Array.isArray(raw) ? raw : []) {
+    const s = clean(q, 200).replace(/\s+/g, ' ')
+    const key = s.toLowerCase()
+    if (!s || seen.has(key)) continue
+    seen.add(key)
+    out.push(s)
+    if (out.length >= max) break
+  }
+  return out
+}
+
+/** What the words said (the screen) always wins; the model may add a concern, never remove one. */
+export function safetyOf(raw: unknown, screened: Safety): Safety {
+  const modelSafety = (raw && typeof raw === 'object' ? raw : {}) as { concern?: unknown; kind?: unknown }
+  const kinds: SafetyKind[] = ['none', 'self-harm', 'abuse', 'danger', 'other']
+  const modelKind = kinds.includes(modelSafety.kind as SafetyKind) ? (modelSafety.kind as SafetyKind) : 'none'
+  const concern = screened.concern || modelSafety.concern === true
+  return { concern, kind: screened.concern ? screened.kind : concern ? (modelKind === 'none' ? 'other' : modelKind) : 'none' }
 }
 
 /** The letter the app shows when the model could not answer at all: the passages, and nothing made up. */
@@ -434,7 +486,156 @@ export function fallbackLetter(cands: Candidate[], canon: CanonBook[], screened:
     prayer: 'Lord, You see what I could not fully put into words. Meet me in these verses, quiet my heart, and show me the next right step. Amen.',
     closing: 'The Lord is near to all who call on Him.',
     plan: [],
+    questions: [],
     theme: '',
+    safety: screened,
+  }, cands, canon, screened)
+}
+
+// ---------------------------------------------------------------------
+// Study — a question asked under a letter.
+// ---------------------------------------------------------------------
+export const SYSTEM_STUDY = `You are the same seasoned pastor who wrote the letter below, and the person has come back to you with a question about it — a verse, a person, a place, a word, what something meant then and what it means now. Answer across the kitchen table: warm, plain, unhurried English (South African spelling: colour, realise, counsellor), the way a good teacher talks — never a lecture, a textbook or a chatbot.
+
+How you answer:
+- Answer the question they actually asked, directly, in the first sentence or two. Then give what a good teacher would add: the story around a person, the setting of a passage, the sense of a word in the original language when it helps, how the passage sits in the whole of Scripture, and what it means for the thing they wrote about.
+- Be accurate. Where Christians read a passage differently, say so in a sentence and do not pick a side; where nobody knows (who wrote Hebrews, an exact date), say so plainly. Never invent a detail, a date, a name or a quotation.
+- Grace-centred and non-denominational: keep to what the Scriptures say; no denominational distinctives, no politics.
+- Two to five short paragraphs, separated by blank lines. No bullet points, numbering, headings or markdown — the app lays it out. Do not begin with a greeting and do not sign off.
+- Point them to their local church, to trusted people, and to professional help when a question is really about a matter that needs a doctor, a counsellor, a lawyer or the police.
+
+Rules about Scripture (strict):
+- Quote verse text ONLY from the numbered CANDIDATES, by their id ("c4"), in "passages" — one to four that truly bear on the question, each with one to three sentences on what it says and why it matters here. Never quote or paraphrase verse text from memory anywhere, and never invent a reference.
+- In "answer", point to Scripture by reference ("Ruth 2:1", "Philippians 4:6-7") and say in your own words what it says; do not put verse text inside "answer".
+- "readings" is optional: up to three passages worth reading in full on this question, from anywhere in the Bible, as exact references ("Ruth 2", "Hebrews 11:1-16") with a one-line focus each. Leave it empty when the candidates already cover it.
+- "followups" are two or three questions they might naturally ask next, short and specific, in their voice.
+
+If the question, or the letter it sits under, suggests they may be in danger, being harmed, or thinking about ending their life: set safety.concern to true with the kind, speak to that first with great tenderness, and urge them to tell someone today and to phone for help. Otherwise set safety.kind to "none".
+
+If the question is not something a person would bring to a pastor about the Bible or their life (a request for code, a joke, nonsense), answer kindly and briefly and invite them to ask what is really on their mind.`
+
+export const STUDY_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    answer: { type: 'STRING', description: 'Two to five short paragraphs answering the question, separated by blank lines. Scripture by reference only, no verse text.' },
+    passages: {
+      type: 'ARRAY',
+      description: 'One to four candidate passages, by id, each with why it bears on the question.',
+      items: { type: 'OBJECT', properties: { id: { type: 'STRING', description: 'A candidate id such as "c4".' }, why: { type: 'STRING' } }, required: ['id', 'why'] },
+    },
+    readings: {
+      type: 'ARRAY',
+      description: 'Up to three passages worth reading in full on this question; may be empty.',
+      items: { type: 'OBJECT', properties: { reference: { type: 'STRING', description: 'An exact reference: "Ruth 2" or "Hebrews 11:1-16".' }, focus: { type: 'STRING' } }, required: ['reference', 'focus'] },
+    },
+    followups: { type: 'ARRAY', description: 'Two or three questions they might ask next.', items: { type: 'STRING' } },
+    safety: {
+      type: 'OBJECT',
+      properties: { concern: { type: 'BOOLEAN' }, kind: { type: 'STRING', enum: ['none', 'self-harm', 'abuse', 'danger', 'other'] } },
+      required: ['concern', 'kind'],
+    },
+  },
+  required: ['answer', 'passages', 'readings', 'followups', 'safety'],
+  propertyOrdering: ['answer', 'passages', 'readings', 'followups', 'safety'],
+}
+
+/** What the model is told about the letter a question sits under. */
+export interface LetterSummary { theme: string; context: string; passages: { reference: string; why: string }[]; plan: { reference: string; focus: string }[] }
+export interface StudyTurn { question: string; answer: string }
+
+export function studyPrompt(name: string, letter: LetterSummary, thread: StudyTurn[], question: string, cands: Candidate[], translation: Translation): string {
+  const trim = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
+  const quoted = letter.passages.map((p) => `- ${p.reference}${p.why ? ` — ${trim(p.why, 240)}` : ''}`).join('\n') || '- (none)'
+  const plan = letter.plan.map((p) => `- ${p.reference}${p.focus ? ` — ${trim(p.focus, 120)}` : ''}`).join('\n') || '- (none)'
+  const earlier = thread.length
+    ? `\n\nEARLIER IN THIS STUDY, oldest first:\n${thread.map((t) => `They asked: ${trim(t.question, 300)}\nYou answered: ${trim(t.answer, 700)}`).join('\n\n')}`
+    : ''
+  return `The person's first name: ${name || 'friend'}
+
+THE LETTER they are asking about:
+Theme: ${letter.theme || '(none)'}
+What they wrote:
+<<<
+${trim(letter.context.trim(), 1500)}
+>>>
+Passages quoted in the letter:
+${quoted}
+Readings you suggested:
+${plan}${earlier}
+
+THEIR QUESTION NOW:
+<<<
+${question.trim()}
+>>>
+
+CANDIDATES — the only passages you may quote (${translation === 'KJV' ? 'King James Version' : 'Berean Standard Bible'}):
+${renderCandidates(cands, translation)}
+
+Answer as JSON in the given schema.`
+}
+
+export interface Mention extends Ref { text: string }
+export interface StudyAnswer {
+  text: string
+  passages: GuidancePassage[]
+  readings: PlanReading[]
+  mentions: Mention[]
+  followups: string[]
+  safety: Safety
+}
+
+const MENTION = /(?<![A-Za-z])((?:[1-3]\s?)?[A-Z][a-z]+\.?(?:\s(?:of\s)?[A-Z][a-z]+)?)\s(\d{1,3})(?::(\d{1,3})(?:\s?[-–—]\s?(\d{1,3}))?)?(?![\d:])/g
+
+/**
+ * The references an answer mentions in passing — "Ruth 2:1", "1 John 4:18", "Psalm 23" — found in
+ * the text and checked against the canon, so the app can open each one in place. Anything that is
+ * not a real reference ("In 2 days", "chapter 3") fails the check and is left alone.
+ */
+export function findMentions(text: string, canon: CanonBook[]): Mention[] {
+  const out: Mention[] = []
+  const seen = new Set<string>()
+  for (const m of text.matchAll(MENTION)) {
+    const ref = parseReference(m[0], canon)
+    if (!ref || seen.has(m[0])) continue
+    seen.add(m[0])
+    out.push({ ...ref, text: m[0] })
+    if (out.length >= 12) break
+  }
+  return out
+}
+
+/** Checks a study answer the way assemble() checks a letter: passages by candidate id, readings against the canon, our verse text throughout. */
+export function assembleStudy(raw: unknown, cands: Candidate[], canon: CanonBook[], screened: Safety): StudyAnswer {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const byId = new Map(cands.map((c) => [c.id, c]))
+  const passages: GuidancePassage[] = []
+  const seen = new Set<string>()
+  for (const p of Array.isArray(o.passages) ? o.passages : []) {
+    const id = String((p as { id?: unknown })?.id ?? '').trim().toLowerCase()
+    const c = byId.get(id)
+    if (!c || seen.has(c.id) || passages.length >= 4) continue
+    seen.add(c.id)
+    passages.push({ reference: c.reference, book_id: c.book_id, chapter: c.chapter, start: c.start, end: c.end, verses: c.verses, why: clean((p as { why?: unknown }).why, 800), note: c.note })
+  }
+  const readings: PlanReading[] = []
+  const readingSeen = new Set<string>()
+  for (const item of Array.isArray(o.readings) ? o.readings : []) {
+    const ref = parseReference(String((item as { reference?: unknown })?.reference ?? ''), canon)
+    if (!ref || readingSeen.has(ref.reference) || readings.length >= 3) continue
+    readingSeen.add(ref.reference)
+    readings.push({ ...ref, focus: clean((item as { focus?: unknown }).focus, 200) })
+  }
+  const text = clean(o.answer, 4000)
+  return { text, passages, readings, mentions: findMentions(text, canon), followups: questionsOf(o.followups, 3), safety: safetyOf(o.safety, screened) }
+}
+
+/** When the model could not answer: the nearest passages, and nothing made up. */
+export function fallbackStudy(cands: Candidate[], canon: CanonBook[], screened: Safety): StudyAnswer {
+  return assembleStudy({
+    answer: 'I could not write out an answer to this just now. Here are the passages that come nearest to your question — read them slowly, and ask me again in a little while.',
+    passages: cands.slice(0, 3).map((c) => ({ id: c.id, why: '' })),
+    readings: [],
+    followups: [],
     safety: screened,
   }, cands, canon, screened)
 }
@@ -463,6 +664,12 @@ class Said extends Error {
   constructor(message: string, status = 200) { super(message); this.status = status }
 }
 
+/** The database refused a PIN: the app gets the database's own answer, so it can say how many tries are left. */
+class PinSaid extends Said {
+  pin: Record<string, unknown>
+  constructor(pin: Record<string, unknown>) { super('That letter is locked — unlock it first.'); this.pin = pin }
+}
+
 async function timed(url: string, init: RequestInit, ms = TIMEOUT): Promise<Response> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), ms)
@@ -475,24 +682,25 @@ async function embed(text: string, key: string): Promise<number[]> {
     headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
     body: JSON.stringify({ content: { parts: [{ text }] }, taskType: 'RETRIEVAL_QUERY', outputDimensionality: DIMS }),
   }, 20_000)
-  if (res.status === 401 || res.status === 403) throw new Said('The Gemini key was refused. Check GEMINI_API_KEY.')
-  if (!res.ok) throw new Said(`Could not read what you wrote (embedding answered ${res.status}).`)
+  // What the person sees never names the service behind the letter; the detail goes to the logs.
+  if (res.status === 401 || res.status === 403) { console.error('embedding: key refused', res.status); throw new Said(KEY_REFUSED) }
+  if (!res.ok) { console.error('embedding answered', res.status); throw new Said(TRY_AGAIN) }
   const data = await res.json()
   const values = data?.embedding?.values
-  if (!Array.isArray(values) || values.length !== DIMS) throw new Said('The embedding came back in the wrong shape.')
+  if (!Array.isArray(values) || values.length !== DIMS) { console.error('embedding: wrong shape'); throw new Said(TRY_AGAIN) }
   return normalise(values as number[])
 }
 
 interface Generated { text: string; model: string }
 
 /** Asks the first model that exists; waits out one rate-limit or hiccup per model before moving on. */
-async function generate(system: string, prompt: string, key: string): Promise<Generated> {
+async function generate(system: string, prompt: string, key: string, schema: object = SCHEMA): Promise<Generated> {
   const pinned = env('GEMINI_MODEL')?.trim()
   const models = [...new Set([pinned, ...MODELS].filter((m): m is string => Boolean(m)))]
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.7, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: SCHEMA },
+    generationConfig: { temperature: 0.7, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: schema },
     safetySettings: [
       // Someone describing abuse or despair must not be answered with silence.
       { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
@@ -501,24 +709,24 @@ async function generate(system: string, prompt: string, key: string): Promise<Ge
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
     ],
   })
-  let lastProblem = 'No model answered.'
+  let lastProblem = 'no model answered'
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
       let res: Response
       try {
         res = await timed(`${GEMINI}/models/${model}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' }, body })
       } catch (e) {
-        lastProblem = e instanceof Error && e.name === 'AbortError' ? 'The letter took too long to write.' : 'Gemini could not be reached.'
+        lastProblem = e instanceof Error && e.name === 'AbortError' ? 'timed out' : 'unreachable'
         break
       }
-      if (res.status === 404) { lastProblem = `Model ${model} is not available.`; break }
-      if (res.status === 401 || res.status === 403) throw new Said('The Gemini key was refused. Check GEMINI_API_KEY.')
+      if (res.status === 404) { lastProblem = `model ${model} not available`; break }
+      if (res.status === 401 || res.status === 403) { console.error('generate: key refused', res.status); throw new Said(KEY_REFUSED) }
       if (res.status === 429 || res.status >= 500) {
-        lastProblem = res.status === 429 ? 'Gemini is busy right now.' : `Gemini answered ${res.status}.`
+        lastProblem = res.status === 429 ? 'rate limited' : `answered ${res.status}`
         await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
         continue
       }
-      if (!res.ok) { lastProblem = `Gemini answered ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`; break }
+      if (!res.ok) { lastProblem = `answered ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`; break }
       const data = await res.json()
       const cand = data?.candidates?.[0]
       const text = cand?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? ''
@@ -529,7 +737,8 @@ async function generate(system: string, prompt: string, key: string): Promise<Ge
       return { text, model }
     }
   }
-  throw new Said(lastProblem)
+  console.error('generate failed:', lastProblem)
+  throw new Said(lastProblem === 'rate limited' ? BUSY : TRY_AGAIN)
 }
 
 function parseJson(text: string): unknown {
@@ -551,7 +760,7 @@ function roleOf(token: string): string {
   } catch { return '' }
 }
 
-async function whoIs(sb: Supa, authorization: string | null): Promise<{ id: string }> {
+async function whoIs(sb: Supa, authorization: string | null): Promise<{ id: string; token: string }> {
   const token = authorization?.replace(/^Bearer\s+/i, '').trim()
   if (!token || token === sb.anon || roleOf(token) === 'anon') throw new Said('Sign in to ask.', 401)
   // GoTrue identifies the person by the bearer token; the apikey only has to be one of the project's own,
@@ -560,7 +769,7 @@ async function whoIs(sb: Supa, authorization: string | null): Promise<{ id: stri
   if (!res.ok) throw new Said('Your sign-in has expired — sign out and back in.', 401)
   const user = await res.json()
   if (!user?.id) throw new Said('Your sign-in has expired — sign out and back in.', 401)
-  return { id: String(user.id) }
+  return { id: String(user.id), token }
 }
 
 function rest(sb: Supa, path: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<Response> {
@@ -595,12 +804,61 @@ async function firstName(sb: Supa, userId: string): Promise<string> {
   } catch { return '' }
 }
 
-async function lettersToday(sb: Supa, userId: string): Promise<number> {
+/** Whether a PIN exists — a letter may only be born hidden when there is a way back to it. */
+async function hasPin(sb: Supa, userId: string): Promise<boolean> {
+  try {
+    const res = await rest(sb, `bible_prefs?user_id=eq.${encodeURIComponent(userId)}&pin_hash=not.is.null&select=user_id`)
+    const rows = (await res.json()) as unknown[]
+    return Array.isArray(rows) && rows.length > 0
+  } catch { return false }
+}
+
+async function countToday(sb: Supa, table: string, userId: string): Promise<number> {
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-  const res = await rest(sb, `bible_guidance?user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(since)}&select=id`, { headers: { Prefer: 'count=exact', Range: '0-0' } })
+  const res = await rest(sb, `${table}?user_id=eq.${encodeURIComponent(userId)}&created_at=gte.${encodeURIComponent(since)}&select=id`, { headers: { Prefer: 'count=exact', Range: '0-0' } })
   const range = res.headers.get('content-range') ?? ''
   const total = Number(range.split('/')[1])
   return Number.isFinite(total) ? total : 0
+}
+
+interface LetterRow { id: string; context: string; translation: Translation; theme: string; response: Partial<GuidanceBody> | null; hidden: boolean }
+
+/** The letter a question is asked under — the person's own, hidden or not (the service role sees both). */
+async function letterOf(sb: Supa, id: string, userId: string): Promise<LetterRow | null> {
+  const res = await rest(sb, `bible_guidance?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}&select=id,context,translation,theme,response,hidden`)
+  if (!res.ok) { console.error('letter lookup answered', res.status); throw new Said(TRY_AGAIN) }
+  const rows = (await res.json()) as LetterRow[]
+  return Array.isArray(rows) && rows[0] ? rows[0] : null
+}
+
+interface StudyRow { question: string; answer: { text?: string } | null }
+
+/** The thread so far under a visible letter. */
+async function openThread(sb: Supa, guidanceId: string, userId: string): Promise<StudyRow[]> {
+  const res = await rest(sb, `bible_study?guidance_id=eq.${encodeURIComponent(guidanceId)}&user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc&select=question,answer`)
+  if (res.status === 404) throw new Said('The study section is not set up on this Hub yet (migration 013 has not been run).')
+  if (!res.ok) { console.error('thread lookup answered', res.status); throw new Said(TRY_AGAIN) }
+  const rows = (await res.json()) as StudyRow[]
+  return Array.isArray(rows) ? rows : []
+}
+
+/**
+ * The thread under a hidden letter — asked for AS THE PERSON, with their own token, through the same
+ * PIN-checking database function the app uses. A wrong PIN counts against them there exactly as it
+ * would in the app; no PIN at all is not even tried.
+ */
+async function hiddenThread(sb: Supa, token: string, guidanceId: string, pin: string | null): Promise<StudyRow[]> {
+  if (!pin) throw new PinSaid({ ok: false, error: 'locked' })
+  const res = await timed(`${sb.url}/rest/v1/rpc/bible_hidden_study`, {
+    method: 'POST',
+    headers: { apikey: sb.service, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_id: guidanceId, p_pin: pin }),
+  }, 30_000)
+  if (res.status === 404) throw new Said('The study section is not set up on this Hub yet (migration 013 has not been run).')
+  if (!res.ok) { console.error('hidden thread answered', res.status); throw new Said(TRY_AGAIN) }
+  const r = (await res.json()) as { ok?: boolean; study?: StudyRow[] } & Record<string, unknown>
+  if (!r || r.ok !== true) throw new PinSaid(r ?? { ok: false, error: 'locked' })
+  return Array.isArray(r.study) ? r.study : []
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -611,10 +869,10 @@ const handler = async (req: Request): Promise<Response> => {
     const sb: Supa = { url: env('SUPABASE_URL') ?? '', anon: env('SUPABASE_ANON_KEY') ?? '', service: env('SUPABASE_SERVICE_ROLE_KEY') ?? '' }
     if (!sb.url || !sb.anon || !sb.service) throw new Said('This function is missing its Supabase settings.')
     const key = env('GEMINI_API_KEY')
-    if (!key) throw new Said('The Word is not switched on for this Hub yet — add the GEMINI_API_KEY secret.')
+    if (!key) { console.error('GEMINI_API_KEY is not set'); throw new Said('The Word is not switched on for this Hub yet.') }
 
     const body = await req.json().catch(() => ({})) as Record<string, unknown>
-    const action = body.action === 'passage' ? 'passage' : 'guide'
+    const action = body.action === 'passage' ? 'passage' : body.action === 'study' ? 'study' : 'guide'
     const translation: Translation = body.translation === 'KJV' ? 'KJV' : 'BSB'
     const me = await whoIs(sb, req.headers.get('authorization'))
 
@@ -628,11 +886,71 @@ const handler = async (req: Request): Promise<Response> => {
       return json({ passage })
     }
 
+    if (action === 'study') {
+      const guidanceId = typeof body.guidance_id === 'string' ? body.guidance_id.trim() : ''
+      const question = typeof body.question === 'string' ? body.question.replace(/\s+/g, ' ').trim().slice(0, MAX_QUESTION_CHARS) : ''
+      const pin = typeof body.pin === 'string' && body.pin ? body.pin : null
+      if (!/^[0-9a-f-]{36}$/i.test(guidanceId)) throw new Said('Which letter is this about?', 400)
+      if (question.length < 3) throw new Said('Ask a little more.', 400)
+
+      const [canon, name, letter, today] = await Promise.all([canonOf(sb), firstName(sb, me.id), letterOf(sb, guidanceId, me.id), countToday(sb, 'bible_study', me.id)])
+      if (!letter) throw new Said('That letter isn’t there any more.', 404)
+      if (today >= QUESTIONS_PER_DAY) throw new Said('That is a great many questions for one day. Sit with the answers you have, and come back tomorrow.', 429)
+      const thread = letter.hidden ? await hiddenThread(sb, me.token, guidanceId, pin) : await openThread(sb, guidanceId, me.id)
+      const tail = thread.slice(-THREAD_TAIL).map((t) => ({ question: t.question, answer: t.answer?.text ?? '' }))
+
+      // The letter's own translation, so its quoted passages and the new ones read alike.
+      const tr: Translation = letter.translation === 'KJV' ? 'KJV' : 'BSB'
+      const screened = screen(question)
+      // A short follow-up ("and what about him?") searches better with the question before it attached.
+      const lastQ = tail.length ? tail[tail.length - 1].question : ''
+      const q = await embed(question.length < 40 && lastQ ? `${lastQ} ${question}` : question, key)
+      const retrieved = await rpc<Retrieved>(sb, 'bible_retrieve', { query_embedding: JSON.stringify(q), k_verses: K_VERSES, k_topics: K_TOPICS, p_translation: tr })
+      const own = (letter.response?.passages ?? []).map((p) => ({ book_id: p.book_id, chapter: p.chapter, start: p.start, end: p.end, reference: p.reference, verses: p.verses ?? [], note: 'quoted in the letter', score: 1 }))
+      const cands = buildCandidates(retrieved, canon, own)
+      if (cands.length === 0) throw new Said('The Bible index is empty — run the BibleBot "Load and embed" workflow first.')
+      const summary: LetterSummary = {
+        theme: letter.theme,
+        context: letter.context,
+        passages: (letter.response?.passages ?? []).map((p) => ({ reference: p.reference, why: p.why ?? '' })),
+        plan: (letter.response?.plan ?? []).map((p) => ({ reference: p.reference, focus: p.focus ?? '' })),
+      }
+
+      let answer: StudyAnswer
+      let model = ''
+      try {
+        const prompt = studyPrompt(name, summary, tail, question, cands, tr)
+        const whole = (p: unknown) => Boolean(p && typeof (p as { answer?: unknown }).answer === 'string' && ((p as { answer: string }).answer).trim())
+        let out = await generate(SYSTEM_STUDY, prompt, key, STUDY_SCHEMA)
+        model = out.model
+        let parsed = parseJson(out.text)
+        if (!whole(parsed)) {
+          out = await generate(SYSTEM_STUDY, prompt + '\n\nReturn only the JSON object, complete and valid.', key, STUDY_SCHEMA)
+          model = out.model
+          parsed = parseJson(out.text)
+        }
+        answer = whole(parsed) ? assembleStudy(parsed, cands, canon, screened) : fallbackStudy(cands, canon, screened)
+        if (!whole(parsed)) model = `${model} (no answer; passages only)`
+      } catch (e) {
+        if (!(e instanceof Said)) throw e
+        answer = fallbackStudy(cands, canon, screened)
+        model = `fallback: ${e.message}`
+      }
+
+      const row = { guidance_id: guidanceId, user_id: me.id, question, answer, model }
+      const saved = await rest(sb, 'bible_study', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) })
+      if (!saved.ok) throw new Said(`The answer was written but could not be saved (${saved.status}).`)
+      const [study] = (await saved.json()) as unknown[]
+      return json({ study })
+    }
+
     const context = typeof body.context === 'string' ? body.context.replace(/\s+$/g, '').trim().slice(0, MAX_CONTEXT_CHARS) : ''
     if (context.length < 8) throw new Said('Write a little more about what is going on.', 400)
 
-    const [canon, name, today] = await Promise.all([canonOf(sb), firstName(sb, me.id), lettersToday(sb, me.id)])
+    const wantHidden = body.hidden === true
+    const [canon, name, today, pinned] = await Promise.all([canonOf(sb), firstName(sb, me.id), countToday(sb, 'bible_guidance', me.id), wantHidden ? hasPin(sb, me.id) : Promise.resolve(false)])
     if (today >= LETTERS_PER_DAY) throw new Said('That is a great many letters for one day. Sit with the ones you have, and come back tomorrow.', 429)
+    if (wantHidden && !pinned) throw new Said('Set a PIN for hidden letters first, then ask again.', 400)
 
     const screened = screen(context)
     const q = await embed(context, key)
@@ -665,7 +983,7 @@ const handler = async (req: Request): Promise<Response> => {
       model = `fallback: ${e.message}`
     }
 
-    const row = { user_id: me.id, context, translation, theme, response: letter, model }
+    const row = { user_id: me.id, context, translation, theme, response: letter, model, hidden: wantHidden }
     const saved = await rest(sb, 'bible_guidance', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) })
     if (!saved.ok) throw new Said(`The letter was written but could not be saved (${saved.status}).`)
     const [guidance] = (await saved.json()) as unknown[]
@@ -673,6 +991,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (e) {
     // Everything the person can act on comes back as {error} with 200, the way the Hub's other
     // functions do it; only an expired sign-in is an HTTP error, so the app can say exactly that.
+    if (e instanceof PinSaid) return json({ error: e.message, pin: e.pin })
     if (e instanceof Said) return json({ error: e.message }, e.status === 401 ? 401 : 200)
     const msg = e instanceof Error ? e.message : 'Something went wrong.'
     console.error('guide failed:', msg)
