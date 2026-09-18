@@ -1,7 +1,7 @@
 import { createClient, FunctionRegion, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
 import { guessCurrencyCode, searchCountry } from '../lib/currency'
-import type { Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Passage, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
+import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type Household, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type PinError, type PinStatus, type Presence, type ProductHit, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
 
 /**
  * The Word's function runs next to the database rather than next to the phone: it makes several
@@ -50,6 +50,19 @@ export async function fnError(what: string, error: unknown): Promise<Error> {
     return new Error(`Could not reach the ${what} — check your connection.`)
   }
   return new Error(e?.message || `The ${what} did not answer.`)
+}
+
+/**
+ * The PIN functions answer with {ok, ...} rather than raising, so that a wrong guess still counts
+ * (a raised error would roll the count back with everything else). This turns a refusal into a
+ * PinRefused the panel can read — code, tries left, how long the lock lasts.
+ */
+async function pinCall<T = Record<string, unknown>>(sb: SupabaseClient, fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await sb.rpc(fn, args)
+  if (error) fail(error)
+  const r = (data ?? {}) as { ok?: boolean; error?: PinError; attempts_left?: number; locked_until?: string } & T
+  if (!r.ok) throw new PinRefused(r.error ?? 'not_found', r.attempts_left ?? null, r.locked_until ?? null)
+  return r
 }
 
 export function createSupabaseDb(url: string, anonKey: string): Db {
@@ -396,10 +409,10 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       return data.results ?? []
     },
 
-    async askTheWord(context, translation) {
+    async askTheWord(context, translation, hidden = false) {
       const { data, error } = await sb.functions.invoke<{ guidance?: Guidance; error?: string }>(
         'guide',
-        { body: { action: 'guide', context, translation }, region: WORD_REGION },
+        { body: { action: 'guide', context, translation, hidden }, region: WORD_REGION },
       )
       if (error) throw await fnError('Word', error)
       if (!data) throw new Error('The Word sent nothing back.')
@@ -408,17 +421,42 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       return data.guidance
     },
     async listGuidance() {
+      // The policies only ever return the letters in the open; hidden ones need listHiddenGuidance.
       return many<Guidance>(sb.from('bible_guidance').select('*').order('created_at', { ascending: false }).limit(100))
     },
-    async deleteGuidance(id) {
+    async deleteGuidance(id, pin) {
+      if (pin != null) { await pinCall(sb, 'bible_hidden_delete', { p_id: id, p_pin: pin }); return }
       await one(sb.from('bible_guidance').delete().eq('id', id))
     },
-    async setReadingDone(id, index, done) {
+    async setReadingDone(id, index, done, pin) {
+      if (pin != null) return (await pinCall<{ letter: Guidance }>(sb, 'bible_hidden_tick', { p_id: id, p_index: index, p_done: done, p_pin: pin })).letter
       const current = await one<Pick<Guidance, 'plan_done'>>(sb.from('bible_guidance').select('plan_done').eq('id', id).single())
       const plan_done = { ...(current.plan_done ?? {}) }
       if (done) plan_done[String(index)] = new Date().toISOString().slice(0, 10)
       else delete plan_done[String(index)]
       return one<Guidance>(sb.from('bible_guidance').update({ plan_done }).eq('id', id).select().single())
+    },
+
+    async pinStatus() {
+      const { data, error } = await sb.rpc('bible_pin_status')
+      if (error) fail(error)
+      const s = (data ?? {}) as Partial<PinStatus>
+      return { has_pin: Boolean(s.has_pin), locked_until: s.locked_until ?? null, hidden_count: Number(s.hidden_count ?? 0) }
+    },
+    async setPin(pin, oldPin) {
+      await pinCall(sb, 'bible_set_pin', { p_pin: pin, p_old: oldPin ?? null })
+    },
+    async forgetPin() {
+      return (await pinCall<{ deleted: number }>(sb, 'bible_forget_pin', {})).deleted ?? 0
+    },
+    async hideGuidance(id) {
+      await pinCall(sb, 'bible_hide', { p_id: id })
+    },
+    async unhideGuidance(id, pin) {
+      return (await pinCall<{ letter: Guidance }>(sb, 'bible_unhide', { p_id: id, p_pin: pin })).letter
+    },
+    async listHiddenGuidance(pin) {
+      return (await pinCall<{ letters: Guidance[] }>(sb, 'bible_hidden_letters', { p_pin: pin })).letters ?? []
     },
     async readPassage(reading, translation) {
       const { data, error } = await sb.functions.invoke<{ passage?: Passage; error?: string }>(

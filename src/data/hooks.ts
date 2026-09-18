@@ -4,7 +4,7 @@ import { useAuth, useDb } from './session'
 import type {
   Achievement, BlockerKind, BoardItem, Contact, Expense, Guidance, Household, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense, NewHouseTask, NewImage,
   NewMeterReading, NewProject, NewQuote, NewShoppingItem, NewUtilityPurchase,
-  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Utility, UtilityPurchase, XpEvent, XpKind,
+  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, PinStatus, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Utility, UtilityPurchase, XpEvent, XpKind,
 } from './types'
 import { UTILITIES } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
@@ -34,6 +34,8 @@ export const keys = {
   readings: ['readings'] as QueryKey,
   purchases: ['purchases'] as QueryKey,
   guidance: ['guidance'] as QueryKey,
+  guidanceHidden: ['guidance-hidden'] as QueryKey,
+  pinStatus: ['pin-status'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -62,6 +64,30 @@ export function useGuidance() {
   const { db } = useDb()
   const { userId } = useAuth()
   return useHouseholdQuery([...keys.guidance, userId], () => db.listGuidance())
+}
+/** Where the PIN stands: whether there is one, whether it is locked, how many letters sit behind it. */
+export function usePinStatus() {
+  const { db } = useDb()
+  const { userId } = useAuth()
+  return useHouseholdQuery([...keys.pinStatus, userId], () => db.pinStatus())
+}
+/**
+ * The hidden letters, fetched only while a PIN is in hand and dropped from the cache the moment
+ * it isn't (gcTime 0): locking is forgetting. A wrong PIN is an error the unlock sheet shows
+ * itself, so no retry and no toast.
+ */
+export function useHiddenGuidance(pin: string | null) {
+  const { db } = useDb()
+  const { userId } = useAuth()
+  return useQuery({
+    queryKey: [...keys.guidanceHidden, userId, db.mode],
+    queryFn: () => db.listHiddenGuidance(pin!),
+    enabled: Boolean(userId && pin),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  })
 }
 
 /** The shopping list, the chores and the meters — everything that belongs to the house itself. */
@@ -767,32 +793,89 @@ export function useActions() {
 
   // ---- the Word --------------------------------------------------------------
   const guidanceKey = useCallback(() => [...keys.guidance, me?.id ?? null] as QueryKey, [me])
-  const askTheWord = useCallback(async (context: string, translation: Translation) => {
+  const hiddenKey = useCallback(() => [...keys.guidanceHidden, me?.id ?? null] as QueryKey, [me])
+  const pinKey = useCallback(() => [...keys.pinStatus, me?.id ?? null] as QueryKey, [me])
+  // The count moves at once for the eye, then the database has the last word: a refetch that was
+  // already in flight (setting the PIN invalidates too) could otherwise land after the bump with a
+  // number from before the change.
+  const bumpHidden = useCallback((by: number) => {
+    qc.setQueryData<PinStatus>(k(pinKey()), (old) => (old ? { ...old, hidden_count: Math.max(0, old.hidden_count + by) } : old))
+    invalidate(pinKey())
+  }, [qc, k, pinKey, invalidate])
+
+  const askTheWord = useCallback(async (context: string, translation: Translation, hidden = false) => {
     try {
-      const g = await db.askTheWord(context, translation)
-      setList<Guidance>(guidanceKey(), (old) => [g, ...old.filter((x) => x.id !== g.id)])
+      const g = await db.askTheWord(context, translation, hidden)
+      if (g.hidden) {
+        // Only into the hidden cache if it is open; otherwise it waits behind the PIN like the rest.
+        if (qc.getQueryData<Guidance[]>(k(hiddenKey()))) setList<Guidance>(hiddenKey(), (old) => [g, ...old.filter((x) => x.id !== g.id)])
+        bumpHidden(1)
+      } else {
+        setList<Guidance>(guidanceKey(), (old) => [g, ...old.filter((x) => x.id !== g.id)])
+      }
       return g
     } catch (e) { return fail(e, 'write the letter') }
-  }, [db, setList, guidanceKey, fail])
+  }, [db, qc, k, setList, guidanceKey, hiddenKey, bumpHidden, fail])
 
-  const deleteGuidance = useCallback(async (id: string) => {
-    setList<Guidance>(guidanceKey(), (old) => old.filter((g) => g.id !== id))
-    try { await db.deleteGuidance(id) } catch (e) { invalidate(guidanceKey()); return fail(e, 'delete the letter') }
-  }, [db, setList, guidanceKey, invalidate, fail])
+  const deleteGuidance = useCallback(async (g: Guidance, pin?: string) => {
+    const key = g.hidden ? hiddenKey() : guidanceKey()
+    setList<Guidance>(key, (old) => old.filter((x) => x.id !== g.id))
+    try {
+      await db.deleteGuidance(g.id, g.hidden ? pin : undefined)
+      if (g.hidden) bumpHidden(-1)
+    } catch (e) { invalidate(key); return fail(e, 'delete the letter') }
+  }, [db, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail])
 
-  const tickReading = useCallback(async (id: string, index: number, done: boolean) => {
-    setList<Guidance>(guidanceKey(), (old) => old.map((g) => {
-      if (g.id !== id) return g
-      const plan_done = { ...g.plan_done }
+  const tickReading = useCallback(async (g: Guidance, index: number, done: boolean, pin?: string) => {
+    const key = g.hidden ? hiddenKey() : guidanceKey()
+    setList<Guidance>(key, (old) => old.map((x) => {
+      if (x.id !== g.id) return x
+      const plan_done = { ...x.plan_done }
       if (done) plan_done[String(index)] = todayISO(); else delete plan_done[String(index)]
-      return { ...g, plan_done }
+      return { ...x, plan_done }
     }))
-    try { await db.setReadingDone(id, index, done) } catch (e) { invalidate(guidanceKey()); return fail(e, 'save the tick') }
-  }, [db, setList, guidanceKey, invalidate, fail])
+    try { await db.setReadingDone(g.id, index, done, g.hidden ? pin : undefined) } catch (e) { invalidate(key); return fail(e, 'save the tick') }
+  }, [db, setList, guidanceKey, hiddenKey, invalidate, fail])
+
+  const hideGuidance = useCallback(async (g: Guidance) => {
+    setList<Guidance>(guidanceKey(), (old) => old.filter((x) => x.id !== g.id))
+    try {
+      await db.hideGuidance(g.id)
+      if (qc.getQueryData<Guidance[]>(k(hiddenKey()))) setList<Guidance>(hiddenKey(), (old) => [{ ...g, hidden: true }, ...old.filter((x) => x.id !== g.id)])
+      bumpHidden(1)
+    } catch (e) { invalidate(guidanceKey()); return fail(e, 'hide the letter') }
+  }, [db, qc, k, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail])
+
+  const unhideGuidance = useCallback(async (g: Guidance, pin: string) => {
+    setList<Guidance>(hiddenKey(), (old) => old.filter((x) => x.id !== g.id))
+    try {
+      const back = await db.unhideGuidance(g.id, pin)
+      setList<Guidance>(guidanceKey(), (old) => [back, ...old.filter((x) => x.id !== back.id)].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      bumpHidden(-1)
+      return back
+    } catch (e) { invalidate(hiddenKey()); return fail(e, 'bring the letter back') }
+  }, [db, setList, guidanceKey, hiddenKey, bumpHidden, invalidate, fail])
+
+  const setPin = useCallback(async (pin: string, oldPin?: string) => {
+    await db.setPin(pin, oldPin)   // a refusal is shown by the sheet, in its own words
+    invalidate(pinKey())
+  }, [db, invalidate, pinKey])
+
+  const forgetPin = useCallback(async () => {
+    try {
+      const gone = await db.forgetPin()
+      qc.removeQueries({ queryKey: k(hiddenKey()) })
+      invalidate(pinKey())
+      toast({ title: 'PIN forgotten', description: gone ? `${gone} hidden letter${gone === 1 ? '' : 's'} went with it.` : 'There were no hidden letters.', tone: 'neutral' })
+    } catch (e) { return fail(e, 'forget the PIN') }
+  }, [db, qc, k, hiddenKey, invalidate, pinKey, toast, fail])
+
+  /** Locking is forgetting: the hidden letters leave memory with the PIN. */
+  const lockHidden = useCallback(() => { qc.removeQueries({ queryKey: k(hiddenKey()) }) }, [qc, k, hiddenKey])
 
   return {
     award, checkAchievements, invalidate, uploadFile,
-    askTheWord, deleteGuidance, tickReading,
+    askTheWord, deleteGuidance, tickReading, hideGuidance, unhideGuidance, setPin, forgetPin, lockHidden,
     createProject, updateProject, deleteProject,
     addImage, updateImage, deleteImage,
     createContact, updateContact, deleteContact,

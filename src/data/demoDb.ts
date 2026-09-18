@@ -1,5 +1,7 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import type { Achievement, BoardItem, Contact, Expense, Guidance, HouseTask, Invite, InvitePreview, MeterReading, Nudge, Passage, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Unfurled, UtilityPurchase, XpEvent } from './types'
+import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
+import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
+import { uid } from '../lib/utils'
 
 /**
  * The letter the demo writes, whatever is asked. King James, because it is out of copyright and its
@@ -43,12 +45,11 @@ const PSALM_23: Passage = {
     { verse: 6, text: 'Surely goodness and mercy shall follow me all the days of my life: and I will dwell in the house of the LORD for ever.' },
   ],
 }
-import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
-import { uid } from '../lib/utils'
 
 const STORAGE_KEY = 'hub-demo-state-v3'
 const SESSION_KEY = 'hub-demo-user'
 const CHANNEL = 'hub-demo-sync'
+const PIN_KEY = 'hub-demo-word-pins'
 
 function nowISO() {
   return new Date().toISOString()
@@ -118,6 +119,23 @@ export function createDemoDb(): Db {
   }
 
   const currentUser = () => localStorage.getItem(SESSION_KEY)
+
+  // Hidden letters in the demo: a PIN per person, five wrong guesses lock it for fifteen minutes.
+  type DemoPin = { pin: string; failed: number; lockedUntil: number | null }
+  const pins = (): Record<string, DemoPin> => { try { return JSON.parse(localStorage.getItem(PIN_KEY) || '{}') as Record<string, DemoPin> } catch { return {} } }
+  const savePins = (all: Record<string, DemoPin>) => { try { localStorage.setItem(PIN_KEY, JSON.stringify(all)) } catch { /* fine */ } }
+  const checkPin = (pin: string | undefined) => {
+    const me = currentUser() ?? ''
+    const all = pins()
+    const p = all[me]
+    if (!p) throw new PinRefused('pin_not_set')
+    if (p.lockedUntil && p.lockedUntil > Date.now()) throw new PinRefused('pin_locked', null, new Date(p.lockedUntil).toISOString())
+    if (pin === p.pin) { p.failed = 0; p.lockedUntil = null; savePins(all); return }
+    p.failed += 1
+    if (p.failed >= 5) { p.lockedUntil = Date.now() + 15 * 60_000; savePins(all); throw new PinRefused('pin_locked', null, new Date(p.lockedUntil).toISOString()) }
+    savePins(all)
+    throw new PinRefused('wrong_pin', 5 - p.failed)
+  }
 
   const db: Db = {
     mode: 'demo',
@@ -601,17 +619,18 @@ export function createDemoDb(): Db {
         favoured: shop.favoured,
       }))
     },
-    async askTheWord(context, translation) {
+    async askTheWord(context, translation, hidden = false) {
       // No model in demo mode: the same letter for everyone, after a pause long enough to show
       // the waiting screen. The live Hub writes each one from its own Bible index.
       await new Promise((r) => setTimeout(r, 2200))
       const me = currentUser() ?? DEMO_USERS.russel
+      if (hidden && !pins()[me]) throw new PinRefused('pin_not_set')
       // The first sentence stands in for the theme the model would name.
       const first = context.trim().split(/(?<=[.!?])\s/)[0]!.replace(/[.!?]+$/, '')
       const g: Guidance = {
         id: uid(), user_id: me, created_at: nowISO(), context: context.trim(), translation,
         theme: first.length > 40 ? `${first.slice(0, 37).replace(/\s+\S*$/, '')}…` : first,
-        response: DEMO_LETTER, plan_done: {}, model: 'demo',
+        response: DEMO_LETTER, plan_done: {}, model: 'demo', hidden,
       }
       ;(state.guidance ??= []).unshift(g)
       persist()
@@ -619,21 +638,68 @@ export function createDemoDb(): Db {
     },
     async listGuidance() {
       const me = currentUser()
-      return delay((state.guidance ?? []).filter((g) => g.user_id === me).sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      return delay((state.guidance ?? []).filter((g) => g.user_id === me && !g.hidden).sort((a, b) => b.created_at.localeCompare(a.created_at)))
     },
-    async deleteGuidance(id) {
-      state.guidance = (state.guidance ?? []).filter((g) => g.id !== id)
+    async deleteGuidance(id, pin) {
+      const g = (state.guidance ?? []).find((x) => x.id === id)
+      if (!g) throw new PinRefused('not_found')
+      if (g.hidden) checkPin(pin)
+      state.guidance = (state.guidance ?? []).filter((x) => x.id !== id)
       persist()
     },
-    async setReadingDone(id, index, done) {
+    async setReadingDone(id, index, done, pin) {
       const g = (state.guidance ?? []).find((x) => x.id === id)
-      if (!g) throw new Error('That letter is gone.')
+      if (!g) throw new PinRefused('not_found')
+      if (g.hidden) checkPin(pin)
       const plan_done = { ...g.plan_done }
       if (done) plan_done[String(index)] = nowISO().slice(0, 10)
       else delete plan_done[String(index)]
       g.plan_done = plan_done
       persist()
       return { ...g }
+    },
+
+    // The demo keeps its PINs in plain sight in localStorage; the live Hub keeps a bcrypt hash in
+    // the database and refuses hidden rows without it. Same shape, so the panel cannot tell.
+    async pinStatus() {
+      const me = currentUser() ?? ''
+      const p = pins()[me]
+      return delay({ has_pin: Boolean(p), locked_until: p && p.lockedUntil && p.lockedUntil > Date.now() ? new Date(p.lockedUntil).toISOString() : null, hidden_count: (state.guidance ?? []).filter((g) => g.user_id === me && g.hidden).length })
+    },
+    async setPin(pin, oldPin) {
+      const me = currentUser() ?? ''
+      if (!/^[0-9]{4,8}$/.test(pin)) throw new PinRefused('bad_pin')
+      if (pins()[me]) checkPin(oldPin)
+      const all = pins(); all[me] = { pin, failed: 0, lockedUntil: null }; savePins(all)
+    },
+    async forgetPin() {
+      const me = currentUser() ?? ''
+      const before = (state.guidance ?? []).length
+      state.guidance = (state.guidance ?? []).filter((g) => !(g.user_id === me && g.hidden))
+      persist()
+      const all = pins(); delete all[me]; savePins(all)
+      return before - (state.guidance ?? []).length
+    },
+    async hideGuidance(id) {
+      const me = currentUser() ?? ''
+      if (!pins()[me]) throw new PinRefused('pin_not_set')
+      const g = (state.guidance ?? []).find((x) => x.id === id && x.user_id === me && !x.hidden)
+      if (!g) throw new PinRefused('not_found')
+      g.hidden = true
+      persist()
+    },
+    async unhideGuidance(id, pin) {
+      checkPin(pin)
+      const g = (state.guidance ?? []).find((x) => x.id === id && x.hidden)
+      if (!g) throw new PinRefused('not_found')
+      g.hidden = false
+      persist()
+      return { ...g }
+    },
+    async listHiddenGuidance(pin) {
+      checkPin(pin)
+      const me = currentUser()
+      return (state.guidance ?? []).filter((g) => g.user_id === me && g.hidden).sort((a, b) => b.created_at.localeCompare(a.created_at))
     },
     async readPassage(reading) {
       await new Promise((r) => setTimeout(r, 350))

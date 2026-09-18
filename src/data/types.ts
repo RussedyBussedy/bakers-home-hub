@@ -493,6 +493,8 @@ export interface GuidanceBody {
   closing: string
   plan: PlanReading[]
   safety: { concern: boolean; kind: SafetyKind }
+  /** Three questions to start the study with — letters written before the study section have none. */
+  questions?: string[]
 }
 
 export interface Guidance {
@@ -507,6 +509,78 @@ export interface Guidance {
   /** Readings ticked off, by their index in the plan: {"0": "2026-09-17"}. */
   plan_done: Record<string, string>
   model: string
+  /** Behind the PIN: not returned by ordinary reads, only by the PIN functions. */
+  hidden: boolean
+}
+
+/** A reference the answer mentions in passing ("Ruth 2:1"), found in its text and checked against the canon, so it can be opened. */
+export interface StudyMention {
+  /** The exact words in the answer. */
+  text: string
+  reference: string
+  book_id: number
+  book: string
+  chapter: number
+  start: number | null
+  end: number | null
+}
+
+/** The answer to a study question — in the letter's voice, quoting only from the Hub's own index. */
+export interface StudyAnswer {
+  text: string
+  passages: GuidancePassage[]
+  readings: PlanReading[]
+  mentions: StudyMention[]
+  followups: string[]
+  safety: { concern: boolean; kind: SafetyKind }
+}
+
+/** One question asked under a letter, and its answer. Reachable exactly when the letter is. */
+export interface Study {
+  id: string
+  guidance_id: string
+  user_id: string
+  created_at: string
+  question: string
+  answer: StudyAnswer
+  model: string
+}
+
+/** Where things stand with the PIN that guards hidden letters. */
+export interface PinStatus {
+  has_pin: boolean
+  /** Set while five wrong guesses have locked the PIN. */
+  locked_until: string | null
+  hidden_count: number
+}
+
+/** Why a PIN call was refused, in the database's words; the app translates. */
+export type PinError = 'wrong_pin' | 'pin_locked' | 'pin_not_set' | 'bad_pin' | 'not_found' | 'not_signed_in'
+
+export class PinRefused extends Error {
+  code: PinError
+  attemptsLeft: number | null
+  lockedUntil: string | null
+  constructor(code: PinError, attemptsLeft: number | null = null, lockedUntil: string | null = null) {
+    super(pinMessage(code, attemptsLeft, lockedUntil))
+    this.code = code
+    this.attemptsLeft = attemptsLeft
+    this.lockedUntil = lockedUntil
+  }
+}
+
+export function pinMessage(code: PinError, attemptsLeft: number | null = null, lockedUntil: string | null = null): string {
+  switch (code) {
+    case 'wrong_pin': return attemptsLeft === 1 ? 'That isn’t it — one more try before it locks.' : attemptsLeft != null ? `That isn’t it — ${attemptsLeft} tries left.` : 'That isn’t it.'
+    case 'pin_locked': {
+      const mins = lockedUntil ? Math.max(1, Math.ceil((new Date(lockedUntil).getTime() - Date.now()) / 60_000)) : 15
+      return `Too many wrong guesses. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`
+    }
+    case 'pin_not_set': return 'Set a PIN first.'
+    case 'bad_pin': return 'A PIN is 4 to 8 digits.'
+    case 'not_found': return 'That letter isn’t there any more.'
+    case 'not_signed_in': return 'Sign in first.'
+  }
 }
 
 /** A chapter or passage fetched to read in the app. */

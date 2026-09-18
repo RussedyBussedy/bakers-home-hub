@@ -1,7 +1,7 @@
 import type {
   Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseholdBundle, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense,
   Invite, InvitePreview, NewHouseTask, NewImage, NewMeterReading, NewNudge, NewProject, NewQuote, NewShoppingItem, NewSiteVisit, NewTask, NewUtilityPurchase,
-  Nudge, Passage, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Unfurled, UtilityPurchase, XpEvent,
+  Nudge, Passage, PinStatus, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Task, Translation, Unfurled, UtilityPurchase, XpEvent,
 } from './types'
 
 export type ChangeTable =
@@ -142,14 +142,29 @@ export interface Db {
   searchProducts(q: string): Promise<ProductHit[]>
 
   // ---- the Word ----------------------------------------------------
-  /** Writes a pastor's letter for what someone has written, and keeps it — private to them. */
-  askTheWord(context: string, translation: Translation): Promise<Guidance>
+  /** Writes a pastor's letter for what someone has written, and keeps it — private to them. `hidden` puts it straight behind the PIN. */
+  askTheWord(context: string, translation: Translation, hidden?: boolean): Promise<Guidance>
+  /** The letters in the open — never the hidden ones. */
   listGuidance(): Promise<Guidance[]>
-  deleteGuidance(id: string): Promise<void>
-  /** Ticks (or unticks) one reading in a letter's plan. */
-  setReadingDone(id: string, index: number, done: boolean): Promise<Guidance>
+  /** Ticks (or unticks) one reading in a letter's plan. A hidden letter needs the PIN. */
+  setReadingDone(id: string, index: number, done: boolean, pin?: string): Promise<Guidance>
+  /** A hidden letter needs the PIN. */
+  deleteGuidance(id: string, pin?: string): Promise<void>
   /** A chapter or passage from the Hub's Bible, to read in the app. */
   readPassage(reading: Pick<PlanReading, 'book_id' | 'chapter' | 'start' | 'end'>, translation: Translation): Promise<Passage>
+
+  // ---- hidden letters (behind a PIN the database checks) -----------
+  pinStatus(): Promise<PinStatus>
+  /** Sets a PIN of 4–8 digits; changing one needs the old one. Throws PinRefused. */
+  setPin(pin: string, oldPin?: string): Promise<void>
+  /** Forgets the PIN and deletes every hidden letter, since nothing could reach them again. Returns how many went. */
+  forgetPin(): Promise<number>
+  /** Puts a visible letter behind the PIN (one must exist). */
+  hideGuidance(id: string): Promise<void>
+  /** Brings a hidden letter back into the open list. */
+  unhideGuidance(id: string, pin: string): Promise<Guidance>
+  /** The hidden letters, for the right PIN. Throws PinRefused. */
+  listHiddenGuidance(pin: string): Promise<Guidance[]>
 
   // ---- media -------------------------------------------------------
   /** Uploads a blob and returns the storage path to persist. */
