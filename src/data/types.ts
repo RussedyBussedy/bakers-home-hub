@@ -382,8 +382,6 @@ export interface MeterReading {
   /** Water: kilolitres on the dial. Electricity: kWh left on the prepaid meter. */
   reading: number
   read_on: string
-  /** Wall-clock time the dial was read, when it was noted. Null means end-of-day. */
-  read_time: string | null
   photo_path: string | null
   source: ReadingSource
   notes: string
@@ -397,8 +395,6 @@ export interface UtilityPurchase {
   household_id: string
   utility: Utility
   bought_on: string
-  /** Wall-clock time the token was bought, when it was noted. Null means start-of-day. */
-  bought_time: string | null
   amount: number
   units: number
   token: string
@@ -484,6 +480,8 @@ export interface PlanReading {
   start: number | null
   end: number | null
   focus: string
+  /** One question to start a study of this reading with; letters written before the study section have none. */
+  question?: string
 }
 
 export type SafetyKind = 'none' | 'self-harm' | 'abuse' | 'danger' | 'other'
@@ -548,6 +546,8 @@ export interface Study {
   question: string
   answer: StudyAnswer
   model: string
+  /** Under which reading of the plan it was asked (0 = Day 1), or null for the letter as a whole. */
+  reading_index: number | null
 }
 
 /** Where things stand with the PIN that guards hidden letters. */

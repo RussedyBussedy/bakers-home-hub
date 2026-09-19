@@ -166,11 +166,13 @@ export interface Db {
   /** The hidden letters, for the right PIN. Throws PinRefused. */
   listHiddenGuidance(pin: string): Promise<Guidance[]>
 
-  // ---- study: questions under a letter -----------------------------
-  /** Asks a question about a letter and keeps the answer with it. A hidden letter needs the PIN. */
-  askStudy(guidanceId: string, question: string, pin?: string): Promise<Study>
-  /** The thread under a letter, oldest first. A hidden letter needs the PIN. */
+  // ---- study: questions under a letter, or under one reading of its plan ----
+  /** Asks a question about a letter (readingIndex null) or one of its readings (0 = Day 1) and keeps the answer with it. A hidden letter needs the PIN. */
+  askStudy(guidanceId: string, question: string, readingIndex: number | null, pin?: string): Promise<Study>
+  /** The whole thread under a letter — every reading's and the letter's own — oldest first. A hidden letter needs the PIN. */
   listStudy(guidanceId: string, pin?: string): Promise<Study[]>
+  /** Files a question under another reading, or back under the letter. A hidden letter needs the PIN. */
+  moveStudy(id: string, readingIndex: number | null, pin?: string): Promise<Study>
   /** Removes one question and its answer. A hidden letter needs the PIN. */
   deleteStudy(id: string, pin?: string): Promise<void>
 

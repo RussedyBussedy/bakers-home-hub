@@ -903,13 +903,22 @@ export function useActions() {
   // ---- study: questions under a letter ---------------------------------------
   const studyKey = useCallback((letter: Pick<Guidance, 'id' | 'hidden'>) => [...(letter.hidden ? keys.studyHidden : keys.study), me?.id ?? null, letter.id] as QueryKey, [me])
 
-  const askStudy = useCallback(async (letter: Guidance, question: string, pin?: string) => {
+  const askStudy = useCallback(async (letter: Guidance, question: string, readingIndex: number | null, pin?: string) => {
     try {
-      const s = await db.askStudy(letter.id, question, letter.hidden ? pin : undefined)
+      const s = await db.askStudy(letter.id, question, readingIndex, letter.hidden ? pin : undefined)
       setList<Study>(studyKey(letter), (old) => [...old.filter((x) => x.id !== s.id), s])
       return s
     } catch (e) { return fail(e, 'answer the question') }
   }, [db, setList, studyKey, fail])
+
+  /** Files a question under another reading of the plan, or back under the letter. */
+  const moveStudy = useCallback(async (letter: Guidance, s: Study, readingIndex: number | null, pin?: string) => {
+    setList<Study>(studyKey(letter), (old) => old.map((x) => (x.id === s.id ? { ...x, reading_index: readingIndex } : x)))
+    try {
+      const moved = await db.moveStudy(s.id, readingIndex, letter.hidden ? pin : undefined)
+      setList<Study>(studyKey(letter), (old) => old.map((x) => (x.id === moved.id ? moved : x)))
+    } catch (e) { invalidate(studyKey(letter)); return fail(e, 'move the question') }
+  }, [db, setList, studyKey, invalidate, fail])
 
   const deleteStudy = useCallback(async (letter: Guidance, s: Study, pin?: string) => {
     setList<Study>(studyKey(letter), (old) => old.filter((x) => x.id !== s.id))
@@ -918,7 +927,7 @@ export function useActions() {
 
   return {
     award, checkAchievements, invalidate, uploadFile,
-    askTheWord, deleteGuidance, tickReading, hideGuidance, unhideGuidance, setPin, forgetPin, lockHidden, askStudy, deleteStudy,
+    askTheWord, deleteGuidance, tickReading, hideGuidance, unhideGuidance, setPin, forgetPin, lockHidden, askStudy, moveStudy, deleteStudy,
     createProject, updateProject, deleteProject,
     addImage, updateImage, deleteImage,
     createContact, updateContact, deleteContact,

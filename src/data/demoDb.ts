@@ -25,11 +25,11 @@ const DEMO_LETTER: Guidance['response'] = {
   prayer: 'Lord Jesus, I come to You tired and carrying more than I can hold. You said You would give me rest, and I am asking for it now. Draw near to my broken places. Take the worry I keep picking up at night, and keep my heart and my mind in Your peace while I wait for You. Show me the one next step, and give me the courage to take it. Amen.',
   closing: 'The Lord is near to you tonight — nearer than the thing you are afraid of. Rest in that.',
   plan: [
-    { reference: 'Psalm 23', book_id: 19, book: 'Psalm', chapter: 23, start: null, end: null, focus: 'Resting when you cannot fix it: who is doing the leading here?' },
-    { reference: 'Matthew 11:25–30', book_id: 40, book: 'Matthew', chapter: 11, start: 25, end: 30, focus: 'What Jesus means by an easy yoke.' },
-    { reference: 'Philippians 4:4–13', book_id: 50, book: 'Philippians', chapter: 4, start: 4, end: 13, focus: 'Peace and contentment from a prison cell.' },
-    { reference: 'Isaiah 41:8–13', book_id: 23, book: 'Isaiah', chapter: 41, start: 8, end: 13, focus: '“Fear not, for I am with thee” — said to people in exile.' },
-    { reference: 'Psalm 34', book_id: 19, book: 'Psalm', chapter: 34, start: null, end: null, focus: 'A whole psalm from a man who had been very afraid.' },
+    { reference: 'Psalm 23', book_id: 19, book: 'Psalm', chapter: 23, start: null, end: null, focus: 'Resting when you cannot fix it: who is doing the leading here?', question: 'What is the “valley of the shadow of death”, and why does David not fear it?' },
+    { reference: 'Matthew 11:25–30', book_id: 40, book: 'Matthew', chapter: 11, start: 25, end: 30, focus: 'What Jesus means by an easy yoke.', question: 'What was a yoke, and why would Jesus call His easy?' },
+    { reference: 'Philippians 4:4–13', book_id: 50, book: 'Philippians', chapter: 4, start: 4, end: 13, focus: 'Peace and contentment from a prison cell.', question: 'Where was Paul when he wrote this, and what did he have to be content about?' },
+    { reference: 'Isaiah 41:8–13', book_id: 23, book: 'Isaiah', chapter: 41, start: 8, end: 13, focus: '“Fear not, for I am with thee” — said to people in exile.', question: 'Who is Isaiah speaking to here, and what had happened to them?' },
+    { reference: 'Psalm 34', book_id: 19, book: 'Psalm', chapter: 34, start: null, end: null, focus: 'A whole psalm from a man who had been very afraid.', question: 'Who wrote Psalm 34, and what had just happened to him?' },
   ],
   safety: { concern: false, kind: 'none' },
   questions: [
@@ -727,13 +727,14 @@ export function createDemoDb(): Db {
       return (state.guidance ?? []).filter((g) => g.user_id === me && g.hidden).sort((a, b) => b.created_at.localeCompare(a.created_at))
     },
 
-    async askStudy(guidanceId, question, pin) {
+    async askStudy(guidanceId, question, readingIndex, pin) {
       await new Promise((r) => setTimeout(r, 1600))
       const me = currentUser() ?? DEMO_USERS.russel
       const g = (state.guidance ?? []).find((x) => x.id === guidanceId && x.user_id === me)
       if (!g) throw new PinRefused('not_found')
       if (g.hidden) checkPin(pin)
-      const s: Study = { id: uid(), guidance_id: guidanceId, user_id: me, created_at: nowISO(), question: question.trim(), answer: DEMO_ANSWER, model: 'demo' }
+      if (readingIndex != null && !g.response.plan[readingIndex]) throw new Error('That reading isn’t in the letter.')
+      const s: Study = { id: uid(), guidance_id: guidanceId, user_id: me, created_at: nowISO(), question: question.trim(), answer: DEMO_ANSWER, model: 'demo', reading_index: readingIndex }
       ;(state.study ??= []).push(s)
       persist()
       return s
@@ -744,6 +745,15 @@ export function createDemoDb(): Db {
       if (!g) return delay([])
       if (g.hidden) checkPin(pin)
       return delay((state.study ?? []).filter((s) => s.guidance_id === guidanceId).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+    },
+    async moveStudy(id, readingIndex, pin) {
+      const s = (state.study ?? []).find((x) => x.id === id)
+      if (!s) throw new PinRefused('not_found')
+      const g = (state.guidance ?? []).find((x) => x.id === s.guidance_id)
+      if (g?.hidden) checkPin(pin)
+      s.reading_index = readingIndex
+      persist()
+      return { ...s }
     },
     async deleteStudy(id, pin) {
       const s = (state.study ?? []).find((x) => x.id === id)

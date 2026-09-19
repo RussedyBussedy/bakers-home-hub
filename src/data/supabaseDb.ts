@@ -459,10 +459,10 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       return (await pinCall<{ letters: Guidance[] }>(sb, 'bible_hidden_letters', { p_pin: pin })).letters ?? []
     },
 
-    async askStudy(guidanceId, question, pin) {
+    async askStudy(guidanceId, question, readingIndex, pin) {
       const { data, error } = await sb.functions.invoke<{ study?: Study; error?: string; pin?: { error?: PinError; attempts_left?: number; locked_until?: string } }>(
         'guide',
-        { body: { action: 'study', guidance_id: guidanceId, question, ...(pin != null ? { pin } : {}) }, region: WORD_REGION },
+        { body: { action: 'study', guidance_id: guidanceId, question, reading_index: readingIndex, ...(pin != null ? { pin } : {}) }, region: WORD_REGION },
       )
       if (error) throw await fnError('Word', error)
       if (!data) throw new Error('The Word sent nothing back.')
@@ -475,6 +475,11 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
     async listStudy(guidanceId, pin) {
       if (pin != null) return (await pinCall<{ study: Study[] }>(sb, 'bible_hidden_study', { p_id: guidanceId, p_pin: pin })).study ?? []
       return many<Study>(sb.from('bible_study').select('*').eq('guidance_id', guidanceId).order('created_at', { ascending: true }).limit(200))
+    },
+    async moveStudy(id, readingIndex, pin) {
+      if (pin != null) return (await pinCall<{ study: Study }>(sb, 'bible_hidden_study_move', { p_id: id, p_index: readingIndex, p_pin: pin })).study
+      // The one column a person may change on a study row (migration 014).
+      return one<Study>(sb.from('bible_study').update({ reading_index: readingIndex }).eq('id', id).select().single())
     },
     async deleteStudy(id, pin) {
       if (pin != null) { await pinCall(sb, 'bible_hidden_study_delete', { p_id: id, p_pin: pin }); return }
