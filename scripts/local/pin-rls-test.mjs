@@ -1,11 +1,11 @@
 /**
  * Hidden letters, the PIN and the study threads, against a real Postgres — the row-level policies
- * and the SECURITY DEFINER functions of migrations 012 and 013, run as the `authenticated` role the
- * way PostgREST does.
+ * and the SECURITY DEFINER functions of migrations 012, 013 and 014, run as the `authenticated` role
+ * the way PostgREST does.
  *
  * Needs a local Postgres that looks enough like Supabase: schemas `auth` (users table + auth.uid()
  * reading request.jwt.claim.sub) and `extensions` (pgcrypto), roles anon / authenticated /
- * service_role, and migrations 011 + 012 + 013 applied. Not part of `npm run units` for that reason.
+ * service_role, and migrations 011 + 012 + 013 + 014 applied. Not part of `npm run units` for that reason.
  *   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres node scripts/local/pin-rls-test.mjs
  */
 import pg from 'pg';
@@ -38,6 +38,13 @@ eq((await db.query('select context from public.bible_guidance order by context')
 eq(await questions(), ['what is meekness', 'who was david'], 'and the study under them');
 let ins = 'no error'; try { await db.query(`insert into public.bible_study (guidance_id, user_id, question, answer) values ($1, $2, 'x', '{}')`, [L1, U1]) } catch (e) { ins = e.message }
 eq(ins, 'permission denied for table bible_study', 'only the function may write a study row');
+// moving a question between the letter and its readings is the one edit a person may make
+eq((await db.query(`update public.bible_study set reading_index = 2 where id = $1 returning reading_index`, [Q1])).rows, [{ reading_index: 2 }], 'a question can be moved under a reading');
+eq((await db.query(`update public.bible_study set reading_index = null where id = $1 returning reading_index`, [Q1])).rows, [{ reading_index: null }], 'and back under the letter');
+let edit = 'no error'; try { await db.query(`update public.bible_study set question = 'tampered' where id = $1`, [Q1]) } catch (e) { edit = e.message }
+eq(edit, 'permission denied for table bible_study', 'but nothing else on the row can be changed');
+let neg = 'no error'; try { await db.query(`update public.bible_study set reading_index = -1 where id = $1`, [Q1]) } catch (e) { neg = e.message.split('\n')[0] }
+eq(/violates check constraint/.test(neg), true, 'a negative reading is refused');
 eq(await rpc('bible_hidden_letters', ['1234']), { ok: false, error: 'pin_not_set' }, 'hidden letters need a PIN to exist first');
 eq((await rpc('bible_hide', [L1])).error, 'pin_not_set', 'nothing can be hidden before a PIN exists');
 eq(await rpc('bible_set_pin', ['12']), { ok: false, error: 'bad_pin' }, 'a PIN is 4–8 digits');
@@ -56,6 +63,7 @@ eq(await questions(), ['what is meekness'], 'and neither does its study');
 eq((await db.query(`update public.bible_guidance set hidden = false where id = $1 returning context`, [L1])).rows, [], 'and cannot be unhidden by a plain update');
 eq((await db.query(`delete from public.bible_guidance where id = $1 returning context`, [L1])).rows, [], 'nor deleted by a plain delete');
 eq((await db.query(`delete from public.bible_study where id = $1 returning question`, [Q1])).rows, [], 'nor its study');
+eq((await db.query(`update public.bible_study set reading_index = 1 where id = $1 returning id`, [Q1])).rows, [], 'nor can its questions be moved plainly');
 eq((await rpc('bible_pin_status')).hidden_count, 1, 'the count says one is hidden');
 
 eq((await rpc('bible_hidden_letters', ['0000'])).error, 'wrong_pin', 'wrong PIN: nothing');
@@ -66,6 +74,10 @@ eq((await rpc('bible_hidden_study', [L1, '0000'])).error, 'wrong_pin', 'a hidden
 const st = await rpc('bible_hidden_study', [L1, '5678']);
 eq([st.ok, st.study.map(s => s.question), st.study[0].answer], [true, ['who was david'], { text: 'a shepherd' }], 'right PIN: the thread under the hidden letter');
 eq((await rpc('bible_hidden_study', [L2, '5678'])).error, 'not_found', 'but not for a letter that is not hidden');
+const mv = await rpc('bible_hidden_study_move', [Q1, 3, '5678']);
+eq([mv.ok, mv.study.reading_index], [true, 3], 'a hidden letter\'s question moves with the PIN');
+eq((await rpc('bible_hidden_study_move', [Q1, null, '5678'])).study.reading_index, null, 'and back to the letter');
+eq((await rpc('bible_hidden_study_move', [Q2, 0, '5678'])).error, 'not_found', 'the PIN door does not move a visible letter\'s question');
 eq((await rpc('bible_hidden_study_delete', [Q2, '5678'])).error, 'not_found', 'deleting through the PIN door needs a hidden letter');
 eq(await rpc('bible_hidden_study_delete', [Q1, '5678']), { ok: true }, 'a hidden letter\'s question can be removed with the PIN');
 eq((await rpc('bible_hidden_study', [L1, '5678'])).study, [], 'and is gone');
