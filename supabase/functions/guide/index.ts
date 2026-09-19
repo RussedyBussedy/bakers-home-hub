@@ -28,7 +28,10 @@
 //  mentioned in the answer's text are checked against the canon so the app
 //  can open them. Saved to public.bible_study (migration 013); a hidden
 //  letter's thread needs the PIN, which is checked as the person, through
-//  the same database function the app uses.
+//  the same database function the app uses. With `reading_index` the
+//  question sits under one reading of the plan (migration 014): that
+//  reading's own text is fetched and offered to the model as source "r",
+//  quotable by verse range, and only that reading's thread is context.
 //
 //  Deploy from the dashboard: Edge Functions -> Deploy a new function ->
 //  name it "guide" -> paste this file -> Deploy. Then add the secret
@@ -62,6 +65,8 @@ const LETTERS_PER_DAY = 40
 const QUESTIONS_PER_DAY = 120
 /** How much of the thread so far the model gets to see when answering the next question. */
 const THREAD_TAIL = 4
+/** How much of a reading the model gets to see verbatim when a question is asked under it (Psalm 119 would be a lot). */
+const MAX_READING_VERSES = 80
 const TIMEOUT = 55_000
 
 /** What the person is told when something behind the letter fails. Nothing here names a service or a model. */
@@ -318,7 +323,7 @@ How you counsel:
 Rules about Scripture (strict):
 - In "passages", quote ONLY from the numbered CANDIDATES, by their id ("c4"). Never quote, paraphrase or cite verse text from memory anywhere in the letter, and never invent references. Choose 3 to 5 candidates that fit best — two that truly fit beat five that half-fit.
 - In "why", speak to them about that passage in one to three sentences: what it says, and what it means for the thing they wrote.
-- The "plan" is a short reading plan for the coming days — five to seven readings, each a whole chapter or a short passage that takes about ten minutes to read, chosen for THEIR situation. These may come from anywhere in the Bible (not only the candidates), written as exact references such as "Psalm 23", "Philippians 4:4-9" or "1 John 4:7-21", each with a one-line focus for the day.
+- The "plan" is a short reading plan for the coming days — five to seven readings, each a whole chapter or a short passage that takes about ten minutes to read, chosen for THEIR situation. These may come from anywhere in the Bible (not only the candidates), written as exact references such as "Psalm 23", "Philippians 4:4-9" or "1 John 4:7-21", each with a one-line focus for the day and one question they might ask you about that reading — a person in it, a phrase, why it was chosen for them.
 - "theme" is two to four words naming the matter, as a heading in a diary would ("Anxiety about money", "Grief for a father", "A marriage under strain").
 - "questions" are three questions they might want to ask you next about this letter — a person it names ("Who was Boaz, and why does that matter here?"), a word or phrase in a passage, the story around it, what something meant then and now. Short, specific, in their voice, each about a different passage or person in the letter.
 
@@ -343,7 +348,7 @@ export const SCHEMA = {
     plan: {
       type: 'ARRAY',
       description: 'Five to seven readings for the coming days.',
-      items: { type: 'OBJECT', properties: { reference: { type: 'STRING', description: 'An exact reference: "Psalm 23" or "Philippians 4:4-9".' }, focus: { type: 'STRING', description: 'One line on what to look for that day.' } }, required: ['reference', 'focus'] },
+      items: { type: 'OBJECT', properties: { reference: { type: 'STRING', description: 'An exact reference: "Psalm 23" or "Philippians 4:4-9".' }, focus: { type: 'STRING', description: 'One line on what to look for that day.' }, question: { type: 'STRING', description: 'One question they might ask about this reading.' } }, required: ['reference', 'focus', 'question'] },
     },
     questions: { type: 'ARRAY', description: 'Three questions they might ask next about this letter — a person, a word, the story behind a passage.', items: { type: 'STRING' } },
     theme: { type: 'STRING' },
@@ -375,7 +380,7 @@ Write the letter as JSON in the given schema.`
 // The finished letter.
 // ---------------------------------------------------------------------
 export interface GuidancePassage { reference: string; book_id: number; chapter: number; start: number; end: number; verses: VerseLine[]; why: string; note: string }
-export interface PlanReading extends Ref { focus: string }
+export interface PlanReading extends Ref { focus: string; /** One question to start a study of this reading with — the letter's plan has one, a study answer's further readings do not. */ question?: string }
 export interface GuidanceBody {
   greeting: string
   passages: GuidancePassage[]
@@ -423,7 +428,7 @@ export function assemble(raw: unknown, cands: Candidate[], canon: CanonBook[], s
     const ref = parseReference(String((item as { reference?: unknown })?.reference ?? ''), canon)
     if (!ref || planSeen.has(ref.reference) || plan.length >= 7) continue
     planSeen.add(ref.reference)
-    plan.push({ ...ref, focus: clean((item as { focus?: unknown }).focus, 200) })
+    plan.push({ ...ref, focus: clean((item as { focus?: unknown }).focus, 200), question: clean((item as { question?: unknown }).question, 200).replace(/\s+/g, ' ') })
   }
   if (plan.length < 3) {
     for (const p of passages) {
@@ -433,7 +438,7 @@ export function assemble(raw: unknown, cands: Candidate[], canon: CanonBook[], s
       const reference = formatRef(book, p.chapter, null, null)
       if (planSeen.has(reference)) continue
       planSeen.add(reference)
-      plan.push({ book_id: book.id, book: bookLabel(book), chapter: p.chapter, start: null, end: null, reference, focus: `Read the whole chapter around ${p.reference}.` })
+      plan.push({ book_id: book.id, book: bookLabel(book), chapter: p.chapter, start: null, end: null, reference, focus: `Read the whole chapter around ${p.reference}.`, question: '' })
     }
   }
 
@@ -504,8 +509,11 @@ How you answer:
 - Two to five short paragraphs, separated by blank lines. No bullet points, numbering, headings or markdown — the app lays it out. Do not begin with a greeting and do not sign off.
 - Point them to their local church, to trusted people, and to professional help when a question is really about a matter that needs a doctor, a counsellor, a lawyer or the police.
 
+When THE READING is given, the question is about that one reading from their plan: answer from the reading itself first — what it says, its setting, the people and words in it — and only then bring in the rest of Scripture through the candidates.
+
 Rules about Scripture (strict):
 - Quote verse text ONLY from the numbered CANDIDATES, by their id ("c4"), in "passages" — one to four that truly bear on the question, each with one to three sentences on what it says and why it matters here. Never quote or paraphrase verse text from memory anywhere, and never invent a reference.
+- When THE READING is given, it is also a source you may quote: use the id "r" with "verses" naming the verse or range from it ("22", "20-22"), at most a few verses at a time.
 - In "answer", point to Scripture by reference ("Ruth 2:1", "Philippians 4:6-7") and say in your own words what it says; do not put verse text inside "answer".
 - "readings" is optional: up to three passages worth reading in full on this question, from anywhere in the Bible, as exact references ("Ruth 2", "Hebrews 11:1-16") with a one-line focus each. Leave it empty when the candidates already cover it.
 - "followups" are two or three questions they might naturally ask next, short and specific, in their voice.
@@ -520,8 +528,8 @@ export const STUDY_SCHEMA = {
     answer: { type: 'STRING', description: 'Two to five short paragraphs answering the question, separated by blank lines. Scripture by reference only, no verse text.' },
     passages: {
       type: 'ARRAY',
-      description: 'One to four candidate passages, by id, each with why it bears on the question.',
-      items: { type: 'OBJECT', properties: { id: { type: 'STRING', description: 'A candidate id such as "c4".' }, why: { type: 'STRING' } }, required: ['id', 'why'] },
+      description: 'One to four passages, by id, each with why it bears on the question.',
+      items: { type: 'OBJECT', properties: { id: { type: 'STRING', description: 'A candidate id such as "c4", or "r" for the reading itself.' }, why: { type: 'STRING' }, verses: { type: 'STRING', description: 'Only with id "r": the verse or range from the reading, such as "22" or "20-22". Otherwise empty.' } }, required: ['id', 'why'] },
     },
     readings: {
       type: 'ARRAY',
@@ -542,13 +550,25 @@ export const STUDY_SCHEMA = {
 /** What the model is told about the letter a question sits under. */
 export interface LetterSummary { theme: string; context: string; passages: { reference: string; why: string }[]; plan: { reference: string; focus: string }[] }
 export interface StudyTurn { question: string; answer: string }
+/** One reading of the plan, with its text, when the question sits under it. */
+export interface ReadingText { index: number; reference: string; focus: string; book_id: number; book: string; chapter: number; start: number; end: number; verses: VerseLine[] }
 
-export function studyPrompt(name: string, letter: LetterSummary, thread: StudyTurn[], question: string, cands: Candidate[], translation: Translation): string {
+export function studyPrompt(name: string, letter: LetterSummary, thread: StudyTurn[], question: string, cands: Candidate[], translation: Translation, reading?: ReadingText): string {
   const trim = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
   const quoted = letter.passages.map((p) => `- ${p.reference}${p.why ? ` — ${trim(p.why, 240)}` : ''}`).join('\n') || '- (none)'
   const plan = letter.plan.map((p) => `- ${p.reference}${p.focus ? ` — ${trim(p.focus, 120)}` : ''}`).join('\n') || '- (none)'
   const earlier = thread.length
     ? `\n\nEARLIER IN THIS STUDY, oldest first:\n${thread.map((t) => `They asked: ${trim(t.question, 300)}\nYou answered: ${trim(t.answer, 700)}`).join('\n\n')}`
+    : ''
+  const long = translation === 'KJV' ? 'King James Version' : 'Berean Standard Bible'
+  const shown = reading ? reading.verses.slice(0, MAX_READING_VERSES) : []
+  const readingBlock = reading
+    ? `\n\nTHE READING they are asking about — Day ${reading.index + 1} of the plan, ${reading.reference} (${long}):
+Focus that day: ${reading.focus || '(none)'}
+<<<
+${shown.map((v) => `${v.verse} ${v.text.trim()}`).join('\n')}${reading.verses.length > shown.length ? `\n(verses ${shown[shown.length - 1]!.verse + 1}–${reading.verses[reading.verses.length - 1]!.verse} not shown)` : ''}
+>>>
+Quote it with the id "r" and a verse range.`
     : ''
   return `The person's first name: ${name || 'friend'}
 
@@ -561,7 +581,7 @@ ${trim(letter.context.trim(), 1500)}
 Passages quoted in the letter:
 ${quoted}
 Readings you suggested:
-${plan}${earlier}
+${plan}${readingBlock}${earlier}
 
 THEIR QUESTION NOW:
 <<<
@@ -604,18 +624,40 @@ export function findMentions(text: string, canon: CanonBook[]): Mention[] {
   return out
 }
 
-/** Checks a study answer the way assemble() checks a letter: passages by candidate id, readings against the canon, our verse text throughout. */
-export function assembleStudy(raw: unknown, cands: Candidate[], canon: CanonBook[], screened: Safety): StudyAnswer {
+/** A few verses out of the reading, by the range the model named — never more than a handful, never outside it. */
+export function readingSlice(reading: ReadingText, range: unknown, canon: CanonBook[]): GuidancePassage | null {
+  const m = String(range ?? '').match(/(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/)
+  if (!m) return null
+  let start = Number(m[1]), end = m[2] ? Number(m[2]) : start
+  if (end < start) [start, end] = [end, start]
+  const lines = reading.verses.filter((v) => v.verse >= start && v.verse <= end && v.text.trim()).slice(0, 6)
+  if (!lines.length) return null
+  const book = canon.find((b) => b.id === reading.book_id) ?? { id: reading.book_id, name: reading.book }
+  const s = lines[0]!.verse, e = lines[lines.length - 1]!.verse
+  return { reference: formatRef(book, reading.chapter, s, e), book_id: reading.book_id, chapter: reading.chapter, start: s, end: e, verses: lines, why: '', note: 'from the reading' }
+}
+
+/** Checks a study answer the way assemble() checks a letter: passages by candidate id (or a range of the reading), readings against the canon, our verse text throughout. */
+export function assembleStudy(raw: unknown, cands: Candidate[], canon: CanonBook[], screened: Safety, reading?: ReadingText): StudyAnswer {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const byId = new Map(cands.map((c) => [c.id, c]))
   const passages: GuidancePassage[] = []
   const seen = new Set<string>()
   for (const p of Array.isArray(o.passages) ? o.passages : []) {
     const id = String((p as { id?: unknown })?.id ?? '').trim().toLowerCase()
+    const why = clean((p as { why?: unknown }).why, 800)
+    if (passages.length >= 4) break
+    if (id === 'r' && reading) {
+      const slice = readingSlice(reading, (p as { verses?: unknown }).verses, canon)
+      if (!slice || seen.has(slice.reference)) continue
+      seen.add(slice.reference)
+      passages.push({ ...slice, why })
+      continue
+    }
     const c = byId.get(id)
-    if (!c || seen.has(c.id) || passages.length >= 4) continue
-    seen.add(c.id)
-    passages.push({ reference: c.reference, book_id: c.book_id, chapter: c.chapter, start: c.start, end: c.end, verses: c.verses, why: clean((p as { why?: unknown }).why, 800), note: c.note })
+    if (!c || seen.has(c.id) || seen.has(c.reference)) continue
+    seen.add(c.id); seen.add(c.reference)
+    passages.push({ reference: c.reference, book_id: c.book_id, chapter: c.chapter, start: c.start, end: c.end, verses: c.verses, why, note: c.note })
   }
   const readings: PlanReading[] = []
   const readingSeen = new Set<string>()
@@ -831,11 +873,11 @@ async function letterOf(sb: Supa, id: string, userId: string): Promise<LetterRow
   return Array.isArray(rows) && rows[0] ? rows[0] : null
 }
 
-interface StudyRow { question: string; answer: { text?: string } | null }
+interface StudyRow { question: string; answer: { text?: string } | null; reading_index?: number | null }
 
 /** The thread so far under a visible letter. */
 async function openThread(sb: Supa, guidanceId: string, userId: string): Promise<StudyRow[]> {
-  const res = await rest(sb, `bible_study?guidance_id=eq.${encodeURIComponent(guidanceId)}&user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc&select=question,answer`)
+  const res = await rest(sb, `bible_study?guidance_id=eq.${encodeURIComponent(guidanceId)}&user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc&select=question,answer,reading_index`)
   if (res.status === 404) throw new Said('The study section is not set up on this Hub yet (migration 013 has not been run).')
   if (!res.ok) { console.error('thread lookup answered', res.status); throw new Said(TRY_AGAIN) }
   const rows = (await res.json()) as StudyRow[]
@@ -893,20 +935,37 @@ const handler = async (req: Request): Promise<Response> => {
       if (!/^[0-9a-f-]{36}$/i.test(guidanceId)) throw new Said('Which letter is this about?', 400)
       if (question.length < 3) throw new Said('Ask a little more.', 400)
 
+      // Under one reading of the plan (0 = Day 1), or under the letter as a whole (null).
+      const readingIndex = body.reading_index == null ? null : Number(body.reading_index)
+      if (readingIndex != null && !(Number.isInteger(readingIndex) && readingIndex >= 0)) throw new Said('Which reading is this about?', 400)
+
       const [canon, name, letter, today] = await Promise.all([canonOf(sb), firstName(sb, me.id), letterOf(sb, guidanceId, me.id), countToday(sb, 'bible_study', me.id)])
       if (!letter) throw new Said('That letter isn’t there any more.', 404)
       if (today >= QUESTIONS_PER_DAY) throw new Said('That is a great many questions for one day. Sit with the answers you have, and come back tomorrow.', 429)
-      const thread = letter.hidden ? await hiddenThread(sb, me.token, guidanceId, pin) : await openThread(sb, guidanceId, me.id)
-      const tail = thread.slice(-THREAD_TAIL).map((t) => ({ question: t.question, answer: t.answer?.text ?? '' }))
-
+      const planItem = readingIndex == null ? null : (letter.response?.plan ?? [])[readingIndex] ?? null
+      if (readingIndex != null && !planItem) throw new Said('That reading isn’t in the letter.', 400)
       // The letter's own translation, so its quoted passages and the new ones read alike.
       const tr: Translation = letter.translation === 'KJV' ? 'KJV' : 'BSB'
+      const [thread, readingText] = await Promise.all([
+        letter.hidden ? hiddenThread(sb, me.token, guidanceId, pin) : openThread(sb, guidanceId, me.id),
+        planItem ? rpc<{ book_id: number; book: string; chapter: number; start: number; end: number; verses: VerseLine[] } | null>(sb, 'bible_passage', { p_book: planItem.book_id, p_chapter: planItem.chapter, p_start: planItem.start, p_end: planItem.end, p_translation: tr }) : Promise.resolve(null),
+      ])
+      const reading: ReadingText | undefined = planItem && readingText && Array.isArray(readingText.verses)
+        ? { index: readingIndex!, reference: planItem.reference, focus: planItem.focus ?? '', book_id: readingText.book_id, book: readingText.book, chapter: readingText.chapter, start: readingText.start, end: readingText.end, verses: readingText.verses }
+        : undefined
+      // Only the thread in the same place is context: a reading's study stands on its own.
+      const scoped = thread.filter((t) => (t.reading_index ?? null) === readingIndex)
+      const tail = scoped.slice(-THREAD_TAIL).map((t) => ({ question: t.question, answer: t.answer?.text ?? '' }))
+
       const screened = screen(question)
-      // A short follow-up ("and what about him?") searches better with the question before it attached.
+      // A short follow-up ("and what about him?") searches better with the question before it attached;
+      // under a reading, the reference goes in front so the search knows where it is standing.
       const lastQ = tail.length ? tail[tail.length - 1].question : ''
-      const q = await embed(question.length < 40 && lastQ ? `${lastQ} ${question}` : question, key)
+      const query = `${reading ? `${reading.reference}: ` : ''}${question.length < 40 && lastQ ? `${lastQ} ${question}` : question}`
+      const q = await embed(query, key)
       const retrieved = await rpc<Retrieved>(sb, 'bible_retrieve', { query_embedding: JSON.stringify(q), k_verses: K_VERSES, k_topics: K_TOPICS, p_translation: tr })
-      const own = (letter.response?.passages ?? []).map((p) => ({ book_id: p.book_id, chapter: p.chapter, start: p.start, end: p.end, reference: p.reference, verses: p.verses ?? [], note: 'quoted in the letter', score: 1 }))
+      // The letter's own passages lead the candidates for a question about the letter; under a reading they step back.
+      const own = (letter.response?.passages ?? []).map((p) => ({ book_id: p.book_id, chapter: p.chapter, start: p.start, end: p.end, reference: p.reference, verses: p.verses ?? [], note: 'quoted in the letter', score: reading ? 0.5 : 1 }))
       const cands = buildCandidates(retrieved, canon, own)
       if (cands.length === 0) throw new Said('The Bible index is empty — run the BibleBot "Load and embed" workflow first.')
       const summary: LetterSummary = {
@@ -919,7 +978,7 @@ const handler = async (req: Request): Promise<Response> => {
       let answer: StudyAnswer
       let model = ''
       try {
-        const prompt = studyPrompt(name, summary, tail, question, cands, tr)
+        const prompt = studyPrompt(name, summary, tail, question, cands, tr, reading)
         const whole = (p: unknown) => Boolean(p && typeof (p as { answer?: unknown }).answer === 'string' && ((p as { answer: string }).answer).trim())
         let out = await generate(SYSTEM_STUDY, prompt, key, STUDY_SCHEMA)
         model = out.model
@@ -929,7 +988,7 @@ const handler = async (req: Request): Promise<Response> => {
           model = out.model
           parsed = parseJson(out.text)
         }
-        answer = whole(parsed) ? assembleStudy(parsed, cands, canon, screened) : fallbackStudy(cands, canon, screened)
+        answer = whole(parsed) ? assembleStudy(parsed, cands, canon, screened, reading) : fallbackStudy(cands, canon, screened)
         if (!whole(parsed)) model = `${model} (no answer; passages only)`
       } catch (e) {
         if (!(e instanceof Said)) throw e
@@ -937,7 +996,7 @@ const handler = async (req: Request): Promise<Response> => {
         model = `fallback: ${e.message}`
       }
 
-      const row = { guidance_id: guidanceId, user_id: me.id, question, answer, model }
+      const row = { guidance_id: guidanceId, user_id: me.id, question, answer, model, reading_index: readingIndex }
       const saved = await rest(sb, 'bible_study', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) })
       if (!saved.ok) throw new Said(`The answer was written but could not be saved (${saved.status}).`)
       const [study] = (await saved.json()) as unknown[]
