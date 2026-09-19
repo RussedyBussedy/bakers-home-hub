@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpen, ChevronDown, Copy, ExternalLink, Eye, EyeOff, Feather, Fingerprint, KeyRound, Lock, LockOpen, MessageCircle, MoreHorizontal, PenLine, Phone, SendHorizontal, Share2, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, Copy, CornerDownRight, ExternalLink, Eye, EyeOff, Feather, Fingerprint, GraduationCap, KeyRound, Lock, LockOpen, MessageCircle, MoreHorizontal, PenLine, Phone, SendHorizontal, Share2, Trash2, X } from 'lucide-react'
 import { PinRefused, TRANSLATIONS, type Guidance, type GuidancePassage, type PlanReading, type SafetyKind, type Study, type StudyMention, type Translation } from '../../data/types'
 import { useActions, useGuidance, useHiddenGuidance, usePinStatus, useStudy } from '../../data/hooks'
 import { useAuth, useDb } from '../../data/session'
@@ -586,16 +586,16 @@ function Letter({ letter, pin, firstName, partnerName, onDeleted, onHide, onUnhi
         {r.plan.length > 0 && (
           <section className="border-t border-line bg-surface-2/50 px-5 py-5 sm:px-8 sm:py-6">
             <h3 className="text-[20px] text-ink">Walk with this</h3>
-            <p className="mt-1 text-[14px] text-ink-2">A reading a day for the coming week, chosen for what you wrote. Tap one to read it here; tick it when you have.</p>
+            <p className="mt-1 text-[14px] text-ink-2">A reading a day for the coming week, chosen for what you wrote. Tap one to read it here and study it; tick it when you have.</p>
             <div className="mt-4 space-y-2">
               {r.plan.map((reading, i) => (
-                <ReadingRow key={`${reading.reference}-${i}`} day={i + 1} reading={reading} translation={letter.translation} done={Boolean(letter.plan_done?.[String(i)])} onTick={canTouch ? (v) => void tickReading(letter, i, v, pin ?? undefined) : undefined} />
+                <ReadingRow key={`${reading.reference}-${i}`} day={i + 1} reading={reading} letter={letter} pin={pin} canTouch={canTouch} done={Boolean(letter.plan_done?.[String(i)])} onTick={canTouch ? (v) => void tickReading(letter, i, v, pin ?? undefined) : undefined} />
               ))}
             </div>
           </section>
         )}
 
-        <StudySection letter={letter} pin={pin} canTouch={canTouch} />
+        <StudySection letter={letter} pin={pin} canTouch={canTouch} scope={null} />
 
         <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-5 py-3 text-[12px] leading-relaxed text-ink-3 sm:px-8">
           <span className="max-w-prose">
@@ -681,9 +681,10 @@ function ShareButton({ text, label, className }: { text: string; label: string; 
 // ---------------------------------------------------------------------------
 // The reading plan
 // ---------------------------------------------------------------------------
-function ReadingRow({ day, reading, translation, done, onTick }: { day: number; reading: PlanReading; translation: Translation; done: boolean; onTick?: (v: boolean) => void }) {
+function ReadingRow({ day, reading, letter, pin, canTouch, done, onTick }: { day: number; reading: PlanReading; letter: Guidance; pin: string | null; canTouch: boolean; done: boolean; onTick?: (v: boolean) => void }) {
   const [open, setOpen] = useState(false)
   const calm = useCalm()
+  const translation = letter.translation
   return (
     <div className="rounded-2xl border border-line bg-surface">
       <div className="flex items-center gap-3 px-4 py-3">
@@ -704,6 +705,31 @@ function ReadingRow({ day, reading, translation, done, onTick }: { day: number; 
         {open && (
           <motion.div key="body" initial={calm ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden">
             <PassageReader reading={reading} translation={translation} />
+            <ReadingStudy letter={letter} pin={pin} canTouch={canTouch} index={day - 1} reading={reading} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/** The study of one reading, folded away under its text until wanted; the count on the fold says what is in there. */
+function ReadingStudy({ letter, pin, canTouch, index, reading }: { letter: Guidance; pin: string | null; canTouch: boolean; index: number; reading: PlanReading }) {
+  const [open, setOpen] = useState(false)
+  const calm = useCalm()
+  const q = useStudy(letter, pin)
+  const count = (q.data ?? []).filter((s) => (s.reading_index ?? null) === index).length
+  return (
+    <div className="border-t border-line">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-4 py-3 text-left sm:px-5">
+        <GraduationCap className="size-4 shrink-0 text-primary-text" aria-hidden />
+        <span className="flex-1 text-[14px] font-medium text-ink">Study this reading{count > 0 ? <> <span className="ml-1 text-ink-3">· {count}</span></> : null}</span>
+        <ChevronDown className={cn('size-4 shrink-0 text-ink-3 transition-transform duration-200', open && 'rotate-180')} aria-hidden />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key="study" initial={calm ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden">
+            <StudySection letter={letter} pin={pin} canTouch={canTouch} scope={index} reading={reading} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -753,21 +779,31 @@ function PassageReader({ reading, translation }: { reading: Readable; translatio
 }
 
 // ---------------------------------------------------------------------------
-// Study — questions asked under the letter
+// Study — questions asked under the letter, or under one reading of its plan
 // ---------------------------------------------------------------------------
-function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string | null; canTouch: boolean }) {
-  const { askStudy, deleteStudy } = useActions()
+/** Where a question can be filed: the letter itself, or a day of the plan. */
+function studyPlaces(letter: Guidance): { index: number | null; label: string }[] {
+  return [{ index: null, label: 'The letter' }, ...letter.response.plan.map((r, i) => ({ index: i, label: `Day ${i + 1} · ${r.reference}` }))]
+}
+
+function StudySection({ letter, pin, canTouch, scope, reading }: { letter: Guidance; pin: string | null; canTouch: boolean; scope: number | null; reading?: PlanReading }) {
+  const { askStudy, moveStudy, deleteStudy } = useActions()
   const confirm = useConfirm()
   const q = useStudy(letter, pin)
-  const thread = useMemo(() => q.data ?? [], [q.data])
+  // One thread per letter in the cache; each place shows its own part of it.
+  const thread = useMemo(() => (q.data ?? []).filter((s) => (s.reading_index ?? null) === scope), [q.data, scope])
   const [text, setText] = useState('')
   /** The question being answered right now, shown in its place until the answer lands. */
   const [asking, setAsking] = useState<string | null>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const tail = useRef<HTMLDivElement>(null)
   const justAsked = useRef(false)
-  // The letter's own starters until something has been asked; after that, where the last answer points.
-  const suggestions = thread.length === 0 ? (letter.response.questions ?? []) : (thread[thread.length - 1]!.answer.followups ?? [])
+  // Starters until something has been asked here — the letter's three, or the reading's one — then where the last answer points.
+  const starters = reading
+    ? [reading.question || `What is ${reading.reference} about, and why was it chosen for me?`]
+    : (letter.response.questions ?? [])
+  const suggestions = thread.length === 0 ? starters : (thread[thread.length - 1]!.answer.followups ?? [])
+  const places = studyPlaces(letter)
 
   useEffect(() => {
     if (!justAsked.current) return
@@ -781,7 +817,7 @@ function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string
     setAsking(clean)
     setText('')
     try {
-      await askStudy(letter, clean, pin ?? undefined)
+      await askStudy(letter, clean, scope, pin ?? undefined)
       justAsked.current = true
     } catch {
       setText(clean) // toasted; the question goes back in the box to try again
@@ -794,9 +830,15 @@ function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string
   const submit = (e: FormEvent) => { e.preventDefault(); void ask(text) }
 
   return (
-    <section className="border-t border-line px-5 py-5 sm:px-8 sm:py-6" aria-label="Study">
-      <h3 className="text-[20px] text-ink">Study</h3>
-      <p className="mt-1 text-[14px] text-ink-2">Ask about anything the letter raised — a verse, a person, a word, a place, what something meant then and now. The answers stay here with the letter.</p>
+    <section className={reading ? 'border-t border-line bg-surface-2/40 px-4 py-4 sm:px-5' : 'border-t border-line px-5 py-5 sm:px-8 sm:py-6'} aria-label={reading ? `Study of ${reading.reference}` : 'Study'}>
+      {reading ? (
+        <p className="text-[13px] text-ink-2">Ask about {reading.reference} — a verse in it, a person, a word, what it meant then and now. It can reach across the whole Bible; the answers stay with this reading.</p>
+      ) : (
+        <>
+          <h3 className="text-[20px] text-ink">Study</h3>
+          <p className="mt-1 text-[14px] text-ink-2">Ask about anything the letter raised — a verse, a person, a word, a place, what something meant then and now. Each reading above has a study of its own; this one is for the letter as a whole.</p>
+        </>
+      )}
 
       {!canTouch ? (
         <p className="mt-3 text-[13px] text-ink-3">Unlock your hidden letters to read the study, or add to it.</p>
@@ -808,7 +850,7 @@ function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string
         <>
           {(thread.length > 0 || asking) && (
             <div className="mt-4 space-y-3">
-              {thread.map((s) => <StudyTurn key={s.id} study={s} translation={letter.translation} onRemove={() => void remove(s)} />)}
+              {thread.map((s) => <StudyTurn key={s.id} study={s} translation={letter.translation} places={places} onMove={(to) => void moveStudy(letter, s, to, pin ?? undefined)} onRemove={() => void remove(s)} />)}
               {asking && (
                 <div className="rounded-2xl border border-line bg-surface" role="status" aria-live="polite">
                   <p className="border-b border-line px-4 py-3 text-[15px] text-ink"><span className="text-ink-3">You asked: </span>{asking}</p>
@@ -836,8 +878,8 @@ function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(text) } }}
               rows={2}
               maxLength={MAX_QUESTION_CHARS}
-              placeholder="Ask about a verse, a person, a word…"
-              aria-label="Your question"
+              placeholder={reading ? `Ask about ${reading.reference}…` : 'Ask about a verse, a person, a word…'}
+              aria-label={reading ? `Your question about ${reading.reference}` : 'Your question'}
               className="text-[15px]"
               disabled={Boolean(asking)}
             />
@@ -852,17 +894,22 @@ function StudySection({ letter, pin, canTouch }: { letter: Guidance; pin: string
   )
 }
 
-/** One question and its answer. References in the answer open in place, like the reading plan. */
-function StudyTurn({ study: s, translation, onRemove }: { study: Study; translation: Translation; onRemove: () => void }) {
+/** One question and its answer. References in the answer open in place, like the reading plan; a question asked in the wrong place can be moved. */
+function StudyTurn({ study: s, translation, places, onMove, onRemove }: { study: Study; translation: Translation; places: { index: number | null; label: string }[]; onMove: (to: number | null) => void; onRemove: () => void }) {
   const a = s.answer
   const [open, setOpen] = useState<Readable | null>(null)
   const toggle = (m: Readable) => setOpen((o) => (o && o.reference === m.reference ? null : m))
+  const here = s.reading_index ?? null
   return (
     <div className="rounded-2xl border border-line bg-surface">
       <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
         <p className="text-[15px] text-ink"><span className="text-ink-3">You asked: </span>{s.question}</p>
         <span className="flex shrink-0 items-center">
           <ShareButton text={`${s.question}\n\n${a.text}`} label="Share this answer" />
+          <Menu trigger={<button type="button" className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface-2 hover:text-ink" aria-label="Move this question"><CornerDownRight className="size-4" /></button>}>
+            <MenuLabel>Move to…</MenuLabel>
+            {places.map((p) => <MenuItem key={String(p.index)} disabled={p.index === here} onSelect={() => onMove(p.index)}>{p.label}{p.index === here ? ' (here)' : ''}</MenuItem>)}
+          </Menu>
           <button type="button" onClick={onRemove} className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-surface-2 hover:text-danger" aria-label="Remove this question"><X className="size-4" /></button>
         </span>
       </div>
