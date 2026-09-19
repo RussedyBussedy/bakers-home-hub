@@ -52,7 +52,7 @@ const letterRow = {
   id: LID, context: 'I am anxious about money and cannot sleep', translation: 'BSB', theme: 'Anxiety about money', hidden: false,
   response: {
     passages: [{ reference: 'Psalm 4:8', book_id: 19, chapter: 4, start: 8, end: 8, verses: [{ verse: 8, text: 'I will both lie down and sleep in peace.' }], why: 'Sleep is a gift.', note: 'nearest to what they wrote' }],
-    plan: [{ reference: 'Psalm 23', focus: 'Rest.' }],
+    plan: [{ reference: 'Psalm 23', book_id: 19, book: 'Psalm', chapter: 23, start: null, end: null, focus: 'Rest.', question: 'Who is the shepherd here?' }],
   },
 }
 const studyAnswer = {
@@ -289,6 +289,24 @@ r = await ask({ action: 'study', guidance_id: LID, question: 'And his father?', 
 eq(r.body.error, undefined, 'the right PIN opens the hidden thread')
 eq(world.prompts[0]?.includes('They asked: Who was David?'), true, 'and its history goes to the model')
 eq(world.saved.length, 1, 'and the answer is saved')
+
+// under one reading of the plan
+reset({ study: { ...studyAnswer, passages: [{ id: 'r', why: 'The verse itself.', verses: '1' }, { id: 'c2', why: 'Jesus on the same worry.' }] } })
+r = await ask({ action: 'study', guidance_id: LID, question: 'Why a shepherd?', reading_index: 0 })
+eq(r.body.error, undefined, 'a question under Day 1 is answered')
+eq(r.body.study.reading_index, 0, 'and saved under that reading')
+eq(world.prompts[0]?.includes('THE READING they are asking about — Day 1 of the plan, Psalm 23') && world.prompts[0]?.includes('1 The LORD is my shepherd.'), true, 'the model sees the reading itself')
+eq(world.calls.includes('POST /rest/v1/rpc/bible_passage'), true, 'fetched from the Hub\'s own Bible')
+eq(r.body.study.answer.passages.map((p: { reference: string; note: string }) => [p.reference, p.note]), [['Psalm 23:1', 'from the reading'], ['Philippians 4:6', 'nearest to what they wrote']], 'the reading is quoted by verse range, with our text (and the letter\'s own passage no longer leads the candidates)')
+eq(r.body.study.answer.passages[0].verses[0].text, 'The LORD is my shepherd.', 'word for word')
+reset({ thread: [{ question: 'About the letter', answer: { text: 'Letter-level.' }, reading_index: null }, { question: 'About Day 1', answer: { text: 'Reading-level.' }, reading_index: 0 }] })
+r = await ask({ action: 'study', guidance_id: LID, question: 'And the rod?', reading_index: 0 })
+eq([world.prompts[0]?.includes('They asked: About Day 1'), world.prompts[0]?.includes('They asked: About the letter')], [true, false], 'only that reading\'s thread is context under a reading')
+r = await ask({ action: 'study', guidance_id: LID, question: 'And the shepherd?' })
+eq([world.prompts[1]?.includes('They asked: About the letter'), world.prompts[1]?.includes('They asked: About Day 1')], [true, false], 'and only the letter\'s under the letter')
+reset()
+eq((await ask({ action: 'study', guidance_id: LID, question: 'Who was David?', reading_index: 7 })).body.error, 'That reading isn’t in the letter.', 'a reading the plan does not have')
+eq((await ask({ action: 'study', guidance_id: LID, question: 'Who was David?', reading_index: -1 })).body.error, 'Which reading is this about?', 'or a nonsense index')
 
 // when the model cannot answer a question
 reset({ study: 'blocked' })

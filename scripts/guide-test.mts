@@ -7,7 +7,7 @@
  * what someone wrote must always bring the helplines up whatever the model thought.
  */
 import { readFileSync } from 'node:fs'
-import { assemble, assembleStudy, buildCandidates, clean, fallbackLetter, fallbackStudy, findMentions, formatRef, parseReference, prettyPath, questionsOf, screen, studyPrompt, themeOf, type CanonBook, type Retrieved } from '../supabase/functions/guide/index'
+import { assemble, assembleStudy, buildCandidates, clean, fallbackLetter, fallbackStudy, findMentions, formatRef, parseReference, prettyPath, questionsOf, readingSlice, screen, studyPrompt, themeOf, type CanonBook, type ReadingText, type Retrieved } from '../supabase/functions/guide/index'
 
 const canon = JSON.parse(readFileSync(new URL('./fixtures/bible-canon.json', import.meta.url), 'utf8')) as CanonBook[]
 
@@ -96,8 +96,8 @@ const letter = assemble({
   prayer: 'Lord, quiet my heart.',
   closing: 'Grace and peace.',
   plan: [
-    { reference: 'Psalm 23', focus: 'Rest.' }, { reference: 'Psalm 151', focus: 'Nope.' }, { reference: 'Matthew 6:25-34', focus: 'Worry.' },
-    { reference: 'Psalm 23', focus: 'Twice.' }, { reference: 'Philippians 4:4-9', focus: 'Peace.' },
+    { reference: 'Psalm 23', focus: 'Rest.', question: 'Who is the shepherd, and who are the sheep?' }, { reference: 'Psalm 151', focus: 'Nope.' }, { reference: 'Matthew 6:25-34', focus: 'Worry.' },
+    { reference: 'Psalm 23', focus: 'Twice.' }, { reference: 'Philippians 4:4-9', focus: 'Peace.', question: 42 },
   ],
   theme: 'anxiety about money.',
   safety: { concern: false, kind: 'none' },
@@ -109,7 +109,8 @@ eq(letter.greeting, 'Money worries keep you awake.', 'markdown is stripped')
 eq(letter.understanding, 'Para one.\n\nPara two.', 'paragraph breaks survive, extra blank lines do not')
 eq(letter.response, ['Write the numbers down.', 'Tell Kay.'], 'numbering and bullets are removed, rubbish dropped')
 eq(letter.plan.map((p) => p.reference), ['Psalm 23', 'Matthew 6:25–34', 'Philippians 4:4–9'], 'the plan keeps only real, distinct readings')
-eq(letter.plan[1], { book_id: 40, book: 'Matthew', chapter: 6, start: 25, end: 34, reference: 'Matthew 6:25–34', focus: 'Worry.' }, 'each reading knows where it is')
+eq(letter.plan[1], { book_id: 40, book: 'Matthew', chapter: 6, start: 25, end: 34, reference: 'Matthew 6:25–34', focus: 'Worry.', question: '' }, 'each reading knows where it is')
+eq(letter.plan.map((p) => p.question), ['Who is the shepherd, and who are the sheep?', '', ''], 'a reading carries its starter question when the model gave one')
 eq(letter.safety, { concern: false, kind: 'none' }, 'no concern raised')
 eq(letter.questions, [], 'a letter written without starter questions has none')
 eq(questionsOf(['Who was **David**?', ' who was david? ', 'What does "meek" mean here?', 42, '', 'What happened next?'], 3), ['Who was David?', 'What does "meek" mean here?', 'What happened next?'], 'starter questions: cleaned, deduped, three at most')
@@ -171,7 +172,27 @@ eq(assembleStudy({ answer: 'x', passages: [], readings: [], followups: [], safet
 const sfb = fallbackStudy(scands, canon, screen('who was Boaz?'))
 eq([sfb.passages.length, sfb.passages.every((p) => p.why === ''), sfb.followups], [3, true, []], 'the fallback answer carries the nearest passages and nothing made up')
 const sp = studyPrompt('Russel', { theme: 'Grief for a father', context: 'My dad died', passages: [{ reference: 'Psalm 23', why: 'Comfort.' }], plan: [{ reference: 'Psalm 23', focus: 'Rest.' }] }, [{ question: 'Who was David?', answer: 'A shepherd.' }], 'Why did he write it?', scands, 'BSB')
-eq([sp.includes('Theme: Grief for a father'), sp.includes('They asked: Who was David?'), sp.includes('Why did he write it?'), sp.includes('[c1] Ruth 2:1–3')], [true, true, true, true], 'the model sees the letter, the thread and the candidates')
+eq([sp.includes('Theme: Grief for a father'), sp.includes('They asked: Who was David?'), sp.includes('Why did he write it?'), sp.includes('[c1] Ruth 2:1–3'), sp.includes('THE READING')], [true, true, true, true, false], 'the model sees the letter, the thread and the candidates')
+
+// --- study under one reading of the plan ------------------------------------------
+const psalm: ReadingText = { index: 0, reference: 'Psalm 23', focus: 'Rest.', book_id: 19, book: 'Psalms', chapter: 23, start: 1, end: 6, verses: [1, 2, 3, 4, 5, 6].map((n) => ({ verse: n, text: `Verse ${n} of the psalm.` })) }
+const rp = studyPrompt('Russel', { theme: 'Grief', context: 'My dad died', passages: [], plan: [{ reference: 'Psalm 23', focus: 'Rest.' }] }, [], 'What is the valley of the shadow?', scands, 'BSB', psalm)
+eq([rp.includes('THE READING they are asking about — Day 1 of the plan, Psalm 23 (Berean Standard Bible)'), rp.includes('4 Verse 4 of the psalm.'), rp.includes('Quote it with the id "r"')], [true, true, true], 'under a reading, the model sees the reading itself')
+const longPsalm: ReadingText = { ...psalm, verses: Array.from({ length: 120 }, (_, i) => ({ verse: i + 1, text: `Line ${i + 1}.` })) }
+const lp = studyPrompt('Russel', { theme: '', context: '', passages: [], plan: [] }, [], 'Q?', scands, 'BSB', longPsalm)
+eq([lp.includes('80 Line 80.'), lp.includes('81 Line 81.'), lp.includes('(verses 81–120 not shown)')], [true, false, true], 'a very long reading is cut at 80 verses, and says so')
+eq(readingSlice(psalm, '4-5', canon), { reference: 'Psalm 23:4–5', book_id: 19, chapter: 23, start: 4, end: 5, verses: [{ verse: 4, text: 'Verse 4 of the psalm.' }, { verse: 5, text: 'Verse 5 of the psalm.' }], why: '', note: 'from the reading' }, 'a range of the reading becomes a passage with our text')
+eq(readingSlice(psalm, '6–4', canon)?.reference, 'Psalm 23:4–6', 'a backwards range is put right')
+eq(readingSlice(psalm, '1-20', canon)?.verses.length, 6, 'never more than a handful of verses, never past the end')
+eq(readingSlice(psalm, '9', canon), null, 'a verse the reading does not have is nothing')
+eq(readingSlice(psalm, '', canon), null, 'no range, nothing')
+const rs = assembleStudy({
+  answer: 'The valley is in Psalm 23:4.',
+  passages: [{ id: 'r', why: 'The verse itself.', verses: '4' }, { id: 'R', why: 'again', verses: '4' }, { id: 'c1', why: 'Ruth.' }, { id: 'r', why: 'no range' }],
+  readings: [], followups: [], safety: { concern: false, kind: 'none' },
+}, scands, canon, calm, psalm)
+eq(rs.passages.map((p) => [p.reference, p.note, p.why]), [['Psalm 23:4', 'from the reading', 'The verse itself.'], ['Ruth 2:1–3', 'quoted in the letter', 'Ruth.']], 'the reading is quotable by range as "r", once per range, alongside the candidates')
+eq(assembleStudy({ answer: 'x', passages: [{ id: 'r', why: 'y', verses: '4' }], readings: [], followups: [], safety: { concern: false, kind: 'none' } }, scands, canon, calm).passages, [], 'with no reading given, "r" is not a source')
 
 console.log(failed === 0 ? '\nAll good.' : `\n${failed} failed.`)
 if (failed > 0) process.exit(1)

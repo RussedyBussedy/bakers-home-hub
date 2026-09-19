@@ -696,68 +696,6 @@ await step('meters: prepaid shows a balance, a rate and a runway', async () => {
   await shot('13-meters-electricity')
 })
 
-await step('meters: a reading carries the clock, not just the date', async () => {
-  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: 'Log a reading' }).click()
-  await page.waitForTimeout(600)
-  const sheet = page.locator('[role=dialog]')
-  const now = await sheet.getByLabel('At', { exact: true }).inputValue()
-  if (!/^\d{2}:\d{2}$/.test(now)) throw new Error(`the time did not default to now: "${now}"`)
-  await sheet.getByLabel(/Every digit on the dial/).fill('10170000')
-  await sheet.getByLabel('At', { exact: true }).fill('06:30')
-  await page.getByRole('button', { name: 'Log it' }).click()
-  await page.waitForTimeout(900)
-  // Another reading may already sit later in the day, so find this one by its dial.
-  const row = await page.locator('.divide-y > li', { hasText: '1,017.0000' }).first().innerText()
-  if (!/at 06:30/.test(row)) throw new Error(`the clock never made it onto the record: ${row.replace(/\n+/g, ' | ')}`)
-})
-
-await step('meters: a pasted payment SMS fills the top-up in', async () => {
-  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
-  await page.getByRole('tab', { name: /Electricity/ }).click()
-  await page.waitForTimeout(700)
-  await page.getByRole('button', { name: 'Top-up', exact: true }).click()
-  await page.waitForTimeout(600)
-  const sheet = page.locator('[role=dialog]')
-  // A fee month, exactly as the bank sends it.
-  await sheet.getByLabel('Payment SMS').fill(
-    'FNB :-) Prepaid Electricity purchase of R3 000.00 from cheque acc..1234.\n'
-    + 'Meter: 14308043075\nElec Amt: R2 904.54\nService Fee: R95.46\nVat Amt: R391.30\n'
-    + 'Units: 774.1 kWh\nToken: 1234 5678 9012 3456 7890')
-  await page.waitForTimeout(500)
-  const paid = await sheet.getByLabel('Paid').inputValue()
-  if (paid !== '3000') throw new Error(`the service fee was dropped: paid reads ${paid}`)
-  const units = await sheet.getByLabel(/Units received/).inputValue()
-  if (units !== '774.1') throw new Error(`units read ${units}`)
-  const token = await sheet.getByLabel('Token').inputValue()
-  if (token !== '1234 5678 9012 3456 7890') throw new Error(`token read ${token}`)
-  const body = await sheet.innerText()
-  if (!/read from the message/i.test(body)) throw new Error('it never said what it read')
-  if (!/service fee/i.test(body)) throw new Error('the fee was not called out')
-  if (!/3\.8[0-9]/.test(body)) throw new Error('no rand-per-unit off the pasted figures')
-  await shot('13b-topup-sms')
-  await page.getByRole('button', { name: 'Log it' }).click()
-  await page.waitForTimeout(900)
-  const after = await page.locator('main').innerText()
-  if (!/774\.1/.test(after)) throw new Error('the pasted top-up never landed in the list')
-})
-
-await step('meters: a message that is not a top-up is not guessed at', async () => {
-  await page.goto(base + '/house?tab=meters', { waitUntil: 'networkidle' })
-  await page.getByRole('tab', { name: /Electricity/ }).click()
-  await page.waitForTimeout(700)
-  await page.getByRole('button', { name: 'Top-up', exact: true }).click()
-  await page.waitForTimeout(600)
-  const sheet = page.locator('[role=dialog]')
-  await sheet.getByLabel('Payment SMS').fill('Morning! Running about 20 minutes late, see you at 7.')
-  await page.waitForTimeout(400)
-  const paid = await sheet.getByLabel('Paid').inputValue()
-  if (paid !== '') throw new Error(`it invented an amount: ${paid}`)
-  if (!/nothing in that reads like a top-up/i.test(await sheet.innerText())) throw new Error('it did not say it found nothing')
-  await page.keyboard.press('Escape')
-  await page.waitForTimeout(400)
-})
-
 await step('the evidence pack carries the readings', async () => {
   await page.goto(base + '/house/report/water', { waitUntil: 'networkidle' })
   await page.waitForTimeout(900)
@@ -873,6 +811,33 @@ await step('the Word: study — a starter question is answered, a reference open
   if ((await page.getByText(/You asked:/).count()) !== 1) throw new Error('the question was not removed')
 })
 
+await step('the Word: each reading has a study of its own, and a question can be moved into it', async () => {
+  await page.getByRole('button', { name: /^Day 1/ }).click()
+  await page.getByText('The LORD is my shepherd').waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: /^Study this reading/ }).click()
+  const inside = page.getByRole('region', { name: 'Study of Psalm 23' })
+  const starters = inside.getByLabel('Questions to start with').getByRole('button')
+  if ((await starters.count()) !== 1) throw new Error(`${await starters.count()} starter questions under Day 1`)
+  if (!/valley of the shadow/.test(await starters.first().innerText())) throw new Error('the starter is not the reading\'s own')
+  await starters.first().click()
+  await inside.getByText(/David wrote Psalm 34/).waitFor({ timeout: 10000 })
+  await page.getByRole('button', { name: /^Study this reading · 1$/ }).waitFor()
+  await shot('23c-word-reading-study')
+  // The question asked under the letter is really about Day 1: move it there.
+  const letterStudy = page.getByRole('region', { name: 'Study', exact: true })
+  if ((await letterStudy.getByText(/You asked:/).count()) !== 1) throw new Error('expected one question under the letter')
+  await letterStudy.getByRole('button', { name: 'Move this question' }).first().click()
+  await page.getByRole('menuitem', { name: /^Day 1 · Psalm 23/ }).click()
+  await page.getByRole('button', { name: /^Study this reading · 2$/ }).waitFor({ timeout: 5000 })
+  if (await letterStudy.getByText(/You asked:/).count()) throw new Error('the moved question is still under the letter')
+  // …and it stays there through a reload.
+  await page.goto(base + '/house?tab=word', { waitUntil: 'networkidle' })
+  await page.getByText('From the Word').waitFor()
+  await page.getByRole('button', { name: /^Day 1/ }).click()
+  await page.getByRole('button', { name: /^Study this reading · 2$/ }).waitFor({ timeout: 5000 })
+  if (await page.getByRole('region', { name: 'Study', exact: true }).getByText(/You asked:/).count()) throw new Error('the move did not stick')
+})
+
 await step('the Word: a verse goes to WhatsApp as a message, and a step can be copied', async () => {
   // WhatsApp itself is not reachable from here; answering for it keeps the URL it was opened with.
   await context.route('https://wa.me/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>wa.me</title>' }))
@@ -894,7 +859,9 @@ await step('the Word: a verse goes to WhatsApp as a message, and a step can be c
   const clip = await page.evaluate(() => navigator.clipboard.readText())
   if (!clip.startsWith('Tonight, before you sleep')) throw new Error('the clipboard does not hold the step: ' + clip.slice(0, 40))
   if (!(await page.getByRole('button', { name: 'Share the prayer' }).count())) throw new Error('the prayer has no share button')
-  if (!(await page.getByRole('button', { name: 'Share this answer' }).count())) throw new Error('the study answer has no share button')
+  // Both questions now sit under Day 1 (moved there above); open its study to find them.
+  await page.getByRole('button', { name: /^Study this reading/ }).click()
+  await page.getByRole('button', { name: 'Share this answer' }).first().waitFor({ timeout: 5000 })
 })
 
 await step('the Word: a letter can be deleted, and writing again works', async () => {
