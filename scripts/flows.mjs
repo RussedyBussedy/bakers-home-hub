@@ -789,6 +789,47 @@ await step('the Hub says what the house needs', async () => {
 })
 
 // ---------------------------------------------------------------------------
+// The TV: what it reports, a change that goes to it, and linking it by its code
+// ---------------------------------------------------------------------------
+await step('the TV: what it reports, and a change reaches it', async () => {
+  await page.setViewportSize({ width: 1280, height: 860 })
+  await page.goto(base + '/house?tab=tv', { waitUntil: 'networkidle' })
+  await page.getByText('Lounge TV').first().waitFor({ timeout: 5000 })
+  if (!(await page.getByText('On now').count())) throw new Error('the demo TV is not on')
+  if (!(await page.getByText(/Re-grouting a shower/).count())) throw new Error('what it is playing is missing')
+  await page.getByRole('tab', { name: 'Glass tiles' }).click()
+  await page.getByText('Sending to the TV').waitFor({ timeout: 3000 })
+  await page.getByText('Sending to the TV').waitFor({ state: 'detached', timeout: 6000 })
+  if ((await page.getByRole('tab', { name: 'Glass tiles' }).getAttribute('aria-selected')) !== 'true') throw new Error('the TV did not keep the change')
+})
+
+await step('the TV: a photo added here goes to it, and comes off again', async () => {
+  await page.goto(base + '/house?tab=tv', { waitUntil: 'networkidle' })
+  const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  await page.getByLabel('Photos for the TV').setInputFiles({ name: 'garden.png', mimeType: 'image/png', buffer: pixel })
+  await page.getByText('On its way').first().waitFor({ timeout: 8000 })
+  await page.getByText('On the TV', { exact: true }).first().waitFor({ timeout: 8000 })
+  if (!(await page.getByText('1 of 1 on the TV').count())) throw new Error('the count of photos on the TV is wrong')
+  await page.getByRole('button', { name: 'Take this photo off the TV' }).first().click()
+  await page.getByRole('button', { name: 'Take it off', exact: true }).click()
+  await page.getByText('On the TV', { exact: true }).waitFor({ state: 'detached', timeout: 5000 })
+})
+
+await step('the TV: unlink it, and link it again with the code it shows', async () => {
+  await page.goto(base + '/house?tab=tv', { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Unlink this TV' }).click()
+  await page.getByRole('button', { name: 'Unlink', exact: true }).click()
+  const code = page.getByLabel('The code on the TV')
+  await code.waitFor({ timeout: 5000 })
+  const link = page.getByRole('button', { name: 'Link', exact: true })
+  await code.fill('kq7')
+  if (!(await link.isDisabled())) throw new Error('Link is live before the code is whole')
+  await code.fill('kq7 mx4')
+  await link.click()
+  await page.getByText('Lounge TV').first().waitFor({ timeout: 5000 })
+})
+
+// ---------------------------------------------------------------------------
 // The Word: write it down, get a letter, walk the plan
 // ---------------------------------------------------------------------------
 await step('the Word: a letter comes back for what was written', async () => {
