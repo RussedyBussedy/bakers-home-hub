@@ -1,7 +1,7 @@
 import { createClient, FunctionRegion, type SupabaseClient } from '@supabase/supabase-js'
 import type { ChangePayload, ChangeTable, Db } from './db'
 import { guessCurrencyCode, searchCountry } from '../lib/currency'
-import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type Household, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type PinError, type PinStatus, type Presence, type ProductHit, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Study, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
+import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type Household, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type PinError, type PinStatus, type Presence, type ProductHit, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Study, type Task, type TvDevice, type TvPhoto, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
 
 /**
  * The Word's function runs next to the database rather than next to the phone: it makes several
@@ -11,6 +11,7 @@ const WORD_REGION = FunctionRegion.EuWest1
 
 const BUCKET = 'media'
 const SIGNED_TTL = 60 * 60 * 24 // 24h
+const TV_LINK_TTL = 60 * 60 * 24 * 365 * 5 // the TV's links to its photos: five years
 const URL_CACHE_KEY = 'hub-signed-urls-v1'
 
 type UrlCache = Record<string, { url: string; exp: number }>
@@ -494,6 +495,49 @@ export function createSupabaseDb(url: string, anonKey: string): Db {
       if (!data?.passage) throw new Error(data?.error || 'That passage could not be found.')
       return data.passage
     },
+
+    // ---- the TV: reads through row-level security, every write through a function (016) ----
+    async listTvs() {
+      return many<TvDevice>(sb.from('tv_devices').select('*').order('created_at'))
+    },
+    async claimTv(code) {
+      const { data, error } = await sb.rpc('tv_claim', { p_code: code })
+      if (error) fail(error)
+      const r = (data ?? {}) as { ok?: boolean; id?: string; error?: string }
+      if (!r.ok || !r.id) {
+        throw new Error(r.error === 'no_such_code'
+          ? 'No TV is showing that code. Check it on the TV — a code lasts half an hour, and the TV will show a new one.'
+          : 'That TV could not be linked just now.')
+      }
+      return one<TvDevice>(sb.from('tv_devices').select('*').eq('id', r.id).single())
+    },
+    async setTv(id, patch) {
+      const { data, error } = await sb.rpc('tv_set', { p_id: id, p_patch: patch })
+      if (error) fail(error)
+      if (!(data as { ok?: boolean } | null)?.ok) throw new Error('That TV is no longer linked to this home.')
+      return one<TvDevice>(sb.from('tv_devices').select('*').eq('id', id).single())
+    },
+    async unlinkTv(id) {
+      const { data, error } = await sb.rpc('tv_unlink', { p_id: id })
+      if (error) fail(error)
+      if (!(data as { ok?: boolean } | null)?.ok) throw new Error('That TV is no longer linked to this home.')
+    },
+    async listTvPhotos() {
+      return many<TvPhoto>(sb.from('tv_photos').select('*').order('created_at'))
+    },
+    async addTvPhoto(input) {
+      return one<TvPhoto>(sb.from('tv_photos').insert(input).select().single())
+    },
+    async deleteTvPhoto(id) {
+      await one(sb.from('tv_photos').delete().eq('id', id))
+    },
+    async longUrl(path) {
+      // The TV fetches a photo once, soon after it's added; the link dies with the file if it's taken off.
+      const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, TV_LINK_TTL)
+      if (error || !data) fail(error)
+      return data.signedUrl
+    },
+
     async upload(blob, path) {
       const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false })
       if (error) fail(error)

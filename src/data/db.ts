@@ -1,13 +1,13 @@
 import type {
   Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseholdBundle, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense,
   Invite, InvitePreview, NewHouseTask, NewImage, NewMeterReading, NewNudge, NewProject, NewQuote, NewShoppingItem, NewSiteVisit, NewTask, NewUtilityPurchase,
-  Nudge, Passage, PinStatus, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, Translation, Unfurled, UtilityPurchase, XpEvent,
+  Nudge, NewTvPhoto, Passage, PinStatus, PlanReading, Presence, ProductHit, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, Translation, TvDesired, TvDevice, TvPhoto, Unfurled, UtilityPurchase, XpEvent,
 } from './types'
 
 export type ChangeTable =
   | 'projects' | 'project_images' | 'contacts' | 'quotes' | 'expenses' | 'tasks'
   | 'board_items' | 'xp_events' | 'achievements' | 'profiles' | 'nudges' | 'site_visits' | 'invites'
-  | 'shopping_items' | 'house_tasks' | 'meter_readings' | 'utility_purchases'
+  | 'shopping_items' | 'house_tasks' | 'meter_readings' | 'utility_purchases' | 'tv_devices' | 'tv_photos'
 
 export interface ChangePayload {
   table: ChangeTable
@@ -175,6 +175,22 @@ export interface Db {
   moveStudy(id: string, readingIndex: number | null, pin?: string): Promise<Study>
   /** Removes one question and its answer. A hidden letter needs the PIN. */
   deleteStudy(id: string, pin?: string): Promise<void>
+
+  // ---- the TV (its home screen, linked by a code it shows) -----------
+  listTvs(): Promise<TvDevice[]>
+  /** Links the TV showing this code to the home. Throws, in words, if no TV is showing it. */
+  claimTv(code: string): Promise<TvDevice>
+  /** Changes what the TV should be; it takes it at its next check-in. */
+  setTv(id: string, patch: TvDesired): Promise<TvDevice>
+  /** Lets the TV go; it forgets the link at its next check-in. */
+  unlinkTv(id: string): Promise<void>
+  /** Photos added here for the TV's slideshow and backgrounds, oldest first. */
+  listTvPhotos(): Promise<TvPhoto[]>
+  addTvPhoto(input: NewTvPhoto): Promise<TvPhoto>
+  /** Takes a photo off the TV (at its next check-in); the stored file is removed separately. */
+  deleteTvPhoto(id: string): Promise<void>
+  /** A link to a stored file that keeps working for years, for something with no account to sign in with (the TV). */
+  longUrl(path: string): Promise<string>
 
   // ---- media -------------------------------------------------------
   /** Uploads a blob and returns the storage path to persist. */

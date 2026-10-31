@@ -1,6 +1,6 @@
 import type { ChangePayload, ChangeTable, Db } from './db'
-import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Study, type StudyAnswer, type Task, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
-import { buildDemoState, DEMO_USERS, type DemoState } from './demoSeed'
+import { PinRefused, type Achievement, type BoardItem, type Contact, type Expense, type Guidance, type HouseTask, type Invite, type InvitePreview, type MeterReading, type Nudge, type Passage, type Profile, type Project, type ProjectImage, type Quote, type ShoppingItem, type SiteVisit, type Study, type StudyAnswer, type Task, type TvPhoto, type Unfurled, type UtilityPurchase, type XpEvent } from './types'
+import { buildDemoState, demoTv, DEMO_USERS, type DemoState } from './demoSeed'
 import { uid } from '../lib/utils'
 
 /**
@@ -771,6 +771,78 @@ export function createDemoDb(): Db {
         verses: [{ verse: reading.start ?? 1, text: 'In the demo only Psalm 23 can be opened here. The live Hub reads every chapter from its own Bible.' }],
       }
     },
+
+    // ---- the TV: a sample one, always on; any six-letter code links another like it ----
+    async listTvs() {
+      return delay((state.tvs ?? []).map((t) => ({ ...t, last_seen: nowISO() })))
+    },
+    async claimTv(code) {
+      if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code.replace(/[^a-z0-9]/gi, '').toUpperCase())) {
+        throw new Error('No TV is showing that code. Check it on the TV — a code lasts half an hour, and the TV will show a new one.')
+      }
+      return mutate('tv_devices', 'INSERT', () => {
+        const tv = demoTv(state.household.id)
+        ;(state.tvs ??= []).push(tv)
+        return tv
+      })
+    },
+    async setTv(id, patch) {
+      const saved = await mutate('tv_devices', 'UPDATE', () => {
+        const t = (state.tvs ?? []).find((x) => x.id === id)
+        if (!t) throw new Error('That TV is no longer linked to this home.')
+        t.desired = { ...t.desired, ...patch }
+        t.desired_version += 1
+        return t
+      })
+      // The TV takes the change a moment later, the way a real one does at its next check-in.
+      setTimeout(() => {
+        void mutate('tv_devices', 'UPDATE', () => {
+          const t = (state.tvs ?? []).find((x) => x.id === id)
+          if (!t) return undefined
+          const s = { ...t.report.settings }
+          if (patch.style) s.style = patch.style
+          if (patch.font) s.font = patch.font
+          if (patch.weather) s.weather = patch.weather.place
+          if (patch.favourites) s.favourites = patch.favourites
+          if (patch.buttons) s.buttons = { ...s.buttons, ...patch.buttons }
+          t.report = { ...t.report, settings: s, applied: t.desired_version }
+          return t
+        })
+      }, 2500)
+      return saved
+    },
+    async unlinkTv(id) {
+      await mutate('tv_devices', 'DELETE', () => { state.tvs = (state.tvs ?? []).filter((x) => x.id !== id); return undefined }, { id })
+    },
+    async listTvPhotos() {
+      return delay([...(state.tvPhotos ?? [])])
+    },
+    async addTvPhoto(input) {
+      const photo = await mutate('tv_photos', 'INSERT', () => {
+        const p: TvPhoto = { ...input, id: uid(), created_at: nowISO() }
+        ;(state.tvPhotos ??= []).push(p)
+        return p
+      })
+      // The demo TV fetches it a moment later, as a real one does at its next check-in.
+      setTimeout(() => {
+        void mutate('tv_devices', 'UPDATE', () => {
+          for (const t of state.tvs ?? []) t.report = { ...t.report, photo_ids: [...(t.report.photo_ids ?? []), photo.id] }
+          return undefined
+        })
+      }, 2500)
+      return photo
+    },
+    async deleteTvPhoto(id) {
+      await mutate('tv_photos', 'DELETE', () => {
+        state.tvPhotos = (state.tvPhotos ?? []).filter((x) => x.id !== id)
+        for (const t of state.tvs ?? []) t.report = { ...t.report, photo_ids: (t.report.photo_ids ?? []).filter((x) => x !== id) }
+        return undefined
+      }, { id })
+    },
+    async longUrl(path) {
+      return path
+    },
+
     async upload(blob) {
       // Store as a data URL so it survives a refresh (within localStorage limits).
       return new Promise<string>((resolve, reject) => {

@@ -591,6 +591,76 @@ export function pinMessage(code: PinError, attemptsLeft: number | null = null, l
   }
 }
 
+/** What the Hub can set on the TV. Only the keys sent change; the TV takes each version once. */
+export interface TvDesired {
+  /** Glass tiles, or icons floating on the photo. */
+  style?: 'glass' | 'icons'
+  /** One of the TV's fonts, by id (the TV lists them in its report). */
+  font?: string
+  weather?: { place: string; lat: number; lon: number }
+  /** Packages, in order along the bottom of the screen. */
+  favourites?: string[]
+  /** What the remote's Netflix and Prime Video buttons open: a package, or 'slideshow'. */
+  buttons?: { netflix?: string; prime?: string }
+}
+
+/** How the TV said it was at its last check-in. Everything is optional: an older TV says less. */
+export interface TvReport {
+  /** The home screen's own version, e.g. "1.11". */
+  version?: string
+  /** The last `desired_version` it took. */
+  applied?: number
+  settings?: {
+    style?: 'glass' | 'icons'
+    font?: string
+    /** The weather's place, by name. */
+    weather?: string
+    favourites?: string[]
+    buttons?: { netflix?: string; prime?: string }
+  }
+  apps?: { pkg: string; label: string }[]
+  fonts?: { id: string; name: string }[]
+  /** What it is playing, or was last playing, with minutes left when the app says. */
+  playing?: { app: string; title: string; sub?: string; left_min?: number | null } | null
+  /** The weather line under its clock, e.g. "28°  Cloudy". */
+  weather?: string | null
+  /** The Wi-Fi signal in a word: very weak, weak, fair, good, strong. */
+  wifi?: string | null
+  /** How many photos it has, from everywhere. */
+  photos?: number
+  /** Which of the Hub's photos (TvPhoto ids) it has fetched. */
+  photo_ids?: string[]
+}
+
+/** A photo added in the Hub for the TV's slideshow and backgrounds. */
+export interface TvPhoto {
+  id: string
+  household_id: string
+  /** Where it's kept: <home>/tv/<file>.jpg in the media bucket. */
+  path: string
+  /** A long-lived signed link to it, for the TV (which has no account to sign one with). */
+  url: string
+  /** The day it was taken, read from it: it comes back on that day in later years. */
+  taken_on: string | null
+  created_by: string
+  created_at: string
+}
+
+export type NewTvPhoto = Omit<TvPhoto, 'id' | 'created_at'>
+
+/** The lounge TV's home screen, linked to the home by a code it showed on screen. */
+export interface TvDevice {
+  id: string
+  household_id: string
+  name: string
+  desired: TvDesired
+  desired_version: number
+  report: TvReport
+  last_seen: string | null
+  claimed_at: string | null
+  created_at: string
+}
+
 /** A chapter or passage fetched to read in the app. */
 export interface Passage {
   book_id: number

@@ -4,8 +4,9 @@ import { useAuth, useDb } from './session'
 import type {
   Achievement, BlockerKind, BoardItem, Contact, Expense, Guidance, Household, HouseTask, MeterReading, NewBoardItem, NewContact, NewExpense, NewHouseTask, NewImage,
   NewMeterReading, NewProject, NewQuote, NewShoppingItem, NewUtilityPurchase,
-  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, PinStatus, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, Translation, Utility, UtilityPurchase, XpEvent, XpKind,
+  Invite, NewSiteVisit, NewTask, Nudge, NudgeKind, PinStatus, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, Translation, TvDesired, TvDevice, TvPhoto, Utility, UtilityPurchase, XpEvent, XpKind,
 } from './types'
+import { takenOn } from '../lib/takenOn'
 import { UTILITIES } from './types'
 import { ACHIEVEMENTS, XP_RULES, evaluateAchievements, levelFor, projectCosts, quoteProgress, type GameSnapshot } from '../lib/xp'
 import { readingDue } from '../lib/meters'
@@ -39,6 +40,8 @@ export const keys = {
   /** A letter's study thread; hidden letters' threads live under their own prefix so locking can drop them all. */
   study: ['study'] as QueryKey,
   studyHidden: ['study-hidden'] as QueryKey,
+  tvs: ['tvs'] as QueryKey,
+  tvPhotos: ['tv-photos'] as QueryKey,
 }
 
 function useHouseholdQuery<T>(key: QueryKey, fn: () => Promise<T>) {
@@ -62,6 +65,9 @@ export function useShopping() { const { db } = useDb(); return useHouseholdQuery
 export function useHouseTasks() { const { db } = useDb(); return useHouseholdQuery(keys.houseTasks, () => db.listHouseTasks()) }
 export function useReadings() { const { db } = useDb(); return useHouseholdQuery(keys.readings, () => db.listReadings()) }
 export function usePurchases() { const { db } = useDb(); return useHouseholdQuery(keys.purchases, () => db.listPurchases()) }
+/** The home's linked TVs (usually the one in the lounge). */
+export function useTvs() { const { db } = useDb(); return useHouseholdQuery(keys.tvs, () => db.listTvs()) }
+export function useTvPhotos() { const { db } = useDb(); return useHouseholdQuery(keys.tvPhotos, () => db.listTvPhotos()) }
 /** The letters written for me — private, so the key carries my id and never another person's cache. */
 export function useGuidance() {
   const { db } = useDb()
@@ -322,10 +328,10 @@ export function useActions() {
   }, [setList, db, invalidate, fail])
 
   // ---- media -----------------------------------------------------------------
-  const uploadFile = useCallback(async (file: File | Blob, folder: string, opts: { image?: boolean } = { image: true }) => {
+  const uploadFile = useCallback(async (file: File | Blob, folder: string, opts: { image?: boolean; maxSize?: number; maxMB?: number } = { image: true }) => {
     if (!household) throw new Error('Not signed in')
     const isImage = (opts.image ?? true) && (file.type.startsWith('image/') || !file.type)
-    const blob = isImage ? await compressImage(file) : file
+    const blob = isImage ? await compressImage(file, { maxSize: opts.maxSize, maxMB: opts.maxMB }) : file
     const ext = isImage ? 'jpg' : (file instanceof File ? file.name.split('.').pop() || 'bin' : 'bin')
     const path = `${household.id}/${folder}/${uid()}.${ext}`
     return db.upload(blob, path)
@@ -925,7 +931,61 @@ export function useActions() {
     try { await db.deleteStudy(s.id, letter.hidden ? pin : undefined) } catch (e) { invalidate(studyKey(letter)); return fail(e, 'remove the question') }
   }, [db, setList, studyKey, invalidate, fail])
 
+  // ---- the TV --------------------------------------------------------------
+  const claimTv = useCallback(async (code: string) => {
+    try {
+      const tv = await db.claimTv(code)
+      setList<TvDevice>(keys.tvs, (old) => [...old.filter((t) => t.id !== tv.id), tv])
+      return tv
+    } catch (e) { return fail(e, 'link the TV') }
+  }, [db, setList, fail])
+
+  /** Shows the change straight away, as on its way; the TV takes it at its next check-in. */
+  const setTv = useCallback(async (id: string, patch: TvDesired) => {
+    setList<TvDevice>(keys.tvs, (old) => old.map((t) => (t.id === id ? { ...t, desired: { ...t.desired, ...patch }, desired_version: t.desired_version + 1 } : t)))
+    try {
+      const saved = await db.setTv(id, patch)
+      setList<TvDevice>(keys.tvs, (old) => old.map((t) => (t.id === id ? saved : t)))
+      return saved
+    } catch (e) { invalidate(keys.tvs); return fail(e, 'change the TV') }
+  }, [db, setList, invalidate, fail])
+
+  const unlinkTv = useCallback(async (id: string) => {
+    try {
+      await db.unlinkTv(id)
+      setList<TvDevice>(keys.tvs, (old) => old.filter((t) => t.id !== id))
+    } catch (e) { return fail(e, 'unlink the TV') }
+  }, [db, setList, fail])
+
+  /**
+   * Photos for the TV's slideshow and backgrounds. The day each was taken is read first (shrinking drops
+   * it), then it's shrunk to 2560 px — the TV crops to its own screen — kept under <home>/tv/, and given a
+   * long-lived link for the TV. One that fails doesn't stop the rest. Returns how many went in.
+   */
+  const addTvPhotos = useCallback(async (files: File[]) => {
+    if (!me || !household) throw new Error('Not signed in')
+    let added = 0
+    for (const file of files) {
+      try {
+        const taken = await takenOn(file)
+        const path = await uploadFile(file, 'tv', { maxSize: 2560, maxMB: 1.5 })
+        const photo = await db.addTvPhoto({ household_id: household.id, path, url: await db.longUrl(path), taken_on: taken, created_by: me.id })
+        setList<TvPhoto>(keys.tvPhotos, (old) => [...old, photo])
+        added++
+      } catch (e) {
+        toast({ title: `Couldn't add ${file.name || 'that photo'}`, description: e instanceof Error ? e.message : 'Please try again.', tone: 'danger' })
+      }
+    }
+    return added
+  }, [me, household, uploadFile, db, setList, toast])
+
+  const deleteTvPhoto = useCallback(async (p: TvPhoto) => {
+    setList<TvPhoto>(keys.tvPhotos, (old) => old.filter((x) => x.id !== p.id))
+    try { await db.deleteTvPhoto(p.id); void db.remove([p.path]) } catch (e) { invalidate(keys.tvPhotos); return fail(e, 'take the photo off') }
+  }, [db, setList, invalidate, fail])
+
   return {
+    claimTv, setTv, unlinkTv, addTvPhotos, deleteTvPhoto,
     award, checkAchievements, invalidate, uploadFile,
     askTheWord, deleteGuidance, tickReading, hideGuidance, unhideGuidance, setPin, forgetPin, lockHidden, askStudy, moveStudy, deleteStudy,
     createProject, updateProject, deleteProject,
@@ -1020,6 +1080,8 @@ export function useRealtimeSync() {
         case 'house_tasks': inv(keys.houseTasks); break
         case 'meter_readings': inv(keys.readings); break
         case 'utility_purchases': inv(keys.purchases); break
+        case 'tv_devices': inv(keys.tvs); break
+        case 'tv_photos': inv(keys.tvPhotos); break
         case 'board_items': {
           const pid = (p.row?.project_id ?? p.old?.project_id) as string | undefined
           if (pid) inv(keys.board(pid)); else qc.invalidateQueries({ queryKey: keys.boardAll })

@@ -1,8 +1,41 @@
 import { addDays, format, subDays } from 'date-fns'
 import type {
-  Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseTask, Invite, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, UtilityPurchase, XpEvent,
+  Achievement, BoardItem, Contact, Expense, Guidance, Household, HouseTask, Invite, MeterReading, Nudge, Profile, Project, ProjectImage, Quote, ShoppingItem, SiteVisit, Study, Task, TvDevice, TvPhoto, UtilityPurchase, XpEvent,
 } from './types'
 import { SCENES, materialSwatch, meterFace, roomScene } from '../lib/demoImages'
+import { uid } from '../lib/utils'
+
+/** The TV home screen's fonts, as a real TV lists them in its report. */
+const TV_FONTS = [
+  ['doto', 'Dot matrix'], ['inter', 'Clean'], ['quicksand', 'Rounded'], ['fraunces', 'Elegant'], ['specialelite', 'Typewriter'],
+  ['bebas', 'Poster'], ['orbitron', 'Futuristic'], ['silkscreen', 'Arcade'], ['caveat', 'Handwritten'], ['dancing', 'Script'],
+  ['greatvibes', 'Fancy script'], ['pacifico', 'Retro'],
+].map(([id, name]) => ({ id, name }))
+
+/** A lounge TV, linked and on, part-way through something about grout. */
+export function demoTv(householdId: string): TvDevice {
+  const linked = subDays(new Date(), 12).toISOString()
+  return {
+    id: uid(), household_id: householdId, name: 'Lounge TV',
+    desired: {}, desired_version: 0,
+    report: {
+      version: '1.12', applied: 0,
+      settings: {
+        style: 'icons', font: 'doto', weather: 'Brackendowns',
+        favourites: ['com.stremio.one', 'com.google.android.youtube.tv'],
+        buttons: { netflix: 'com.stremio.one', prime: 'com.google.android.youtube.tv' },
+      },
+      apps: [
+        { pkg: 'com.android.vending', label: 'Play Store' }, { pkg: 'com.spotify.tv.android', label: 'Spotify' },
+        { pkg: 'com.stremio.one', label: 'Stremio' }, { pkg: 'com.google.android.youtube.tv', label: 'YouTube' },
+      ],
+      fonts: TV_FONTS,
+      playing: { app: 'YouTube', title: 'Re-grouting a shower, start to finish', sub: 'This Old House', left_min: 12 },
+      weather: '24°  Sunny', wifi: 'strong', photos: 31, photo_ids: [],
+    },
+    last_seen: new Date().toISOString(), claimed_at: linked, created_at: linked,
+  }
+}
 
 export const DEMO_USERS = {
   russel: 'u-russel',
@@ -30,6 +63,8 @@ export interface DemoState {
   purchases?: UtilityPurchase[]
   guidance?: Guidance[]
   study?: Study[]
+  tvs?: TvDevice[]
+  tvPhotos?: TvPhoto[]
 }
 
 const d = (daysAgo: number, hour = 10) => {
@@ -336,5 +371,5 @@ export function buildDemoState(): DemoState {
     { id: 'up4', household_id: H, utility: 'electricity', bought_time: '17:40', bought_on: day(-10), amount: 3000, units: 774.1, token: '', notes: '', receipt_path: null, created_by: R, created_at: d(10, 18) },
   ]
 
-  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges, visits, shopping, houseTasks, readings: [...readings, ...elec], purchases }
+  return { household, profiles, projects, images, contacts, quotes, expenses, tasks, boardItems, xp, achievements, nudges, visits, shopping, houseTasks, readings: [...readings, ...elec], purchases, tvs: [demoTv(H)] }
 }
